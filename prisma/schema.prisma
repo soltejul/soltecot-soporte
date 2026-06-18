@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Cliente {
+  id        String   @id @default(uuid())
+  nombre    String
+  email     String   @unique
+  telefono  String?
+  tickets   Ticket[] 
+  createdAt DateTime @default(now())
+}
+
+model Ticket {
+  id              String       @id @default(uuid())
+  numeroOrden     String       @unique 
+  equipo          String       
+  fallaReportada  String       
+  estado          EstadoTicket @default(RECIBIDO)
+  costoEstimado   Float?
+  notasInternas   String?      
+  clienteId       String
+  cliente         Cliente      @relation(fields: [clienteId], references: [id])
+  citas           Cita[]       // <-- NUEVO: Un ticket puede tener historial de citas (recolección y entrega)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+// ==========================================
+// NUEVOS MODELOS PARA EL AGENTE DE AGENDA
+// ==========================================
+
+model Cita {
+  id            String     @id @default(uuid())
+  nombreCliente String     // Nombre de quien entrega/recibe
+  telefono      String     // Teléfono de contacto directo para la ruta
+  direccion     String     // Dirección exacta del domicilio del cliente
+  fechaCita     DateTime   // Fecha y hora exacta combinada (Ej: Sábado 10:00 AM)
+  tipo          TipoCita   // ¿Es recolección o es entrega?
+  estado        EstadoCita @default(PENDIENTE)
+  notas         String?    // Indicaciones extra del cliente (Ej: "Tocar el timbre intermedio")
+  ticketId      String?    // Opcional: Al inicio es null, se vincula cuando creas el ticket
+  ticket        Ticket?    @relation(fields: [ticketId], references: [id])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+enum TipoCita {
+  RECOLECCION
+  ENTREGA
+}
+
+enum EstadoCita {
+  PENDIENTE     // Cita registrada por la IA, esperando que tú la revises
+  CONFIRMADA    // Hablaste con el cliente y aprobaste el espacio
+  EN_RUTA       // Estás en tu moto/auto camino al domicilio
+  COMPLETADA    // Equipo recolectado o entregado con éxito
+  CANCELADA     // El cliente canceló o no se encontró en el domicilio
+}
+
+enum EstadoTicket {
+  RECIBIDO
+  EN_DIAGNOSTICO
+  ESPERANDO_APROBACION
+  EN_REPARACION
+  LISTO_PARA_ENTREGA
+  ENTREGADO
+}
