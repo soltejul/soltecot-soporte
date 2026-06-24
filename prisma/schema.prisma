@@ -1,3 +1,5 @@
+// 📄 CONTENIDO COMPLETO PARA TU prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,13 +9,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==========================================
+// MODELOS OPTIMIZADOS PARA EL CRM SOLTECOT_
+// ==========================================
+
 model Cliente {
   id        String   @id @default(uuid())
   nombre    String
-  email     String   @unique
-  telefono  String?
+  email     String?  @unique 
+  telefono  String   @unique 
   tickets   Ticket[] 
   createdAt DateTime @default(now())
+
+  @@index([telefono]) 
 }
 
 model Ticket {
@@ -26,28 +34,30 @@ model Ticket {
   notasInternas   String?      
   clienteId       String
   cliente         Cliente      @relation(fields: [clienteId], references: [id])
-  citas           Cita[]       // <-- NUEVO: Un ticket puede tener historial de citas (recolección y entrega)
+  citas           Cita[]       
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
-}
 
-// ==========================================
-// NUEVOS MODELOS PARA EL AGENTE DE AGENDA
-// ==========================================
+  @@index([numeroOrden]) 
+}
 
 model Cita {
   id            String     @id @default(uuid())
-  nombreCliente String     // Nombre de quien entrega/recibe
-  telefono      String     // Teléfono de contacto directo para la ruta
-  direccion     String     // Dirección exacta del domicilio del cliente
-  fechaCita     DateTime   // Fecha y hora exacta combinada (Ej: Sábado 10:00 AM)
-  tipo          TipoCita   // ¿Es recolección o es entrega?
+  nombreCliente String     
+  telefono      String     
+  direccion     String     
+  distanciaKm   Float?     
+  coordenadas   String?    
+  fechaCita     DateTime   
+  tipo          TipoCita   
   estado        EstadoCita @default(PENDIENTE)
-  notas         String?    // Indicaciones extra del cliente (Ej: "Tocar el timbre intermedio")
-  ticketId      String?    // Opcional: Al inicio es null, se vincula cuando creas el ticket
+  notas         String?    
+  ticketId      String?    
   ticket        Ticket?    @relation(fields: [ticketId], references: [id])
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+
+  @@index([telefono])
 }
 
 enum TipoCita {
@@ -56,11 +66,11 @@ enum TipoCita {
 }
 
 enum EstadoCita {
-  PENDIENTE     // Cita registrada por la IA, esperando que tú la revises
-  CONFIRMADA    // Hablaste con el cliente y aprobaste el espacio
-  EN_RUTA       // Estás en tu moto/auto camino al domicilio
-  COMPLETADA    // Equipo recolectado o entregado con éxito
-  CANCELADA     // El cliente canceló o no se encontró en el domicilio
+  PENDIENTE     
+  CONFIRMADA    
+  EN_RUTA       
+  COMPLETADA    
+  CANCELADA     
 }
 
 enum EstadoTicket {

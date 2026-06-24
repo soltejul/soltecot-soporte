@@ -109,12 +109,24 @@ export default function Chatbot() {
                             <h3 className="text-white font-bold text-sm">Soltecot_ Asistente</h3>
                             <p className="text-xs text-[#00e676]">En línea 24/7</p>
                         </div>
-                        <button
-                            onClick={() => setIsOpen(false)}
-                            className="text-zinc-400 hover:text-white text-xs bg-zinc-800 px-2 py-1 rounded-md transition-colors"
-                        >
-                            Cerrar
-                        </button>
+
+                        {/* 📥 CONTENEDOR DE BOTONES (WhatsApp + Cerrar) */}
+                        <div className="flex items-center gap-2">
+                            <a
+                                href="https://wa.me/5546088200" // 👈 REEMPLAZA ESTO: Pon el número oficial de Soltecot con su código de país sin el "+"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-[#00e676] hover:bg-[#00c853] text-black font-bold px-2 py-1 rounded-md text-[10px] transition-colors tracking-wide flex items-center gap-1"
+                            >
+                                🔀 Pasar a WA
+                            </a>
+                            <button
+                                onClick={() => setIsOpen(false)}
+                                className="text-zinc-400 hover:text-white text-xs bg-zinc-800 px-2 py-1 rounded-md transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
 
                     {/* Caja de Mensajes */}
