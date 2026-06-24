@@ -38,3 +38,5 @@ next-env.d.ts
 **_IGNORE_**
 # end managed by open-wa
 google-credentials.json
+fijar-seguridad-js
+generar-hash.js
