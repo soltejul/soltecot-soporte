@@ -121,3 +121,23 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT);
 connectToWhatsApp();
+
+// ⏰ TEMPORIZADOR AUTOMÁTICO DE RECORDATORIOS (SOLTECOT_ CRON)
+// Revisa el reloj cada minuto. Si da exactamente las 8:00 PM (20:00 hrs), le da el "clic invisible" a Next.js
+setInterval(async () => {
+    const ahora = new Date()
+    const horas = ahora.getHours()
+    const minutos = ahora.getMinutes()
+
+    // Configurado a las 8:00 PM de la noche
+    if (horas === 20 && minutos === 0) {
+        console.log("⏰ [CRON AUTOMÁTICO]: Es la hora punta (8:00 PM). Detonando cola de recordatorios para mañana...")
+        try {
+            const res = await fetch('http://localhost:3000/api/admin/recordatorios', { method: 'POST' })
+            const data = await res.json()
+            console.log(`✅ [CRON ÉXITO]: WhatsApps de recordatorio enviados automáticamente: ${data.enviados}`)
+        } catch (error) {
+            console.error("🔴 [CRON CRASH]: No se pudo conectar con Next.js para enviar recordatorios:", error.message)
+        }
+    }
+}, 60000) // Se ejecuta cada 60 segundos

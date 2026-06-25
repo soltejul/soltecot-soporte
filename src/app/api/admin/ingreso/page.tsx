@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 
 export default function RegistroOrdenAdmin() {
     const [form, setForm] = useState({
@@ -32,7 +33,6 @@ export default function RegistroOrdenAdmin() {
             if (!res.ok) throw new Error(data.error || 'Error al procesar el ingreso')
 
             setMensajeExito(`¡Orden generada con éxito! Folio asignado: ${data.ticket.numeroOrden}`)
-            // Limpiamos el formulario para la siguiente recepción
             setForm({ telefono: '', nombre: '', equipo: '', fallaReportada: '', costoEstimado: '', notasInternas: '' })
         } catch (err: any) {
             setError(err.message)
@@ -44,8 +44,20 @@ export default function RegistroOrdenAdmin() {
     return (
         <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
             <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-xl p-8 shadow-2xl">
-                <h2 className="text-2xl font-bold text-center mb-2 text-emerald-400">SOLTECOT_ INTERNAL</h2>
-                <p className="text-zinc-500 text-xs text-center mb-6 uppercase tracking-widest">Recepción de Equipos y Órdenes de Servicio</p>
+
+                {/* ⬅ ENCABEZADO AJUSTADO CON BOTÓN DE ESCAPE INTEGRADO */}
+                <div className="flex justify-between items-start border-b border-zinc-900 pb-4 mb-6">
+                    <div>
+                        <h2 className="text-xl font-bold text-emerald-400">SOLTECOT_ INTERNAL</h2>
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest mt-0.5">Recepción de Equipos</p>
+                    </div>
+                    <Link
+                        href="/admin"
+                        className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-bold px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5"
+                    >
+                        ⬅ Volver
+                    </Link>
+                </div>
 
                 <form onSubmit={manejarEnvio} className="space-y-4">
                     <div>

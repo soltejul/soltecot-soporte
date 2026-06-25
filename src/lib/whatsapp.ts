@@ -1,17 +1,23 @@
 export async function enviarMensajeWhatsApp(telefono: string, mensaje: string) {
     const WHATSAPP_API_URL = 'http://localhost:8080'
 
-    // 1. Limpiamos el número de espacios, guiones o símbolos
-    let numeroLimpio = telefono.replace(/\D/g, '')
+    let numeroLimpio = ''
 
-    // 🚨 EL CAMBIO SECRETO PARA MÉXICO:
-    // Si el número viene a 10 dígitos, le agregamos el '52' de México + el '1' obligatorio para celulares
-    if (numeroLimpio.length === 10) {
-        numeroLimpio = `521${numeroLimpio}`
-    }
+    // 🛡️ CONFIGURACIÓN INTELIGENTE DE CANALES
+    if (telefono.includes('@')) {
+        // Si ya viene con un JID estructurado (como @lid o @s.whatsapp.net desde el bot), lo respetamos intacto
+        numeroLimpio = telefono.trim()
+    } else {
+        // Si viene del Dashboard manual (solo los 10 dígitos del cliente)
+        // 1. Limpiamos el número de espacios, guiones o símbolos
+        numeroLimpio = telefono.replace(/\D/g, '')
 
-    // 3. Lo empaquetamos con el sufijo que exige Baileys
-    if (!numeroLimpio.includes('@s.whatsapp.net')) {
+        // 🚨 EL CAMBIO SECRETO PARA MÉXICO:
+        if (numeroLimpio.length === 10) {
+            numeroLimpio = `521${numeroLimpio}`
+        }
+
+        // 3. Lo empaquetamos con el sufijo estándar de clientes
         numeroLimpio = `${numeroLimpio}@s.whatsapp.net`
     }
 
