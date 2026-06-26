@@ -106,12 +106,13 @@ const server = http.createServer((req, res) => {
                 let { to, content } = JSON.parse(body);
                 if (!sock) throw new Error('El canal de WhatsApp aún no está listo.');
 
-                // ⚡ [NUEVO] SANITIZADOR INTELIGENTE DE SOLTECOT
-                // Si el formato viene crudo de 10 dígitos desde la web, lo estructuramos para WhatsApp
-                if (!to.endsWith('@s.whatsapp.net')) {
+                // ⚡ [SÚPER PARCHADO] SANITIZADOR INTELIGENTE DE SOLTECOT
+                // Si ya viene con formato oficial de WhatsApp (@s.whatsapp.net o @lid), lo deja pasar directo.
+                // Si viene en texto plano de 10 dígitos desde el Dashboard, lo formatea.
+                if (!to.endsWith('@s.whatsapp.net') && !to.endsWith('@lid')) {
                     const numeroLimpio = to.replace(/\D/g, ''); // Remueve espacios, guiones o letras
                     const diezDigitos = numeroLimpio.slice(-10); // Asegura extraer solo los últimos 10 dígitos locales
-                    to = `52${diezDigitos}@s.whatsapp.net`; // Construye la nomenclatura oficial internacional (México)
+                    to = `52${diezDigitos}@s.whatsapp.net`; // Construye la nomenclatura oficial internacional
                 }
 
                 console.log(`📡 Disparando mensaje saliente hacia: ${to}`);
