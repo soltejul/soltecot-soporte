@@ -1,5 +1,10 @@
 export async function enviarMensajeWhatsApp(telefono: string, mensaje: string) {
-    const WHATSAPP_API_URL = 'http://localhost:8080'
+    // 🌐 Lee la variable de Vercel en producción o usa localhost si estás programando en casa
+    const urlBase = process.env.WHATSAPP_BOT_URL || 'http://localhost:8080'
+
+    // ⚡ PARCHE DEFENSIVO: Si la variable de Vercel ya incluye '/sendText', se lo removemos 
+    // temporalmente para que no se duplique con el fetch de abajo
+    const WHATSAPP_API_URL = urlBase.endsWith('/sendText') ? urlBase.replace('/sendText', '') : urlBase
 
     let numeroLimpio = ''
 
@@ -24,6 +29,7 @@ export async function enviarMensajeWhatsApp(telefono: string, mensaje: string) {
     try {
         console.log(`📡 [BAILEYS LIB]: Intentando enviar a JID -> ${numeroLimpio}`)
 
+        // 🚀 Ahora sí, apuntando directo a la nube de Railway en producción
         const respuesta = await fetch(`${WHATSAPP_API_URL}/sendText`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
