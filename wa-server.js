@@ -154,3 +154,5 @@ setInterval(async () => {
         }
     }
 }, 60000)
+
+//config//
