@@ -103,9 +103,18 @@ const server = http.createServer((req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                const { to, content } = JSON.parse(body);
+                let { to, content } = JSON.parse(body);
                 if (!sock) throw new Error('El canal de WhatsApp aún no está listo.');
 
+                // ⚡ [NUEVO] SANITIZADOR INTELIGENTE DE SOLTECOT
+                // Si el formato viene crudo de 10 dígitos desde la web, lo estructuramos para WhatsApp
+                if (!to.endsWith('@s.whatsapp.net')) {
+                    const numeroLimpio = to.replace(/\D/g, ''); // Remueve espacios, guiones o letras
+                    const diezDigitos = numeroLimpio.slice(-10); // Asegura extraer solo los últimos 10 dígitos locales
+                    to = `52${diezDigitos}@s.whatsapp.net`; // Construye la nomenclatura oficial internacional (México)
+                }
+
+                console.log(`📡 Disparando mensaje saliente hacia: ${to}`);
                 await sock.sendMessage(to, { text: content });
 
                 res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -129,7 +138,7 @@ connectToWhatsApp();
 setInterval(async () => {
     const ahora = new Date()
     const horas = ahora.getHours()
-    const minutos = ahora.getMinutes()
+    const minutos = checked = ahora.getMinutes()
 
     // Configurado a las 8:00 PM de la noche
     if (horas === 20 && minutos === 0) {
