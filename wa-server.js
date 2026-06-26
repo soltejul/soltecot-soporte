@@ -6,8 +6,11 @@ const pino = require('pino');
 const http = require('http');
 const fs = require('fs'); // 📁 Módulo nativo para borrar carpetas corruptas
 
-const NEXTJS_WEBHOOK_URL = 'http://localhost:3000/api/whatsapp';
-const PORT = 8080;
+// 🚀 [MODIFICADO]: Ahora apunta al Webhook real en Vercel
+const NEXTJS_WEBHOOK_URL = 'https://soporte.soltecot.com/api/whatsapp';
+
+// 📡 [MODIFICADO]: Railway asigna el puerto dinámicamente mediante variables de entorno
+const PORT = process.env.PORT || 8080;
 const AUTH_FOLDER = 'soltecot_auth_baileys';
 
 let sock;
@@ -85,7 +88,7 @@ async function connectToWhatsApp() {
                             })
                         });
                     } catch (err) {
-                        console.error('❌ Error al conectar con Next.js. ¿Olvidaste encender npm run dev?', err.message);
+                        console.error('❌ Error al conectar con Next.js en producción:', err.message);
                     }
                 }
             }
@@ -123,7 +126,6 @@ server.listen(PORT);
 connectToWhatsApp();
 
 // ⏰ TEMPORIZADOR AUTOMÁTICO DE RECORDATORIOS (SOLTECOT_ CRON)
-// Revisa el reloj cada minuto. Si da exactamente las 8:00 PM (20:00 hrs), le da el "clic invisible" a Next.js
 setInterval(async () => {
     const ahora = new Date()
     const horas = ahora.getHours()
@@ -133,11 +135,12 @@ setInterval(async () => {
     if (horas === 20 && minutos === 0) {
         console.log("⏰ [CRON AUTOMÁTICO]: Es la hora punta (8:00 PM). Detonando cola de recordatorios para mañana...")
         try {
-            const res = await fetch('http://localhost:3000/api/admin/recordatorios', { method: 'POST' })
+            // 🚀 [MODIFICADO]: Apunta al endpoint de producción en Vercel
+            const res = await fetch('https://soporte.soltecot.com/api/admin/recordatorios', { method: 'POST' })
             const data = await res.json()
             console.log(`✅ [CRON ÉXITO]: WhatsApps de recordatorio enviados automáticamente: ${data.enviados}`)
         } catch (error) {
             console.error("🔴 [CRON CRASH]: No se pudo conectar con Next.js para enviar recordatorios:", error.message)
         }
     }
-}, 60000) // Se ejecuta cada 60 segundos
+}, 60000)

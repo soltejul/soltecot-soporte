@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bot": "node whatsapp-bot.js"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.83",
