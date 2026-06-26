@@ -62,7 +62,7 @@ export async function POST() {
 
             let textoRecordatorio = ''
 
-            if (cita.tipo === 'VISITA') {
+            if (cita.tipo === 'ENTREGA') {
                 textoRecordatorio = `🔬 *SOLTECOT_ RECORDATORIO DE CITA* 🔬\n\nHola *${cita.nombreCliente}*, te recordamos que el día de mañana tienes una cita programada para traer tu equipo a revisión en nuestro laboratorio.\n\n⏰ *Hora reservada:* ${horaFormateada}\n📍 *Laboratorio:* Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán.\n\n_Si tienes algún contratiempo o requieres reprogramar, por favor avísanos por este medio. ¡Te esperamos!_ 🛠️`
             } else {
                 textoRecordatorio = `🚚 *SOLTECOT_ RUTA DE RECOLECCIÓN* 🚚\n\nHola *${cita.nombreCliente}*, te recordamos que el día de mañana nuestro equipo de logística pasará a tu domicilio a recolectar tu equipo para ingresarlo al laboratorio.\n\n⏰ *Horario aproximado:* ${horaFormateada}\n📍 *Dirección de arribo:* ${cita.direccion}\n\n_Por favor, ten tu equipo listo (con su cargador en caso de laptops). ¡Vamos en camino!_ 🚚💨`

@@ -1,4 +1,3 @@
-// 📄 CONTENIDO COMPLETO PARA TU prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -25,18 +24,22 @@ model Cliente {
 }
 
 model Ticket {
-  id              String       @id @default(uuid())
-  numeroOrden     String       @unique 
-  equipo          String       
-  fallaReportada  String       
-  estado          EstadoTicket @default(RECIBIDO)
-  costoEstimado   Float?
-  notasInternas   String?      
-  clienteId       String
-  cliente         Cliente      @relation(fields: [clienteId], references: [id])
-  citas           Cita[]       
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id               String       @id @default(uuid()) // 
+  numeroOrden      String       @unique 
+  equipo           String       
+  fallaReportada   String       
+  estado           EstadoTicket @default(RECIBIDO)
+  costoEstimado    Float?
+  notasInternas    String?      
+  clienteId        String
+  cliente          Cliente      @relation(fields: [clienteId], references: [id])
+  citas            Cita[]       
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  
+  botActivo        Boolean      @default(true)
+  costoReparacion  Float?
+  notasDiagnostico String?
 
   @@index([numeroOrden]) 
 }
@@ -52,7 +55,7 @@ model Cita {
   tipo          TipoCita   
   estado        EstadoCita @default(PENDIENTE)
   notas         String?    
-  ticketId      String?    
+  ticketId      String?  
   ticket        Ticket?    @relation(fields: [ticketId], references: [id])
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

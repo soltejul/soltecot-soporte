@@ -12,7 +12,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Teléfono, equipo y falla son obligatorios' }, { status: 400 })
         }
 
-        // 🔗 URL de escape local (Inyectada directamente en la función)
+        // 🔗 URL de escape local
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://192.168.20.13:3000'
 
         const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
@@ -61,29 +61,59 @@ export async function GET() {
     }
 }
 
-// 🔄 3. ACTUALIZAR ESTATUS (PATCH)
+// 🔄 3. ACTUALIZAR TICKET DINÁMICO (PATCH)
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
-        const { ticketId, nuevoEstado } = body
+        const { ticketId, nuevoEstado, botActivo, costoReparacion, notasDiagnostico } = body
 
-        if (!ticketId || !nuevoEstado) {
-            return NextResponse.json({ error: 'Faltan parámetros obligatorios (ticketId o nuevoEstado)' }, { status: 400 })
+        if (!ticketId) {
+            return NextResponse.json({ error: 'El parámetro ticketId es obligatorio' }, { status: 400 })
         }
 
-        // 🔗 URL de escape local (Declarada aquí para evitar ReferenceErrors de alcance)
-        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://192.168.20.13:3000'
+        // 🧠 Construir el objeto de actualización de forma dinámica
+        const datosAActualizar: any = {}
 
+        if (nuevoEstado !== undefined) datosAActualizar.estado = nuevoEstado
+        if (botActivo !== undefined) datosAActualizar.botActivo = botActivo
+        if (costoReparacion !== undefined) datosAActualizar.costoReparacion = costoReparacion
+        if (notasDiagnostico !== undefined) datosAActualizar.notasDiagnostico = notasDiagnostico
+
+        // Ejecutar actualización en la base de datos Neon
         const ticketActualizado = await prisma.ticket.update({
             where: { id: ticketId },
-            data: { estado: nuevoEstado },
+            data: datosAActualizar,
             include: { cliente: true }
         })
 
-        const estadoFormateado = typeof nuevoEstado === 'string' ? nuevoEstado.replace('_', ' ') : 'ACTUALIZADO'
+        // 🔗 URL de seguimiento local/remota
+        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://192.168.20.13:3000'
 
-        const textoEstatus = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEl estatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha cambiado a:\n👉 *${estadoFormateado}*\n\n🌐 *Rastreo en Vivo:* Consulta el avance actualizado dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-        enviarMensajeWhatsApp(ticketActualizado.cliente.telefono, textoEstatus)
+        // 🚀 CONTROL DE MENSAJES SALIENTES POR WHATSAPP
+        if (nuevoEstado) {
+            let textoMensaje = ""
+
+            if (nuevoEstado === "ESPERANDO_APROBACION") {
+                // 💰 MENSAJE PERSONALIZADO DE PRESUPUESTO (PUNTO 3)
+                textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
+                    `Hola, *${ticketActualizado.cliente.nombre}*. Hemos concluido el diagnóstico completo de tu equipo:\n` +
+                    `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
+                    `🎫 *Orden de Servicio:* ${ticketActualizado.numeroOrden}\n\n` +
+                    `🔬 *Diagnóstico Técnico:* ${notasDiagnostico || 'Revisión y corrección de líneas principales en tarjeta madre.'}\n\n` +
+                    `💵 *Costo Total Autorizado:* $${costoReparacion} MXN (Neto)\n\n` +
+                    `📌 *¿Cómo deseas proceder?* Por favor, responde a este mensaje con una sola palabra:\n\n` +
+                    `👉 Escribe *Aceptar* (Para autorizar el inicio de la reparación).\n` +
+                    `👉 Escribe *Rechazar* (Para cancelar y preparar la devolución de tu equipo).\n\n` +
+                    `🌐 *Rastreo en Vivo:* Puedes consultar la nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+            } else {
+                // 🛠️ MENSAJE ESTÁNDAR PARA OTROS CAMBIOS DE ESTATUS
+                const estadoFormateado = typeof nuevoEstado === 'string' ? nuevoEstado.replace('_', ' ') : 'ACTUALIZADO'
+                textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEl estatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha cambiado a:\n👉 *${estadoFormateado}*\n\n🌐 *Rastreo en Vivo:* Consulta el avance actualizado dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+            }
+
+            // Disparar el mensaje a través de Baileys
+            await enviarMensajeWhatsApp(ticketActualizado.cliente.telefono, textoMensaje)
+        }
 
         return NextResponse.json({ success: true, ticket: ticketActualizado }, { status: 200 })
     } catch (error: any) {

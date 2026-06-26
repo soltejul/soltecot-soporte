@@ -1,8 +1,58 @@
-'use client' // Le dice a Next.js que esta página tendrá interactividad de React (estados, eventos, etc.)
+'use client'
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { buscarTicketPorCodigo } from './actions';
 import Chatbot from '../components/Chatbot';
+
+// 📸 GALERÍA DE TRABAJOS ANTERIORES (Puedes cambiar las imágenes por tus archivos reales en /public)
+const RECENT_WORK = [
+  {
+    id: 1,
+    title: "MacBook Pro M1 - Corto en Línea Principal",
+    description: "Reemplazo de capacitores SMD bajo microscopio y reconstrucción de pistas quemadas.",
+    image: "https://images.unsplash.com/photo-1616440347437-b1c73416efc2?q=80&w=600&auto=format&fit=crop", // Cambia por "/galeria/macbook.jpg"
+    tag: "Micro-soldadura"
+  },
+  {
+    id: 2,
+    title: "Limpieza Química por Daño de Líquido",
+    description: "Tratamiento ultrasónico en placa lógica de laptop ejecutado con éxito.",
+    image: "https://images.unsplash.com/photo-1591405351990-4726e331f141?q=80&w=600&auto=format&fit=crop", // Cambia por "/galeria/quimica.jpg"
+    tag: "Ultrasonido"
+  },
+  {
+    id: 3,
+    title: "Reballing de GPU en Consola de Nueva Gen",
+    description: "Extracción, limpieza de esferas de aleación y resoldado térmico automatizado.",
+    image: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?q=80&w=600&auto=format&fit=crop", // Cambia por "/galeria/consola.jpg"
+    tag: "Reballing"
+  }
+];
+
+// 💬 SECCIÓN DE TESTIMONIOS (LO QUE LOS CLIENTES DICEN DE NOSOTROS)
+const TESTIMONIALS = [
+  {
+    id: 1,
+    name: "Carlos Mendoza",
+    device: "MacBook Air M2",
+    text: "En dos lugares me dijeron que mi tarjeta ya no servía por derrame de café. En Soltecot_ la repararon a nivel componente y guardé toda mi información. Un servicio de ingenieros de verdad.",
+    rating: 5
+  },
+  {
+    id: 2,
+    name: "Sofía Trejo",
+    device: "Asus ROG Strix",
+    text: "Excelente el sistema de rastreo por WhatsApp, estuve al tanto de todo el diagnóstico técnico y el precio fue sumamente justo. Muy recomendados.",
+    rating: 5
+  },
+  {
+    id: 3,
+    name: "Ing. Alejandro Ruiz",
+    device: "Servidor ThinkServer",
+    text: "Su conocimiento en microelectrónica es impecable. Repararon una línea de alimentación crítica de nuestro servidor en tiempo récord. Trato corporativo y formal.",
+    rating: 5
+  }
+];
 
 const SERVICES = [
   {
@@ -17,22 +67,22 @@ const SERVICES = [
     ),
   },
   {
+    id: "microelectronica",
+    title: "Microelectrónica Avanzada",
+    description: "Diagnóstico y rescate de tarjetas madre a nivel componente, reparación de cortos circuitos, reballing y micro-soldadura de alta precisión.",
+    icon: (
+      <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2 2V7a2 2 0 012-2z" />
+      </svg>
+    ),
+  },
+  {
     id: "upgrade",
     title: "Upgrade de Hardware",
     description: "Maximiza la potencia instalando unidades de estado sólido (SSD) de alta velocidad, expansión de memoria RAM y componentes de última generación.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    ),
-  },
-  {
-    id: "software",
-    title: "Sistemas y Software",
-    description: "Instalación y configuración de sistemas operativos, paqueterías oficiales, optimización de rendimiento y eliminación garantizada de malware.",
-    icon: (
-      <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
     ),
   },
@@ -50,9 +100,9 @@ const SERVICES = [
 
 const PASOS_ESTADO = [
   { key: 'RECIBIDO', label: 'Recibido' },
-  { key: 'EN_DIAGNOSTICO', label: 'En Diagnóstico' },
+  { key: 'EN_DIAGNOSTICO', label: 'Diagnóstico' },
   { key: 'ESPERANDO_APROBACION', label: 'Presupuesto' },
-  { key: 'EN_REPARACION', label: 'En Reparación' },
+  { key: 'EN_REPARACION', label: 'Reparación' },
   { key: 'LISTO_PARA_ENTREGA', label: '¡Listo!' },
 ];
 
@@ -61,6 +111,25 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const folioUrl = params.get('folio');
+      if (folioUrl) {
+        setCodigo(folioUrl.toUpperCase());
+        ejecutarBusquedaAutomatica(folioUrl.toUpperCase());
+      }
+    }
+  }, []);
+
+  const ejecutarBusquedaAutomatica = async (folioId: string) => {
+    setLoading(true);
+    setErrorMsg('');
+    const res = await buscarTicketPorCodigo(folioId);
+    setLoading(false);
+    if (res.success) setTicketData(res.data);
+  };
 
   const handleBuscar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +142,7 @@ export default function Home() {
     }
 
     setLoading(true);
-    const res = await buscarTicketPorCodigo(codigo);
+    const res = await buscarTicketPorCodigo(codigo.trim().toUpperCase());
     setLoading(false);
 
     if (res.error) {
@@ -85,54 +154,76 @@ export default function Home() {
 
   const obtenerIndiceEstado = (currentEstado: string) => {
     if (currentEstado === 'ENTREGADO') return 5;
+    if (currentEstado === 'RECHAZADO') return 2;
     return PASOS_ESTADO.findIndex(p => p.key === currentEstado);
   };
 
+  const mapearEstiloEstado = (estado: string) => {
+    const estilos: Record<string, string> = {
+      'RECIBIDO': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      'EN_DIAGNOSTICO': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      'ESPERANDO_APROBACION': 'bg-orange-500/15 text-orange-400 border-orange-500/30 animate-pulse',
+      'EN_REPARACION': 'bg-soltecot-cyan/10 text-soltecot-cyan border-soltecot-cyan/20',
+      'LISTO_PARA_ENTREGA': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+      'ENTREGADO': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+      'RECHAZADO': 'bg-red-500/10 text-red-400 border-red-500/20',
+    };
+    return estilos[estado] || 'bg-slate-500/10 text-slate-400';
+  };
+
   return (
-    <main className="min-h-screen bg-soltecot-dark text-slate-100 flex flex-col items-center p-6 md:p-12 font-montserrat relative overflow-hidden gap-16 md:gap-24">
+    <main className="min-h-screen bg-soltecot-dark text-slate-100 flex flex-col items-center p-6 md:p-12 font-montserrat relative overflow-hidden gap-20 md:gap-28">
 
       {/* Efectos de iluminación sutiles de fondo */}
       <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-soltecot-cyan/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute top-[30%] right-[-20%] w-[500px] h-[500px] bg-soltecot-cyan/5 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* NAVBAR */}
+      {/* NAVBAR CON SOPORTE PARA LOGOTIPO */}
       <header className="w-full max-w-6xl flex justify-between items-center z-10">
-        <div className="flex flex-col">
-          <span className="font-poppins font-extrabold text-2xl tracking-wider text-white">
-            SOLTECOT<span className="text-soltecot-cyan">_</span>
-          </span>
-          <span className="text-[10px] uppercase tracking-[0.2em] text-soltecot-cyan font-semibold">
-            Solutions & Technology on Time
-          </span>
+        <div className="flex items-center gap-3">
+          {/* 📐 CONTENEDOR DE TU LOGOTIPO: Reemplaza este SVG por tu <img src="/logo.png" /> cuando gustes */}
+          <div className="w-10 h-10 bg-gradient-to-br from-soltecot-cyan to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-soltecot-cyan/20 border border-white/10">
+            <svg className="w-5 h-5 text-soltecot-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z" />
+            </svg>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-poppins font-extrabold text-2xl tracking-wider text-white leading-none">
+              SOLTECOT<span className="text-soltecot-cyan">_</span>
+            </span>
+            <span className="text-[9px] uppercase tracking-[0.2em] text-soltecot-cyan font-bold mt-1">
+              Solutions & Technology on Time
+            </span>
+          </div>
         </div>
-        <span className="text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium">
-          Soporte Oficial
+        <span className="text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium hidden sm:inline-block">
+          Laboratorio Certificado 🔬
         </span>
       </header>
 
-      {/* HERO SECTION & FORMULARIO */}
+      {/* HERO SECTION & FORMULARIO DE RASTREO */}
       <section className="w-full max-w-4xl text-center space-y-12 z-10">
         <div className="space-y-6">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
             Impulsa el rendimiento <br />
-            de tu equipo con <span className="text-soltecot-cyan bg-gradient-to-r from-soltecot-cyan to-teal-300 bg-clip-text text-transparent">Soporte Premium</span>
+            de tu equipo con <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">Nivel Componente</span>
           </h1>
-          <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
-            Atención personalizada diseñada para optimizar tus procesos, reducir costos y elevar tu productividad en PC, Laptops y Consolas.
+          <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
+            Especialistas en mantenimiento. Actualización de equipos. Consolas de videojuegos. Controles. Transparencia total en el seguimiento de tu orden.
           </p>
         </div>
 
         {/* CONTENEDOR DEL BUSCADOR */}
         <div className="max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl space-y-4">
-          <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins">
-            ¿Tienes un equipo en nuestro laboratorio?
+          <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
+            🎯 Consulta el estado de tu reparación en tiempo real
           </h3>
           <form onSubmit={handleBuscar} className="flex gap-2">
             <input
               type="text"
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
-              placeholder="Ej: SOL-1001"
+              placeholder="Introduce tu Folio (Ej: SOL-1001)"
               className="flex-1 bg-soltecot-dark border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-soltecot-cyan transition-colors text-white placeholder-slate-600 font-mono uppercase"
             />
             <button
@@ -140,13 +231,12 @@ export default function Home() {
               disabled={loading}
               className="bg-soltecot-cyan hover:bg-[#4bcbc0] disabled:bg-slate-700 disabled:text-slate-400 text-soltecot-dark font-poppins font-bold text-sm px-5 py-3 rounded-xl transition-all duration-200 shadow-lg shadow-soltecot-cyan/20 active:scale-95 flex items-center justify-center min-w-[120px]"
             >
-              {loading ? 'Buscando...' : 'Buscar Estatus'}
+              {loading ? 'Buscando...' : 'Rastrear Equipo'}
             </button>
           </form>
 
-          {/* MENSAJE DE ERROR */}
           {errorMsg && (
-            <p className="text-xs text-red-400 font-medium text-left bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl animate-pulse">
+            <p className="text-xs text-red-400 font-medium text-left bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
               ⚠️ {errorMsg}
             </p>
           )}
@@ -154,30 +244,49 @@ export default function Home() {
 
         {/* RESULTADO DE LA BÚSQUEDA */}
         {ticketData && (
-          <div className="max-w-2xl mx-auto p-6 bg-soltecot-darker border border-soltecot-cyan/20 rounded-2xl shadow-2xl text-left space-y-6 transition-all duration-300">
+          <div className="max-w-2xl mx-auto p-6 bg-soltecot-darker border border-white/5 rounded-2xl shadow-2xl text-left space-y-6 transition-all duration-300 animate-fade-in">
             <div className="flex justify-between items-start border-b border-white/5 pb-4">
               <div>
-                <span className="text-xs font-mono text-soltecot-cyan uppercase font-semibold tracking-wider">Orden {ticketData.numeroOrden}</span>
+                <span className="text-xs font-mono text-soltecot-cyan uppercase font-semibold tracking-wider">Folio Oficial: {ticketData.numeroOrden}</span>
                 <h4 className="font-poppins font-bold text-xl text-white mt-1">{ticketData.equipo}</h4>
-                <p className="text-xs text-slate-400 mt-1">Cliente: <span className="text-slate-200 font-medium">{ticketData.cliente.nombre}</span></p>
+                <p className="text-xs text-slate-400 mt-0.5">Propietario: <span className="text-slate-200 font-medium">{ticketData.cliente.nombre}</span></p>
               </div>
-              <span className="text-[11px] bg-soltecot-cyan/10 text-soltecot-cyan px-3 py-1 rounded-full font-mono font-bold tracking-wide uppercase border border-soltecot-cyan/20">
+              <span className={`text-[10px] px-3 py-1 rounded-full font-mono font-bold tracking-wide uppercase border ${mapearEstiloEstado(ticketData.estado)}`}>
                 {ticketData.estado.replace('_', ' ')}
               </span>
             </div>
 
-            <div className="space-y-1">
-              <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold font-poppins">Diagnóstico de Ingreso</span>
-              <p className="text-xs text-slate-300 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold font-poppins">Falla Reportada en Recepción</span>
+              <p className="text-xs text-slate-300 leading-relaxed bg-soltecot-dark p-3 rounded-xl border border-white/5 font-light">
                 {ticketData.fallaReportada}
               </p>
             </div>
 
+            {/* PANEL DE PRESUPUESTO */}
+            {ticketData.estado === 'ESPERANDO_APROBACION' && ticketData.costoReparacion && (
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
+                  <span className="text-xs font-bold text-amber-400 font-poppins uppercase tracking-wider">💼 Presupuesto Técnico Listo</span>
+                  <span className="text-base font-black text-white font-mono">${ticketData.costoReparacion} MXN</span>
+                </div>
+                {ticketData.notasDiagnostico && (
+                  <div className="space-y-1">
+                    <span className="text-[9px] text-zinc-500 uppercase font-bold">Nota Técnica del Ingeniero:</span>
+                    <p className="text-xs text-slate-300 font-light italic">"{ticketData.notasDiagnostico}"</p>
+                  </div>
+                )}
+                <p className="text-[10px] text-amber-400/80 leading-relaxed pt-1 bg-amber-500/5 px-2.5 py-2 rounded-lg border border-amber-500/10 font-medium">
+                  💡 *¿Cómo autorizar?* Por favor, abre el chat de WhatsApp con nuestro laboratorio y responde con la palabra *Aceptar* para iniciar la instalación de refacciones, o *Rechazar* para preparar su devolución.
+                </p>
+              </div>
+            )}
+
             {/* LÍNEA DE TIEMPO INTERACTIVA */}
-            <div className="space-y-4 pt-2">
-              <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold font-poppins">Progreso de Reparación</span>
+            <div className="space-y-5 pt-2">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold font-poppins">Línea de Progreso en Laboratorio</span>
               <div className="relative flex justify-between items-center w-full px-2">
-                <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/10 -translate-y-1/2 z-0" />
+                <div className="absolute left-0 right-0 top-1/2 h-[2px] bg-white/5 -translate-y-1/2 z-0" />
 
                 {PASOS_ESTADO.map((paso, index) => {
                   const indiceActual = obtenerIndiceEstado(ticketData.estado);
@@ -187,16 +296,16 @@ export default function Home() {
                   return (
                     <div key={paso.key} className="flex flex-col items-center relative z-10 gap-2">
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${esElActual
-                        ? 'bg-soltecot-dark border-soltecot-cyan shadow-[0_0_12px_#5cddcf]'
+                        ? 'bg-soltecot-dark border-soltecot-cyan shadow-[0_0_15px_#5cddcf]'
                         : estaCompletado
                           ? 'bg-soltecot-cyan border-soltecot-cyan'
-                          : 'bg-soltecot-darker border-white/20'
+                          : 'bg-soltecot-darker border-white/10'
                         }`}>
                         {estaCompletado && !esElActual && (
                           <span className="text-[9px] text-soltecot-dark font-bold">✓</span>
                         )}
                         {esElActual && (
-                          <div className="w-2 h-2 rounded-full bg-soltecot-cyan animate-ping" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-soltecot-cyan animate-ping" />
                         )}
                       </div>
                       <span className={`text-[10px] font-medium font-poppins whitespace-nowrap hidden sm:block ${esElActual ? 'text-soltecot-cyan font-bold' : estaCompletado ? 'text-slate-300' : 'text-slate-600'
@@ -208,18 +317,61 @@ export default function Home() {
                 })}
               </div>
             </div>
+
+            <div className="text-[10px] text-center text-slate-600 font-mono pt-2 border-t border-white/5">
+              Última actualización técnica: {new Date(ticketData.updatedAt).toLocaleString('es-MX')}
+            </div>
           </div>
         )}
       </section>
 
-      {/* SECCIÓN DE SERVICIOS (GRID) */}
-      <section className="w-full max-w-6xl z-10 space-y-12 pb-16">
+      {/* 📸 NUEVA SECCIÓN: GALERÍA DE CASOS DE ÉXITO RECIENTES (PUNTO NUEVO) */}
+      <section className="w-full max-w-6xl z-10 space-y-8">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
-            Soluciones Especializadas
+            Evidencia de Laboratorio
           </h2>
           <p className="text-sm text-slate-400 max-w-xl font-light">
-            Infraestructura tecnológica y soporte técnico con estándares de alta fidelidad.
+            Casos reales de ingeniería electrónica avanzada solucionados en nuestros bancos de trabajo.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {RECENT_WORK.map((work) => (
+            <div key={work.id} className="bg-soltecot-darker/60 border border-white/5 rounded-2xl overflow-hidden group hover:border-soltecot-cyan/30 transition-all duration-300 shadow-xl">
+              <div className="h-48 overflow-hidden relative">
+                {/* Capa de tinte cyan al pasar el mouse */}
+                <div className="absolute inset-0 bg-soltecot-cyan/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
+                <img
+                  src={work.image}
+                  alt={work.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <span className="absolute bottom-3 left-3 bg-soltecot-dark/80 text-soltecot-cyan border border-soltecot-cyan/30 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md uppercase z-20">
+                  {work.tag}
+                </span>
+              </div>
+              <div className="p-5 space-y-2">
+                <h4 className="font-poppins font-semibold text-base text-white group-hover:text-soltecot-cyan transition-colors">
+                  {work.title}
+                </h4>
+                <p className="text-xs text-slate-400 font-light leading-relaxed">
+                  {work.description}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* SECCIÓN DE SERVICIOS (GRID) */}
+      <section className="w-full max-w-6xl z-10 space-y-12">
+        <div className="text-center md:text-left space-y-2">
+          <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
+            Servicios Especializados
+          </h2>
+          <p className="text-sm text-slate-400 max-w-xl font-light">
+            Infraestructura técnica de nivel micro-electrónico y soporte de alta fidelidad.
           </p>
         </div>
 
@@ -230,7 +382,6 @@ export default function Home() {
               className="group relative p-6 bg-soltecot-darker/40 backdrop-blur-sm rounded-2xl border border-white/5 hover:border-soltecot-cyan/30 transition-all duration-300 flex flex-col justify-between gap-6 hover:-translate-y-1 shadow-xl"
             >
               <div className="absolute inset-0 bg-gradient-to-b from-soltecot-cyan/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl pointer-events-none" />
-
               <div className="space-y-4 relative z-10">
                 <div className="w-12 h-12 rounded-xl bg-soltecot-cyan/10 border border-soltecot-cyan/20 flex items-center justify-center group-hover:bg-soltecot-cyan group-hover:text-soltecot-dark transition-all duration-300 shadow-inner">
                   {service.icon}
@@ -242,10 +393,43 @@ export default function Home() {
                   {service.description}
                 </p>
               </div>
-
-              <div className="text-[11px] font-poppins font-medium text-soltecot-cyan/60 group-hover:text-soltecot-cyan flex items-center gap-1 mt-2 relative z-10 transition-colors duration-200">
-                Saber más
+              <div className="text-[11px] font-poppins font-medium text-soltecot-cyan/60 group-hover:text-soltecot-cyan flex items-center gap-1 mt-2 relative z-10 transition-colors duration-200 cursor-pointer">
+                Consultar soporte
                 <span className="transform group-hover:translate-x-1 transition-transform duration-200">➔</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 💬 NUEVA SECCIÓN: TESTIMONIOS (CARRUSEL RESPONSIVO ESTILIZADO) */}
+      <section className="w-full max-w-6xl z-10 space-y-8 pb-8">
+        <div className="text-center md:text-left space-y-2">
+          <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
+            Opiniones de Clientes
+          </h2>
+          <p className="text-sm text-slate-400 max-w-xl font-light">
+            La confianza de nuestros usuarios respalda la precisión de nuestro trabajo.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {TESTIMONIALS.map((t) => (
+            <div key={t.id} className="p-6 bg-soltecot-darker/30 backdrop-blur-sm border border-white/5 rounded-2xl flex flex-col justify-between gap-4 shadow-xl">
+              <div className="space-y-3">
+                {/* Estrellas doradas minimalistas */}
+                <div className="flex gap-1 text-amber-400 text-xs">
+                  {Array.from({ length: t.rating }).map((_, i) => (
+                    <span key={i}>★</span>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-300 font-light leading-relaxed italic">
+                  "{t.text}"
+                </p>
+              </div>
+              <div className="border-t border-white/5 pt-3">
+                <h5 className="font-poppins font-semibold text-sm text-white">{t.name}</h5>
+                <span className="text-[10px] font-mono text-soltecot-cyan">{t.device}</span>
               </div>
             </div>
           ))}
@@ -255,11 +439,10 @@ export default function Home() {
       {/* FOOTER */}
       <footer className="w-full max-w-6xl text-center border-t border-white/5 pt-8 pb-4 z-10 mt-auto">
         <p className="text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} Soltecot. Todos los derechos reservados.
+          &copy; {new Date().getFullYear()} SOLTECOT_. Todos los derechos reservados. Solutions & Technology on Time.
         </p>
       </footer>
 
-      {/* AGENTE DE INTELIGENCIA ARTIFICIAL (CONECTADO Y COMPILADO) */}
       <Chatbot />
     </main>
   );
