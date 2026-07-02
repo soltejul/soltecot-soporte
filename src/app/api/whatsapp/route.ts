@@ -15,13 +15,11 @@ const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
 
-// 🔐 FUNCIÓN AUXILIAR: Autenticación centralizada mediante Variable de Entorno (Evita errores ENOENT)
 function obtenerAuthGoogle(scopes: string[]) {
     const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
     if (!credencialesRaw) {
-        throw new Error('🔴 [CRÍTICO]: La variable GOOGLE_APPLICATION_CREDENTIALS no está configurada en el entorno.')
+        throw new Error('🔴 [CRÍTICO]: La variable GOOGLE_APPLICATION_CREDENTIALS no está configurada.')
     }
-
     return new google.auth.GoogleAuth({
         credentials: JSON.parse(credencialesRaw),
         scopes: scopes
@@ -74,64 +72,29 @@ async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, 
                 estado: 'PENDIENTE'
             }
         })
-        console.log(`🐘 [PRISMA]: Cita [${tipo}] guardada exitosamente con el teléfono de contacto: ${telefono}`)
     } catch (error: any) {
         console.error('🔴 [PRISMA ERROR CITA]:', error.message)
     }
 }
 
 async function registrarEnGoogleSheets(
-    folio: string,
-    telefono: string,
-    nombre: string,
-    tipoSoporte: string,
-    dispositivoFalla: string,
-    status: string,
-    reqFactura: string,
-    rfc: string,
-    nombreFiscal: string,
-    cp: string,
-    regimen: string,
-    usoCfdi: string,
-    correo: string,
-    montoNeto: string,
-    iva: string,
-    totalCobrado: string,
-    estatusSat: string
+    folio: string, telefono: string, nombre: string, tipoSoporte: string, dispositivoFalla: string, status: string,
+    reqFactura: string, rfc: string, nombreFiscal: string, cp: string, regimen: string, usoCfdi: string, correo: string,
+    montoNeto: string, iva: string, totalCobrado: string, estatusSat: string
 ) {
     try {
-        // Usa la función centralizada y segura
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets'])
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
 
         const valoresFila = [
-            folio,
-            fechaActual,
-            nombre,
-            telefono,
-            tipoSoporte,
-            dispositivoFalla,
-            status,
-            reqFactura,
-            rfc,
-            nombreFiscal,
-            cp,
-            regimen,
-            usoCfdi,
-            correo,
-            montoNeto,
-            iva,
-            totalCobrado,
-            estatusSat,
-            ""
+            folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
+            reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
         ]
 
         await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: 'Facturación!A:S',
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [valoresFila] }
+            spreadsheetId: SPREADSHEET_ID, range: 'Facturación!A:S',
+            valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
         })
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
@@ -140,7 +103,6 @@ async function registrarEnGoogleSheets(
 
 async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensajeCliente: string, tipo: 'ENTREGA' | 'RECOLECCION') {
     try {
-        // Usa la función centralizada y segura
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
         const inicioCita = new Date(fechaIso)
@@ -173,7 +135,6 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
 
 async function eliminarCitaEnCalendar(eventId: string) {
     try {
-        // Usa la función centralizada y segura
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
         await calendar.events.delete({ calendarId: CALENDAR_ID, eventId })
@@ -212,16 +173,12 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     { telefono: telefono10Digitos }
                 ]
             },
-            include: {
-                tickets: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 1
-                }
-            }
+            include: { tickets: { orderBy: { createdAt: 'desc' }, take: 1 } }
         })
 
         ticketMasReciente = clientePrisma?.tickets[0]
 
+        // 🖥️ 1. INTERCEPTOR INTELIGENTE AUTOMATIZADO CON PARCHE DE MEMORIA V2
         const regexCodigoRemoto = /\b\d{4}\s?\d{4}\s?\d{4}\b|\b\d{12}\b/
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
@@ -229,59 +186,66 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             if (ticketMasReciente) {
                 await prisma.ticket.update({
                     where: { id: ticketMasReciente.id },
-                    data: {
-                        estado: 'EN_REPARACION',
-                        notasInternas: `[SESIÓN REMOTA] Código de acceso: ${codigoEncontrado}`
-                    }
+                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA] Código: ${codigoEncontrado}` }
                 })
             }
 
-            const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito, *${clientePrisma?.nombre || 'Cliente'}*!\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo en este momento vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador y no cierres el código.* Verás la actividad de soporte técnico en tu pantalla en unos segundos. 🔬`
+            // ⚡ CORRECCIÓN: Quitamos el placeholder roto "Nombre" e inyectamos el nombre real dinámico
+            const nombreClienteEstetico = clientePrisma?.nombre && clientePrisma.nombre !== 'Desconocido' ? clientePrisma.nombre : 'amigo'
+
+            const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito, *${nombreClienteEstetico}*!\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo en este momento vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador y no cierres el código.* Verás la actividad de soporte técnico en tu pantalla en unos segundos. 🔬`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
-            const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
-            await dispararAlertaInmediata(
-                telefono10Digitos,
+            // 🔥 PARCHE DE MEMORIA: Guardamos esta interacción en el historial para que Gemini sepa que ya te conectaste
+            let historialLocal = MEMORIA_CHAT.get(numeroCliente) || []
+            historialLocal.push({ role: 'user', parts: [{ text: mensajeCliente }] })
+            historialLocal.push({ role: 'model', parts: [{ text: mensajeConexion }] })
+            if (historialLocal.length > 12) historialLocal = historialLocal.slice(-12)
+            MEMORIA_CHAT.set(numeroCliente, historialLocal)
+
+            // 🚀 REGISTRO EN SHEETS DESDE EL INTERCEPTOR PARA NO PERDER LA FILA EN SOPORTES EXPRESS
+            const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
+            await registrarEnGoogleSheets(
+                codigoFolio,
+                telefono10Digitos, // <- Cambio aquí
+                nombreClienteEstetico,
+                'Remoto',
+                ticketMasReciente?.equipo || 'Instalación de Software / Soporte Express',
                 'EN_REPARACION',
-                `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Cliente:* ${clientePrisma?.nombre || 'Particular'}\n• *Equipo:* ${ticketMasReciente?.equipo || 'PC/Laptop'}\n👉 *CÓDIGO DE CONEXIÓN:* ${codigoFormateado}\n\nCopialo y entra desde tu MacNeo a: https://remotedesktop.google.com/support`
+                'NO',
+                '', '', '', '', '', '',
+                '361.21',
+                '57.79',
+                '419.00',
+                'NO REQUIERE'
             )
+
+            const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
+            await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Cliente:* ${nombreClienteEstetico}\n👉 *CÓDIGO:* ${codigoFormateado}\n\nEntra desde tu MacNeo a: https://remotedesktop.google.com/support`)
             return
         }
 
         if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             if (textoNormalizado === 'aceptar' || textoNormalizado === 'acepto' || textoNormalizado === 'autorizar') {
-                await prisma.ticket.update({
-                    where: { id: ticketMasReciente.id },
-                    data: { estado: 'EN_REPARACION' }
-                })
-
+                await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'EN_REPARACION' } })
                 const anticipo = (ticketMasReciente.costoReparacion || 0) * 0.50
                 const mensajeAceptacion = `✨ *¡Excelente decisión, ${clientePrisma?.nombre || 'Cliente'}!* ✨\n\nHemos registrado tu autorización para proceder con la reparación de tu *${ticketMasReciente.equipo}* (Orden: ${ticketMasReciente.numeroOrden}).\n\n💳 *Instrucciones de Prepago (50%):*\nPara activar las órdenes de refacciones y asignarle prioridad en el banco de trabajo, es necesario realizar el depósito del anticipo reglamentario:\n👉 *Monto del Anticipo:* $${anticipo.toFixed(2)} MXN\n\n🏦 *Datos Bancarios Oficiales:* \n• *Banco:* BBVA\n• *Cuenta CLABE:* 0121 8001 2345 6789 01\n• *Beneficiario:* Solutions & Technology On Time\n• *Concepto/Referencia:* ${ticketMasReciente.numeroOrden}\n\n🙏 Una vez realizado el movimiento, por favor compártenos el comprobante por aquí para validar tu pago y arrancar el microscopio de inmediato. 🔬`
-
                 await enviarMensajeWhatsApp(numeroCliente, mensajeAceptacion)
-                await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `✅ ¡Presupuesto Aceptado! El cliente autorizó la orden ${ticketMasReciente.numeroOrden}. Anticipo requerido: $${anticipo}`)
+                await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `✅ ¡Presupuesto Aceptado! Orden ${ticketMasReciente.numeroOrden}. Anticipo: $${anticipo}`)
                 return
             }
 
             if (textoNormalizado === 'rechazar' || textoNormalizado === 'rechazo' || textoNormalizado === 'cancelar') {
-                await prisma.ticket.update({
-                    where: { id: ticketMasReciente.id },
-                    data: { estado: 'RECHAZADO' }
-                })
-
+                await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'RECHAZADO' } })
                 const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nEntendemos perfectamente, *${clientePrisma?.nombre || 'Cliente'}*. Hemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras instalaciones.\n\n¡Gracias por tu confianza y tiempo! 🔬`
-
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
-                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto CVancelado. El cliente rechazó la orden ${ticketMasReciente.numeroOrden}. El equipo regresa a ensamblaje de devolución.`)
+                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Rechazado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
                 return
             }
         }
 
-        if (ticketMasReciente && ticketMasReciente.botActivo === false) {
-            console.log(`🤫 [MODO HUMANO ACTIVO]: El agente de IA se ha pausado para el cliente: ${numeroCliente}.`)
-            return
-        }
+        if (ticketMasReciente && ticketMasReciente.botActivo === false) return
 
     } catch (dbError: any) {
         console.error('🔴 Error al validar escudos en el webhook:', dbError.message)
@@ -316,33 +280,23 @@ MODALIDADES DE ATENCIÓN DISPONIBLES:
 3. 🖥️ SOPORTE TÉCNICO REMOTO INMEDIATO (NUEVO): Ideal para problemas de software, optimización, eliminación de virus o instalación de paqueterías. Se realiza de forma 100% segura mediante Google Remote Desktop sin que el cliente salga de casa.
 
 💰 TARIFAS Y TRANSPARENCIA FISCAL (SOPORTE REMOTO):
-- Al informar sobre el costo del Soporte Técnico Remoto, sé directo y transparente: La tarifa fija es de $419 MXN. 
+- La tarifa fija de Soporte Remoto es de $419 MXN neto.
 - REGLA ESTRICTA RESICO: Todos nuestros precios YA INCLUYEN IVA. Si el cliente pregunta por factura, dile con total seguridad: "¡Por supuesto! En Soltecot_ somos un laboratorio formalizado y emitimos factura fiscal CFDI 4.0 en todos nuestros servicios, el precio ya incluye el 16% de IVA."
-- Si solicitan factura, indícales: "Con gusto. Al finalizar y liquidar tu soporte, puedes enviarme por este chat tu Constancia de Situación Fiscal en PDF, tu correo electrónico y el Uso de CFDI, y tu factura te llegará en menos de 24 horas."
 
-🚨 REGLA DE TRIAGE REMOTO Y EXTRACCIÓN DE CÓDIGO:
-- Si el problema del cliente es puramente de Software/Sistemas o lentitud, ofrécéle de inmediato el *Soporte Técnico Remoto*. 
-- Si el cliente acepta la sesión remota, indícale de forma muy clara y amable los siguientes pasos exactos:
+🚨 FLUJO SECUENCIAL DE APERTURA (OBLIGATORIO PASO A PASO):
+- PASO 1 (Datos Básicos): Cuando el cliente acepte el servicio técnico (remoto o físico), solicítale únicamente su Nombre Completo, confirme su Teléfono y añade la pregunta cerrada: "¿Requieres factura fiscal CFDI 4.0 para tu servicio? (Por favor responde únicamente SÍ o NO)".
+- PASO 2 (Bifurcación Fiscal):
+  • Si el cliente responde "NO" o indica que no requiere factura: Pasa directamente a entregarle las instrucciones de soporte técnico (Pasos de Google Remote Desktop si es remoto, o confirmación de cita si es físico). Envía la etiqueta: __DATOS_FISCALES__:NO||||||
+  • Si el cliente responde "SÍ" o solicita factura: Pasa a pedirle amablemente sus datos fiscales (RFC, Nombre Fiscal, CP, Régimen, Uso de CFDI y Correo) o indícale que puede adjuntar su Constancia de Situación Fiscal en PDF. Una vez que te provea los datos, entrégale las instrucciones de conexión de Google Remote Desktop.
+
+🚨 REGLA DE TRIAGE REMOTO:
+- Si acepta la sesión remota e indica los datos, guíalo con los pasos de Google Remote Desktop:
   1. Entrar desde su computadora a: https://remotedesktop.google.com/support
-  2. Hacer clic en "Asistencia remota" y descargar la pequeña herramienta oficial de Google.
-  3. Darle clic al botón "+ Generar código" y enviarte los 12 dígitos resultantes por este chat para que el Ingeniero Julio se conecte de inmediato.
-- FILTRO ESTRICTO DE CÓDIGO: El código de acceso de Google consta exactamente de 12 dígitos numéricos continuos (ej: 949643192295). Si detectas un bloque de 12 números en el mensaje del usuario, sin importar si viene acompañado de saludos o texto extra, extráelo inmediatamente como el código de acceso legítimo y pasa de inmediato al formato de confirmación final. No se lo vuelvas a solicitar.
+  2. Descargar la herramienta en "Asistencia remota".
+  3. Hacer clic en "+ Generar código" y pasarte los 12 dígitos.
 
-🚨 REGLA DE ORO DE CAPTURA (OBLIGATORIA):
-- Solicita SIEMPRE el Nombre Completo y un número de teléfono de 10 dígitos para aperturar su folio de servicio técnico en el sistema, sea físico o remoto.
-
-⚠️ REGLA DE SEGURIDAD CONVERSACIONAL (PROHIBIDO PLACEHOLDERS FANTASMA):
-- NUNCA uses la palabra literal "Nombre" o cadenas como "[Nombre del Cliente]" in tus respuestas finales como marcador de posición. Si lograste extraer el nombre del cliente (ej: Pedro), úsalo. Si no tienes certeza de su nombre o el usuario no lo ha provisto, utiliza expresiones amables y genéricas como "estimado cliente", "amigo", o simplemente omítelo con un "¡Perfecto!" o "Excelente", pero jamás envíes una plantilla rota con texto técnico expuesto.
-
-🚨 CONFIRMACIÓN FINAL DE CONEXIÓN REMOTA:
-En cuanto recibas y valides los 12 dígitos del código de Google Remote Desktop, debes confirmar el inicio del enlace técnico con esta estructura estricta, formal y profesional (adaptando el nombre si lo tienes):
-"⚡ SISTEMA SOLTECOT_ REMOTO ⚡
------------------------------------------
-¡Código de acceso recibido con éxito!
-• Folio Temporal: SOL-REM-PENDIENTE
-• Técnico Asignado: Ing. Julio López
-
-El Ingeniero Julio ha recibido la alerta en su banco de trabajo doméstico y se está enlazando a tu computadora en este momento vía Google Remote Desktop. Por favor, mantén tu pantalla activa y acepta la solicitud de entrada en tu monitor. 🔬💻"
+⚠️ CONDUCTA POST-CONEXIÓN:
+- Si en el historial de chat ves que ya se envió el mensaje de conexión exitosa ("⚡ SISTEMA SOLTECOT_ REMOTO ⚡") y el cliente dice cosas como "listo gracias", "entendido", u oraciones cortas afirmativas, significa que el Ingeniero Julio ya está enlazado a su monitor. Respóndele de forma humana y atenta: "¡De nada! El Ingeniero Julio ya se encuentra trabajando en tu equipo en este momento. Mantén tu pantalla activa y en cuanto finalice la instalación/reparación, te lo notificaremos de inmediato por este chat. ¡Gracias por tu confianza!"
 
 🚨 REGLA DE ORO DE ETIQUETAS:
 - Si coordinan visita física: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
@@ -414,11 +368,10 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             if (resultadoAgenda.exitoso) {
                 respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita en Laboratorio Confirmada:* Tu espacio de recepción ha quedado reservado con éxito. ¡Te esperamos! 🛠⚙️`
                 estatusLead = 'AGENDADO'
-
                 await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
-                await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial para ${dispositivoCrm}`)
+                await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
             } else {
-                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa la interrupción. Al intentar asegurar tu folio en nuestro sistema, detectamos que el horario de las **${new Date(fechaExtraida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Mexico_City' })}** para tu visita al laboratorio se acaba de ocupar.\n\n⏳ ¿Tendrás algún otro horario disponible entre semana (10 AM a 6 PM) o el sábado antes de las 2 PM para asignarte un espacio libre?`
+                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Detectamos que el horario solicitado se acaba de ocupar. ¿Tendrás algún otro espacio disponible libre?`
                 estatusLead = 'POR_AGENDAR'
             }
         }
@@ -427,18 +380,13 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             tipoSoporteCalculado = 'Recolección'
             const fechaExtraida = matchRecoleccion[1].trim()
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
-            const MEMORIA_CHAT = new Map<string, any>()
 
             if (resultadoAgenda.exitoso) {
-                respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística.\n\n⚠️ *Para activar tu recolección*, por favor proporciónname tu *dirección completa*, *nombre completo* y la *falla* del equipo. 🚚`
-
+                respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
                 await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Pendiente de dirección', fechaExtraida, 0, 'RECOLECCION')
-
-                MEMORIA_CHAT.set(`${numeroCliente}_event_id`, resultadoAgenda.eventId)
-                MEMORIA_CHAT.set(`${numeroCliente}_fecha_iso`, fechaExtraida)
                 estatusLead = 'POR_AGENDAR'
             } else {
-                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Estábamos procesando tu recolección a domicilio, pero nuestro mapa logístico detectó que el horario de las **${new Date(fechaExtraida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Mexico_City' })}** en la ruta de fin de semana ya no tiene cupo disponible.\n\n⚠️ Nuestro cupo es limitado para garantizar la puntualidad de los operadores.\n\n¿Tendrás algún otro espacio libre el sábado o domingo que podamos validar en tiempo real? 🚚💨`
+                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
                 estatusLead = 'POR_AGENDAR'
             }
         }
@@ -446,39 +394,23 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         if (matchDireccion) {
             tipoSoporteCalculado = 'Recolección'
             const direccionExtraida = matchDireccion[1].trim()
+            const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
 
-            const ultimaCitaPrisma = await prisma.cita.findFirst({
-                where: { telefono: telefonoParaCita },
-                orderBy: { createdAt: 'desc' }
-            })
-
-            const tipoCitaActual = ultimaCitaPrisma?.tipo || 'RECOLECCION'
-
-            if (tipoCitaActual === 'ENTREGA') {
+            if (ultimaCitaPrisma?.tipo === 'ENTREGA') {
                 estatusLead = 'AGENDADO'
                 tipoSoporteCalculado = 'Visita Física'
             } else {
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
-
                 if (kilometrosReal !== -1 && kilometrosReal <= RADIO_MAXIMO_KM) {
-                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n📍 *Validación de Cobertura:* Confirmamos que tu domicilio se encuentra a *${kilometrosReal.toFixed(1)} km* de nuestra base, dentro de nuestro rango operativo. ¡Nuestra logística de ruta está lista! 🚚💨`
+                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n📍 *Rango de Cobertura Válido:* Tu domicilio se encuentra a *${kilometrosReal.toFixed(1)} km*, dentro del rango operativo. 🚚💨`
                     estatusLead = 'AGENDADO'
-
                     if (ultimaCitaPrisma && ultimaCitaPrisma.tipo === 'RECOLECCION') {
-                        await prisma.cita.update({
-                            where: { id: ultimaCitaPrisma.id },
-                            data: { direccion: direccionExtraida, distanciaKm: kilometrosReal, estado: 'PENDIENTE' }
-                        })
+                        await prisma.cita.update({ where: { id: ultimaCitaPrisma.id }, data: { direccion: direccionExtraida, distanciaKm: kilometrosReal, estado: 'PENDIENTE' } })
                     }
-
-                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Recolección. Dirección: ${direccionExtraida}`)
+                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Recolección en: ${direccionExtraida}`)
                 } else {
-                    const eventIdAEliminar = MEMORIA_CHAT.get(`${numeroCliente}_event_id`) as any
-                    if (eventIdAEliminar) await eliminarCitaEnCalendar(eventIdAEliminar)
-
-                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra fuera de nuestro rango de cobertura de recolección.\n\n⚠️ Nuestro límite es de **${RADIO_MAXIMO_KM} km**.\n\nCon gusto te recibimos directamente en nuestras instalaciones para un diagnóstico sin costo. ¿Te comparto la ubicación? 🛠️`
+                    respuestaWhatsApp = `Tu dirección se encuentra fuera de nuestro límite de **${RADIO_MAXIMO_KM} km**. Con gusto te recibimos presencialmente en el laboratorio. 🛠️`
                     estatusLead = 'FUERA_DE_COBERTURA'
-                    await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango. Dirección: ${direccionExtraida}`)
                 }
             }
         }
@@ -516,23 +448,9 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
             await registrarEnGoogleSheets(
-                codigoFolio,
-                telefonoParaCita,
-                nombreCrm,
-                tipoSoporteCalculado,
-                compendioFalla,
-                estatusLead,
-                reqFactura,
-                rfcCrm,
-                nombreFiscalCrm,
-                cpCrm,
-                regimenCrm,
-                usoCfdiCrm,
-                correoCrm,
-                montoNeto,
-                ivaCalculado,
-                totalCobrado,
-                estatusSatCalculado
+                codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
+                reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
+                montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
             )
         }
     } catch (error: any) {
@@ -543,15 +461,11 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 export async function POST(req: Request) {
     try {
         const event = await req.json()
-        if (event.type !== 'message' || !event.data || event.data.type !== 'chat') {
-            return new Response('Evento ignorado', { status: 200 })
-        }
-        if (event.data.fromMe === true || event.data.from.includes('5546088200')) {
-            return new Response('Eco del bot ignorado', { status: 200 })
-        }
+        if (event.type !== 'message' || !event.data || event.data.type !== 'chat') return new Response('Ignorado', { status: 200 })
+        if (event.data.fromMe === true || event.data.from.includes('5546088200')) return new Response('Eco Ignorado', { status: 200 })
         await ejecutarLogicaIA(event.data.body, event.data.from)
-        return new Response('Mensaje processed', { status: 200 })
+        return new Response('Processed', { status: 200 })
     } catch (error) {
-        return new Response('Internal Error', { status: 500 })
+        return new Response('Error', { status: 500 })
     }
 }

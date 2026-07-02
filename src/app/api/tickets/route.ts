@@ -94,7 +94,7 @@ export async function PATCH(request: Request) {
             let textoMensaje = ""
 
             if (nuevoEstado === "ESPERANDO_APROBACION") {
-                // 💰 MENSAJE PERSONALIZADO DE PRESUPUESTO (PUNTO 3)
+                // 💰 MENSAJE PERSONALIZADO DE PRESUPUESTO
                 textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
                     `Hola, *${ticketActualizado.cliente.nombre}*. Hemos concluido el diagnóstico completo de tu equipo:\n` +
                     `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
@@ -105,8 +105,21 @@ export async function PATCH(request: Request) {
                     `👉 Escribe *Aceptar* (Para autorizar el inicio de la reparación).\n` +
                     `👉 Escribe *Rechazar* (Para cancelar y preparar la devolución de tu equipo).\n\n` +
                     `🌐 *Rastreo en Vivo:* Puedes consultar la nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+
+            } else if (nuevoEstado === "LISTO_PARA_ENTREGA" || nuevoEstado === "ENTREGADO") {
+                // 🚀 INTERCEPTOR PREMIUM DE FIN DE SERVICIO (REMOTO O FÍSICO)
+                const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' ? ticketActualizado.cliente.nombre : 'amigo'
+
+                textoMensaje = `🔬 *¡SOPORTE TÉCNICO CONCLUIDO CON ÉXITO!* ⚡\n\n` +
+                    `Hola, *${nombreClienteEstetico}*. El Ingeniero Julio ha finalizado las configuraciones, instalaciones y optimizaciones en tu equipo de forma 100% segura.\n\n` +
+                    `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
+                    `🎫 *Folio de Orden:* ${ticketActualizado.numeroOrden}\n\n` +
+                    `✨ *Tu sistema ya se encuentra operativo al 100% y acelerado.* Tu reporte técnico final y los registros de laboratorio han sido archivados con éxito.\n\n` +
+                    `🧾 *Control Fiscal (CFDI 4.0):* Si solicitaste factura fiscal al aperturar tu orden, nuestro departamento contable la procesará y te llegará a tu correo en menos de 24 horas. Si indicaste que no la requerías, tu nota de servicio digital queda resguardada permanentemente.\n\n` +
+                    `🙏 ¡Muchas gracias por confiar en el laboratorio de Soltecot_! Puedes consultar tu comprobante de cierre dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+
             } else {
-                // 🛠️ MENSAJE ESTÁNDAR PARA OTROS CAMBIOS DE ESTATUS
+                // 🛠️ MENSAJE ESTÁNDAR PARA OTROS CAMBIOS DE ESTATUS (RECIBIDO, DIAGNOSTICO, ETC)
                 const estadoFormateado = typeof nuevoEstado === 'string' ? nuevoEstado.replace('_', ' ') : 'ACTUALIZADO'
                 textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEl estatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha cambiado a:\n👉 *${estadoFormateado}*\n\n🌐 *Rastreo en Vivo:* Consulta el avance actualizado dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
             }
