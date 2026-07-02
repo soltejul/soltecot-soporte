@@ -96,7 +96,7 @@ export default function Chatbot() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-black"></span>
                     </span>
-                    Soporte IA_
+                    Asistencia
                 </button>
             )}
 
@@ -106,7 +106,7 @@ export default function Chatbot() {
                     {/* Encabezado */}
                     <div className="bg-zinc-900 p-4 border-b border-zinc-800 flex justify-between items-center">
                         <div>
-                            <h3 className="text-white font-bold text-sm">Soltecot_ Asistente</h3>
+                            <h3 className="text-white font-bold text-sm">Asistencia Soltecot</h3>
                             <p className="text-xs text-[#00e676]">En línea 24/7</p>
                         </div>
 
@@ -118,7 +118,7 @@ export default function Chatbot() {
                                 rel="noopener noreferrer"
                                 className="bg-[#00e676] hover:bg-[#00c853] text-black font-bold px-2 py-1 rounded-md text-[10px] transition-colors tracking-wide flex items-center gap-1"
                             >
-                                🔀 Pasar a WA
+                                📞 WhatsApp
                             </a>
                             <button
                                 onClick={() => setIsOpen(false)}
@@ -151,7 +151,7 @@ export default function Chatbot() {
                         ))}
 
                         {isLoading && (
-                            <div className="text-zinc-500 text-xs animate-pulse">Soltecot_ está pensando...</div>
+                            <div className="text-zinc-500 text-xs animate-pulse">Asistencia Soltecot está pensando...</div>
                         )}
                     </div>
 

@@ -296,17 +296,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Contenedor del texto (Ajustamos el mt a 2 y 4 para pegarlo justo debajo del logo eliminando el aire) */}
-        <div className="space-y-6 mt-2 md:mt-4">
-          <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
-            Impulsa el rendimiento <br />
-            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">sin salir de casa</span>
-          </h1>
-          <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
-            Especialistas en mantenimiento integral. Actualización de PCs y laptops. Consolas de videojuegos y controles. Soporte técnico remoto y transparente.
-          </p>
-        </div>
-
         {/* Contenedor del texto con un margen superior manual ultra ceñido para pegarlo al logo */}
         <div className="space-y-6 mt-4 md:mt-6">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
@@ -433,7 +422,7 @@ export default function Home() {
       <section className="w-full max-w-6xl z-10 space-y-8">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
-            Evidencia de Laboratorio
+            ¿En qué nos especializamos?
           </h2>
           <p className="text-sm text-slate-400 max-w-xl font-light leading-relaxed">
             Casos reales de mantenimiento y upgrade avanzados solucionados en nuestros bancos de trabajo.
