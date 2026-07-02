@@ -265,7 +265,7 @@ export default function Home() {
               : 'h-16 md:h-24 w-auto drop-shadow-[0_0_20px_rgba(92,221,207,0.15)]'}`}
           >
             <img
-              src="/logo.png"
+              src="/logo.jpg"
               alt="Logo Soltecot"
               className="w-full h-full object-contain pointer-events-none"
             />
