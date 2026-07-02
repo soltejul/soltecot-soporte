@@ -2,7 +2,6 @@ import { GoogleGenAI } from '@google/genai'
 import { google } from 'googleapis'
 import { prisma } from '../../../lib/prisma'
 import { enviarMensajeWhatsApp } from '../../../lib/whatsapp'
-import path from 'path'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +14,19 @@ const LINK_GOOGLE_MAPS = 'https://maps.google.com/?q=19.68430387588073,-99.15870
 const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
+
+// 🔐 FUNCIÓN AUXILIAR: Autenticación centralizada mediante Variable de Entorno (Evita errores ENOENT)
+function obtenerAuthGoogle(scopes: string[]) {
+    const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
+    if (!credencialesRaw) {
+        throw new Error('🔴 [CRÍTICO]: La variable GOOGLE_APPLICATION_CREDENTIALS no está configurada en el entorno.')
+    }
+
+    return new google.auth.GoogleAuth({
+        credentials: JSON.parse(credencialesRaw),
+        scopes: scopes
+    })
+}
 
 async function dispararAlertaInmediata(telefono: string, estatus: string, detalles: string) {
     const CHAT_WEBHOOK_URL = process.env.GOOGLE_CHAT_WEBHOOK || ''
@@ -68,7 +80,6 @@ async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, 
     }
 }
 
-// 🧾 FUNCIÓN CON EL CONTROL COMPLETO DE LAS 19 COLUMNAS FISCALES FINANCIERAS
 async function registrarEnGoogleSheets(
     folio: string,
     telefono: string,
@@ -89,39 +100,36 @@ async function registrarEnGoogleSheets(
     estatusSat: string
 ) {
     try {
-        const auth = new google.auth.GoogleAuth({
-            keyFile: path.join(process.cwd(), 'google-credentials.json'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-        })
+        // Usa la función centralizada y segura
+        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets'])
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
 
-        // Mapeo exacto de las 19 columnas de tu Excel (A hasta S)
         const valoresFila = [
-            folio,             // A: Folio
-            fechaActual,       // B: Fecha
-            nombre,            // C: Cliente
-            telefono,          // D: Teléfono
-            tipoSoporte,       // E: Tipo de Soporte
-            dispositivoFalla,  // F: Dispositivo/Falla
-            status,            // G: Estado Laboratorio
-            reqFactura,        // H: ¿Requiere Factura?
-            rfc,               // I: RFC
-            nombreFiscal,      // J: Nombre Fiscal
-            cp,                // K: CP Fiscal
-            regimen,           // L: Régimen Fiscal
-            usoCfdi,           // M: Uso de CFDI
-            correo,            // N: Correo Facturación
-            montoNeto,         // O: Monto Neto
-            iva,               // P: IVA (16%)
-            totalCobrado,      // Q: Total Cobrado
-            estatusSat,        // R: Estatus SAT
-            ""                 // S: Fecha de Timbrado (Se deja en blanco para cuando la hagas manualmente)
+            folio,
+            fechaActual,
+            nombre,
+            telefono,
+            tipoSoporte,
+            dispositivoFalla,
+            status,
+            reqFactura,
+            rfc,
+            nombreFiscal,
+            cp,
+            regimen,
+            usoCfdi,
+            correo,
+            montoNeto,
+            iva,
+            totalCobrado,
+            estatusSat,
+            ""
         ]
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Facturación!A:S', // Rango ampliado hasta la columna S
+            range: 'Facturación!A:S',
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [valoresFila] }
         })
@@ -132,10 +140,8 @@ async function registrarEnGoogleSheets(
 
 async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensajeCliente: string, tipo: 'ENTREGA' | 'RECOLECCION') {
     try {
-        const auth = new google.auth.GoogleAuth({
-            keyFile: path.join(process.cwd(), 'google-credentials.json'),
-            scopes: ['https://www.googleapis.com/auth/calendar'],
-        })
+        // Usa la función centralizada y segura
+        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
         const inicioCita = new Date(fechaIso)
         const finCita = new Date(inicioCita.getTime() + (60 * 60 * 1000))
@@ -167,10 +173,8 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
 
 async function eliminarCitaEnCalendar(eventId: string) {
     try {
-        const auth = new google.auth.GoogleAuth({
-            keyFile: path.join(process.cwd(), 'google-credentials.json'),
-            scopes: ['https://www.googleapis.com/auth/calendar'],
-        })
+        // Usa la función centralizada y segura
+        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
         await calendar.events.delete({ calendarId: CALENDAR_ID, eventId })
     } catch (error: any) {
@@ -254,6 +258,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                 const anticipo = (ticketMasReciente.costoReparacion || 0) * 0.50
                 const mensajeAceptacion = `✨ *¡Excelente decisión, ${clientePrisma?.nombre || 'Cliente'}!* ✨\n\nHemos registrado tu autorización para proceder con la reparación de tu *${ticketMasReciente.equipo}* (Orden: ${ticketMasReciente.numeroOrden}).\n\n💳 *Instrucciones de Prepago (50%):*\nPara activar las órdenes de refacciones y asignarle prioridad en el banco de trabajo, es necesario realizar el depósito del anticipo reglamentario:\n👉 *Monto del Anticipo:* $${anticipo.toFixed(2)} MXN\n\n🏦 *Datos Bancarios Oficiales:* \n• *Banco:* BBVA\n• *Cuenta CLABE:* 0121 8001 2345 6789 01\n• *Beneficiario:* Solutions & Technology On Time\n• *Concepto/Referencia:* ${ticketMasReciente.numeroOrden}\n\n🙏 Una vez realizado el movimiento, por favor compártenos el comprobante por aquí para validar tu pago y arrancar el microscopio de inmediato. 🔬`
+
                 await enviarMensajeWhatsApp(numeroCliente, mensajeAceptacion)
                 await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `✅ ¡Presupuesto Aceptado! El cliente autorizó la orden ${ticketMasReciente.numeroOrden}. Anticipo requerido: $${anticipo}`)
                 return
@@ -268,7 +273,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nEntendemos perfectamente, *${clientePrisma?.nombre || 'Cliente'}*. Hemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras instalaciones.\n\n¡Gracias por tu confianza y tiempo! 🔬`
 
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
-                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Rechazado. El cliente canceló la orden ${ticketMasReciente.numeroOrden}. El equipo regresa a ensamblaje de devolución.`)
+                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto CVancelado. El cliente rechazó la orden ${ticketMasReciente.numeroOrden}. El equipo regresa a ensamblaje de devolución.`)
                 return
             }
         }
@@ -316,8 +321,8 @@ MODALIDADES DE ATENCIÓN DISPONIBLES:
 - Si solicitan factura, indícales: "Con gusto. Al finalizar y liquidar tu soporte, puedes enviarme por este chat tu Constancia de Situación Fiscal en PDF, tu correo electrónico y el Uso de CFDI, y tu factura te llegará en menos de 24 horas."
 
 🚨 REGLA DE TRIAGE REMOTO Y EXTRACCIÓN DE CÓDIGO:
-- Si el problema del cliente es puramente de Software/Sistemas o lentitud, ofrécele de inmediato el *Soporte Técnico Remoto*. 
-- Si el cliente acepta la sesión remota, indícale de forma muy clara and amable los siguientes pasos exactos:
+- Si el problema del cliente es puramente de Software/Sistemas o lentitud, ofrécéle de inmediato el *Soporte Técnico Remoto*. 
+- Si el cliente acepta la sesión remota, indícale de forma muy clara y amable los siguientes pasos exactos:
   1. Entrar desde su computadora a: https://remotedesktop.google.com/support
   2. Hacer clic en "Asistencia remota" y descargar la pequeña herramienta oficial de Google.
   3. Darle clic al botón "+ Generar código" y enviarte los 12 dígitos resultantes por este chat para que el Ingeniero Julio se conecte de inmediato.
@@ -327,7 +332,7 @@ MODALIDADES DE ATENCIÓN DISPONIBLES:
 - Solicita SIEMPRE el Nombre Completo y un número de teléfono de 10 dígitos para aperturar su folio de servicio técnico en el sistema, sea físico o remoto.
 
 ⚠️ REGLA DE SEGURIDAD CONVERSACIONAL (PROHIBIDO PLACEHOLDERS FANTASMA):
-- NUNCA uses la palabra literal "Nombre" o cadenas como "[Nombre del Cliente]" en tus respuestas finales como marcador de posición. Si lograste extraer el nombre del cliente (ej: Pedro), úsalo. Si no tienes certeza de su nombre o el usuario no lo ha provisto, utiliza expresiones amables y genéricas como "estimado cliente", "amigo", o simplemente omítelo con un "¡Perfecto!" o "Excelente", pero jamás envíes una plantilla rota con texto técnico expuesto.
+- NUNCA uses la palabra literal "Nombre" o cadenas como "[Nombre del Cliente]" in tus respuestas finales como marcador de posición. Si lograste extraer el nombre del cliente (ej: Pedro), úsalo. Si no tienes certeza de su nombre o el usuario no lo ha provisto, utiliza expresiones amables y genéricas como "estimado cliente", "amigo", o simplemente omítelo con un "¡Perfecto!" o "Excelente", pero jamás envíes una plantilla rota con texto técnico expuesto.
 
 🚨 CONFIRMACIÓN FINAL DE CONEXIÓN REMOTA:
 En cuanto recibas y valides los 12 dígitos del código de Google Remote Desktop, debes confirmar el inicio del enlace técnico con esta estructura estricta, formal y profesional (adaptando el nombre si lo tienes):
@@ -345,7 +350,7 @@ El Ingeniero Julio ha recibido la alerta en su banco de trabajo doméstico y se 
 - Si te da su dirección de ruta: __DIRECCION_CLIENTE__:[dirección limpia]
                     
 📊 EXTRAER ATRIBUTOS CRM Y DATOS FISCALES AMPLIADOS:
-Añade siempre al final de cada respuesta dos bloques estructurados (Extrae el Nombre Fiscal completo y Uso de CFDI con precisión):
+Añade siempre al final de cada respuesta dos bloques estructurados:
 __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
 __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`,
                 }
@@ -385,7 +390,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             if (campos[3]) telefonoRealCrm = campos[3].trim().replace(/\D/g, '')
         }
 
-        // 📊 Parseo de los nuevos atributos fiscales para el CFDI 4.0
         let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
         if (matchFiscal) {
             const camposFiscales = matchFiscal[1].split('|')
@@ -487,18 +491,15 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
-            // 💰 CÁLCULOS MATEMÁTICOS DE COSTOS Y IVA AUTOMÁTICOS
             let totalCobrado = ""
             let montoNeto = ""
             let ivaCalculado = ""
 
             if (tipoSoporteCalculado === 'Remoto') {
-                // Tarifa fija establecida de $419 MXN
                 totalCobrado = "419.00"
                 montoNeto = "361.21"
                 ivaCalculado = "57.79"
             } else if (ticketMasReciente?.costoReparacion) {
-                // Si es físico y ya se cargó un presupuesto en la BD Neon
                 const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
                 if (!isNaN(costoTotal)) {
                     totalCobrado = costoTotal.toFixed(2)
@@ -507,16 +508,13 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     ivaCalculado = (costoTotal - neto).toFixed(2)
                 }
             } else {
-                // Si ingresa por primera vez a laboratorio físico sin revisión
                 totalCobrado = "Por cotizar"
                 montoNeto = "Pendiente"
                 ivaCalculado = "Pendiente"
             }
 
-            // ⚖️ ENRUTAMIENTO INTELIGENTE DEL STATUS SAT CFDI 4.0
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-            // 🚀 EJECUCIÓN DEL ENVÍO COMPLETO A LAS 19 COLUMNAS DEL GOOGLE SHEETS
             await registrarEnGoogleSheets(
                 codigoFolio,
                 telefonoParaCita,
