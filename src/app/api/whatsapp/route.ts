@@ -68,7 +68,26 @@ async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, 
     }
 }
 
-async function registrarEnGoogleSheets(telefono: string, mensaje: string, respuesta: string, status: string, nombre: string, dispositivo: string, falla: string) {
+// 🧾 FUNCIÓN CON EL CONTROL COMPLETO DE LAS 19 COLUMNAS FISCALES FINANCIERAS
+async function registrarEnGoogleSheets(
+    folio: string,
+    telefono: string,
+    nombre: string,
+    tipoSoporte: string,
+    dispositivoFalla: string,
+    status: string,
+    reqFactura: string,
+    rfc: string,
+    nombreFiscal: string,
+    cp: string,
+    regimen: string,
+    usoCfdi: string,
+    correo: string,
+    montoNeto: string,
+    iva: string,
+    totalCobrado: string,
+    estatusSat: string
+) {
     try {
         const auth = new google.auth.GoogleAuth({
             keyFile: path.join(process.cwd(), 'google-credentials.json'),
@@ -76,14 +95,38 @@ async function registrarEnGoogleSheets(telefono: string, mensaje: string, respue
         })
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
-        const valoresFila = [fechaActual, telefono, mensaje, respuesta, status, nombre, dispositivo, falla]
+
+        // Mapeo exacto de las 19 columnas de tu Excel (A hasta S)
+        const valoresFila = [
+            folio,             // A: Folio
+            fechaActual,       // B: Fecha
+            nombre,            // C: Cliente
+            telefono,          // D: Teléfono
+            tipoSoporte,       // E: Tipo de Soporte
+            dispositivoFalla,  // F: Dispositivo/Falla
+            status,            // G: Estado Laboratorio
+            reqFactura,        // H: ¿Requiere Factura?
+            rfc,               // I: RFC
+            nombreFiscal,      // J: Nombre Fiscal
+            cp,                // K: CP Fiscal
+            regimen,           // L: Régimen Fiscal
+            usoCfdi,           // M: Uso de CFDI
+            correo,            // N: Correo Facturación
+            montoNeto,         // O: Monto Neto
+            iva,               // P: IVA (16%)
+            totalCobrado,      // Q: Total Cobrado
+            estatusSat,        // R: Estatus SAT
+            ""                 // S: Fecha de Timbrado (Se deja en blanco para cuando la hagas manualmente)
+        ]
 
         await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID, range: 'Hoja 1!A:H',
-            valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Facturación!A:S', // Rango ampliado hasta la columna S
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [valoresFila] }
         })
     } catch (error: any) {
-        console.error('🔴 Error Sheets:', error.message)
+        console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
     }
 }
 
@@ -154,9 +197,9 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const textoNormalizado = mensajeCliente.trim().toLowerCase()
     const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
     const telefono10Digitos = telefonoLimpio.slice(-10)
+    let ticketMasReciente: any = null
 
     try {
-        // Buscamos el cliente y su orden activa usando variaciones del formato telefónico
         const clientePrisma = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -173,15 +216,12 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             }
         })
 
-        const ticketMasReciente = clientePrisma?.tickets[0]
+        ticketMasReciente = clientePrisma?.tickets[0]
 
-        // 🖥️ 1. INTERCEPTOR INTELIGENTE DE GOOGLE REMOTE DESKTOP (NUEVO)
-        // Detecta patrones de 12 dígitos (ej: 1234 5678 9012 o 123456789012)
         const regexCodigoRemoto = /\b\d{4}\s?\d{4}\s?\d{4}\b|\b\d{12}\b/
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            // Actualizamos el ticket en Neon para reflejar que la sesión está activa
             if (ticketMasReciente) {
                 await prisma.ticket.update({
                     where: { id: ticketMasReciente.id },
@@ -196,17 +236,15 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
-            // Te dispara el código listo a tu Google Chat corporativo
             const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
             await dispararAlertaInmediata(
                 telefono10Digitos,
                 'EN_REPARACION',
                 `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Cliente:* ${clientePrisma?.nombre || 'Particular'}\n• *Equipo:* ${ticketMasReciente?.equipo || 'PC/Laptop'}\n👉 *CÓDIGO DE CONEXIÓN:* ${codigoFormateado}\n\nCopialo y entra desde tu MacNeo a: https://remotedesktop.google.com/support`
             )
-            return // 🚫 Frena el flujo, Gemini no interfiere en la entrega del código
+            return
         }
 
-        // 💰 INTERCEPTOR DE PRESUPUESTOS (PUNTO 3)
         if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             if (textoNormalizado === 'aceptar' || textoNormalizado === 'acepto' || textoNormalizado === 'autorizar') {
                 await prisma.ticket.update({
@@ -236,7 +274,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             }
         }
 
-        // 🛡️ ESCUDO MODO HUMANO AUTOMÁTICO (PUNTO 2)
         if (ticketMasReciente && ticketMasReciente.botActivo === false) {
             console.log(`🤫 [MODO HUMANO ACTIVO]: El agente de IA se ha pausado para el cliente: ${numeroCliente}.`)
             return
@@ -263,34 +300,55 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de microelectrónica y soluciones de soporte técnico.
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de computadoras y laptops. Tu objetivo es guiar al cliente de manera clara y profesional para agendar citas de entrega o recolección, y extraer información relevante para el CRM. Debes mantener un tono cordial, profesional y empático, evitando tecnicismos innecesarios.
                     
-                    📅 HOY ES: ${fechaHoyString}.
-                    📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
-                    🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
+📅 HOY ES: ${fechaHoyString}.
+📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
+🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
-                    MODALIDADES DE ATENCIÓN DISPONIBLES:
-                    1. VISITA DIRECTA AL LABORATORIO: De lunes a viernes (10 AM a 6 PM) y sábados (10 AM a 2 PM). El cliente viene en persona.
-                    2. SERVICIO DE RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
-                    3. 🖥️ SOPORTE TÉCNICO REMOTO INMEDIATO (NUEVO): Ideal para problemas de software, optimización, eliminación de virus o instalación de paqueterías. Se realiza de forma 100% segura mediante Google Remote Desktop sin que el cliente salga de casa.
+MODALIDADES DE ATENCIÓN DISPONIBLES:
+1. VISITA DIRECTA AL LABORATORIO: De lunes a viernes (10 AM a 6 PM) y sábados (10 AM a 2 PM). El cliente viene en persona.
+2. SERVICIO DE RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
+3. 🖥️ SOPORTE TÉCNICO REMOTO INMEDIATO (NUEVO): Ideal para problemas de software, optimización, eliminación de virus o instalación de paqueterías. Se realiza de forma 100% segura mediante Google Remote Desktop sin que el cliente salga de casa.
 
-                    🚨 REGLA DE TRIAGE REMOTO:
-                    - Si el problema del cliente es puramente de Software/Sistemas o lentitud, ofrécele de inmediato el *Soporte Técnico Remoto*. 
-                    - Si el cliente acepta la sesión remota, indícale de forma muy clara y amable los siguientes pasos exactos:
-                      1. Entrar desde su computadora a: https://remotedesktop.google.com/support
-                      2. Hacer clic en "Asistencia remota" y descargar la pequeña herramienta oficial de Google.
-                      3. Darle clic al botón "+ Generar código" y enviarte los 12 dígitos resultantes por este chat para que el Ingeniero Julio se conecte de inmediato.
+💰 TARIFAS Y TRANSPARENCIA FISCAL (SOPORTE REMOTO):
+- Al informar sobre el costo del Soporte Técnico Remoto, sé directo y transparente: La tarifa fija es de $419 MXN. 
+- REGLA ESTRICTA RESICO: Todos nuestros precios YA INCLUYEN IVA. Si el cliente pregunta por factura, dile con total seguridad: "¡Por supuesto! En Soltecot_ somos un laboratorio formalizado y emitimos factura fiscal CFDI 4.0 en todos nuestros servicios, el precio ya incluye el 16% de IVA."
+- Si solicitan factura, indícales: "Con gusto. Al finalizar y liquidar tu soporte, puedes enviarme por este chat tu Constancia de Situación Fiscal en PDF, tu correo electrónico y el Uso de CFDI, y tu factura te llegará en menos de 24 horas."
 
-                    🚨 REGLA DE ORO DE CAPTURA (OBLIGATORIA):
-                    - Solicita SIEMPRE el Nombre Completo y un número de teléfono de 10 dígitos para aperturar su folio de servicio técnico en el sistema, sea físico o remoto.
+🚨 REGLA DE TRIAGE REMOTO Y EXTRACCIÓN DE CÓDIGO:
+- Si el problema del cliente es puramente de Software/Sistemas o lentitud, ofrécele de inmediato el *Soporte Técnico Remoto*. 
+- Si el cliente acepta la sesión remota, indícale de forma muy clara and amable los siguientes pasos exactos:
+  1. Entrar desde su computadora a: https://remotedesktop.google.com/support
+  2. Hacer clic en "Asistencia remota" y descargar la pequeña herramienta oficial de Google.
+  3. Darle clic al botón "+ Generar código" y enviarte los 12 dígitos resultantes por este chat para que el Ingeniero Julio se conecte de inmediato.
+- FILTRO ESTRICTO DE CÓDIGO: El código de acceso de Google consta exactamente de 12 dígitos numéricos continuos (ej: 949643192295). Si detectas un bloque de 12 números en el mensaje del usuario, sin importar si viene acompañado de saludos o texto extra, extráelo inmediatamente como el código de acceso legítimo y pasa de inmediato al formato de confirmación final. No se lo vuelvas a solicitar.
 
-                    🚨 REGLA DE ORO DE ETIQUETAS:
-                    - Si coordinan visita física: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
-                    - Si coordinan recolección física: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
-                    - Si te da su dirección de ruta: __DIRECCION_CLIENTE__:[dirección limpia]
+🚨 REGLA DE ORO DE CAPTURA (OBLIGATORIA):
+- Solicita SIEMPRE el Nombre Completo y un número de teléfono de 10 dígitos para aperturar su folio de servicio técnico en el sistema, sea físico o remoto.
+
+⚠️ REGLA DE SEGURIDAD CONVERSACIONAL (PROHIBIDO PLACEHOLDERS FANTASMA):
+- NUNCA uses la palabra literal "Nombre" o cadenas como "[Nombre del Cliente]" en tus respuestas finales como marcador de posición. Si lograste extraer el nombre del cliente (ej: Pedro), úsalo. Si no tienes certeza de su nombre o el usuario no lo ha provisto, utiliza expresiones amables y genéricas como "estimado cliente", "amigo", o simplemente omítelo con un "¡Perfecto!" o "Excelente", pero jamás envíes una plantilla rota con texto técnico expuesto.
+
+🚨 CONFIRMACIÓN FINAL DE CONEXIÓN REMOTA:
+En cuanto recibas y valides los 12 dígitos del código de Google Remote Desktop, debes confirmar el inicio del enlace técnico con esta estructura estricta, formal y profesional (adaptando el nombre si lo tienes):
+"⚡ SISTEMA SOLTECOT_ REMOTO ⚡
+-----------------------------------------
+¡Código de acceso recibido con éxito!
+• Folio Temporal: SOL-REM-PENDIENTE
+• Técnico Asignado: Ing. Julio López
+
+El Ingeniero Julio ha recibido la alerta en su banco de trabajo doméstico y se está enlazando a tu computadora en este momento vía Google Remote Desktop. Por favor, mantén tu pantalla activa y acepta la solicitud de entrada en tu monitor. 🔬💻"
+
+🚨 REGLA DE ORO DE ETIQUETAS:
+- Si coordinan visita física: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
+- Si coordinan recolección física: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
+- Si te da su dirección de ruta: __DIRECCION_CLIENTE__:[dirección limpia]
                     
-                    📊 EXTRAER ATRIBUTOS CRM:
-                    Añade siempre al final de cada respuesta: __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos`,
+📊 EXTRAER ATRIBUTOS CRM Y DATOS FISCALES AMPLIADOS:
+Añade siempre al final de cada respuesta dos bloques estructurados (Extrae el Nombre Fiscal completo y Uso de CFDI con precisión):
+__DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
+__DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`,
                 }
             })
             respuestaRaw = response.text || ''
@@ -301,20 +359,22 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         }
     }
 
-    // [El resto del bloque de tu lógica de salida de citas e inserción a Sheets se mantiene exactamente igual aquí abajo]
     try {
         let estatusLead = 'PROSPECTO'
+        let tipoSoporteCalculado = 'Remoto'
 
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
+        const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
 
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
             .replace(/__AGENDAR_RECOLECCION__:.+/, '')
             .replace(/__DIRECCION_CLIENTE__:.+/, '')
             .replace(/__DATOS_CRM__:.+/, '')
+            .replace(/__DATOS_FISCALES__:.+/, '')
             .trim()
 
         let nombreCrm = 'Desconocido', dispositivoCrm = 'No especificado', fallaCrm = 'No especificada', telefonoRealCrm = ''
@@ -326,11 +386,25 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             if (campos[3]) telefonoRealCrm = campos[3].trim().replace(/\D/g, '')
         }
 
+        // 📊 Parseo de los nuevos atributos fiscales para el CFDI 4.0
+        let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
+        if (matchFiscal) {
+            const camposFiscales = matchFiscal[1].split('|')
+            if (camposFiscales[0]) reqFactura = camposFiscales[0].trim().toUpperCase()
+            if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
+            if (camposFiscales[2]) nombreFiscalCrm = camposFiscales[2].trim().toUpperCase()
+            if (camposFiscales[3]) cpCrm = camposFiscales[3].trim()
+            if (camposFiscales[4]) regimenCrm = camposFiscales[4].trim()
+            if (camposFiscales[5]) usoCfdiCrm = camposFiscales[5].trim()
+            if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
+        }
+
         const telefonoParaCita = (telefonoRealCrm && telefonoRealCrm.length >= 10) ? telefonoRealCrm.slice(-10) : numeroCliente
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
         if (matchVisita) {
+            tipoSoporteCalculado = 'Visita Física'
             const fechaExtraida = matchVisita[1].trim()
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
 
@@ -347,6 +421,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         }
 
         if (matchRecoleccion) {
+            tipoSoporteCalculado = 'Recolección'
             const fechaExtraida = matchRecoleccion[1].trim()
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
             const MEMORIA_CHAT = new Map<string, any>()
@@ -366,6 +441,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         }
 
         if (matchDireccion) {
+            tipoSoporteCalculado = 'Recolección'
             const direccionExtraida = matchDireccion[1].trim()
 
             const ultimaCitaPrisma = await prisma.cita.findFirst({
@@ -377,6 +453,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             if (tipoCitaActual === 'ENTREGA') {
                 estatusLead = 'AGENDADO'
+                tipoSoporteCalculado = 'Visita Física'
             } else {
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
 
@@ -408,10 +485,61 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         if (exitoEnvio) {
-            await registrarEnGoogleSheets(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
+            const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
+            const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
+
+            // 💰 CÁLCULOS MATEMÁTICOS DE COSTOS Y IVA AUTOMÁTICOS
+            let totalCobrado = ""
+            let montoNeto = ""
+            let ivaCalculado = ""
+
+            if (tipoSoporteCalculado === 'Remoto') {
+                // Tarifa fija establecida de $419 MXN
+                totalCobrado = "419.00"
+                montoNeto = "361.21"
+                ivaCalculado = "57.79"
+            } else if (ticketMasReciente?.costoReparacion) {
+                // Si es físico y ya se cargó un presupuesto en la BD Neon
+                const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
+                if (!isNaN(costoTotal)) {
+                    totalCobrado = costoTotal.toFixed(2)
+                    const neto = costoTotal / 1.16
+                    montoNeto = neto.toFixed(2)
+                    ivaCalculado = (costoTotal - neto).toFixed(2)
+                }
+            } else {
+                // Si ingresa por primera vez a laboratorio físico sin revisión
+                totalCobrado = "Por cotizar"
+                montoNeto = "Pendiente"
+                ivaCalculado = "Pendiente"
+            }
+
+            // ⚖️ ENRUTAMIENTO INTELIGENTE DEL STATUS SAT CFDI 4.0
+            const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
+
+            // 🚀 EJECUCIÓN DEL ENVÍO COMPLETO A LAS 19 COLUMNAS DEL GOOGLE SHEETS
+            await registrarEnGoogleSheets(
+                codigoFolio,
+                telefonoParaCita,
+                nombreCrm,
+                tipoSoporteCalculado,
+                compendioFalla,
+                estatusLead,
+                reqFactura,
+                rfcCrm,
+                nombreFiscalCrm,
+                cpCrm,
+                regimenCrm,
+                usoCfdiCrm,
+                correoCrm,
+                montoNeto,
+                ivaCalculado,
+                totalCobrado,
+                estatusSatCalculado
+            )
         }
     } catch (error: any) {
-        console.error('🔴 Error bloque salida:', error.message)
+        console.error('🔴 Error bloque salida total:', error.message)
     }
 }
 

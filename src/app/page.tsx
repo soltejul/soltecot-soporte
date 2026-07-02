@@ -13,14 +13,14 @@ const RECENT_WORK = [
   {
     id: 1,
     title: "Mantenimiento Integral & Thermal Repaste",
-    description: "Limpieza profunda y cambio de pasta térmica en laptop gaming, reduciendo 25°C.",
+    description: "Limpieza profunda y cambio de pasta térmica en equipos de cómputo.",
     image: "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=600&auto=format&fit=crop",
     tag: "Optimización"
   },
   {
     id: 2,
     title: "Upgrade Hardware: SSD y Memoria RAM",
-    description: "Instalación de SSD de 1TB y 32GB RAM en MacBook Air, triplicando velocidad.",
+    description: "Instalación de SSD de 1TB y 32GB RAM, triplicando velocidad.",
     image: "https://images.unsplash.com/photo-1591238372338-22d30c883a86?q=80&w=600&auto=format&fit=crop",
     tag: "Upgrade"
   },
@@ -308,9 +308,10 @@ export default function Home() {
         </div>
 
         {/* CONTENEDOR DEL BUSCADOR (SOFT UI) */}
-        <div className="w-full max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl shadow-soltecot-darker/50 space-y-4 hover:border-soltecot-cyan/10 transition-colors mt-12">           <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
-          🎯 Consulta el estado de tu reparación en tiempo real
-        </h3>
+        <div className="max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl shadow-soltecot-darker/50 space-y-4 hover:border-soltecot-cyan/10 transition-colors">
+          <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
+            🎯 Consulta el estado de tu reparación en tiempo real
+          </h3>
           <form onSubmit={handleBuscar} className="flex gap-2">
             <input
               type="text"
@@ -333,6 +334,15 @@ export default function Home() {
               ⚠️ {errorMsg}
             </p>
           )}
+
+          {/* 🧾 👇 ESTA ES LA NUEVA LÍNEA: SELLO DE FACTURACIÓN FISCAL PREMIUM */}
+          <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-mono tracking-wide">
+            <svg className="w-3.5 h-3.5 text-soltecot-cyan/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <span>Precios netos con IVA incluido • Facturación CFDI 4.0 autorizada</span>
+          </div>
+
         </div>
 
         {/* RESULTADO DE LA BÚSQUEDA */}
