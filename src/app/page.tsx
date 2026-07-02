@@ -159,7 +159,7 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ⚡ Estado para detectar scroll y animar la interfaz
+  // ⚡ Detectar scroll para activar la Navbar compacta
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -172,7 +172,8 @@ export default function Home() {
       }
 
       const handleScroll = () => {
-        if (window.scrollY > 40) {
+        // Se activa cuando bajas más de 120px de la pantalla
+        if (window.scrollY > 120) {
           setIsScrolled(true);
         } else {
           setIsScrolled(false);
@@ -249,48 +250,68 @@ export default function Home() {
       <div className="absolute top-[40%] right-[-25%] w-[700px] h-[700px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none animate-pulse duration-[12000s] z-0" />
       <div className="absolute bottom-[-10%] left-[10%] w-[600px] h-[600px] bg-soltecot-cyan/5 rounded-full blur-[130px] pointer-events-none z-0" />
 
-      {/* 🛸 NAVBAR FLOTANTE INTERACTIVA: LOGOTIPO MONUMENTAL CENTRADO */}
-      <header className={`fixed top-0 left-0 right-0 w-full flex justify-center z-50 transition-all duration-300 px-6 md:px-12 
+      {/* 🛸 NAVBAR STICKY: Totalmente oculta arriba, aparece elegante al hacer scroll */}
+      <header className={`fixed top-0 left-0 right-0 w-full flex justify-center z-50 transition-all duration-500 ease-in-out px-6 md:px-12 
         ${isScrolled
-          ? 'py-3 bg-soltecot-dark/90 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/40'
-          : 'py-6 md:py-10 bg-transparent border-b border-transparent'}`}
+          ? 'py-3 bg-soltecot-dark/90 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/40 translate-y-0 opacity-100'
+          : 'py-4 bg-transparent border-b border-transparent -translate-y-4 opacity-0 pointer-events-none'}`}
       >
         <div className="w-full max-w-6xl flex items-center justify-between relative">
+          {/* Contrapeso izquierdo */}
+          <div className="w-36 hidden sm:block pointer-events-none" />
 
-          {/* 🔍 ESPACIO DE EQUILIBRIO EN ESCRITORIO (Mantiene el logo perfectamente centrado en el eje X) */}
-          <div className="w-40 hidden sm:block pointer-events-none flex-shrink-0" />
-
-          {/* 💎 LOGOTIPO ÚNICO, CENTRADO Y DINÁMICO */}
-          <div className={`transition-all duration-500 ease-in-out flex items-center justify-center select-none transform flex-shrink-0
-            ${isScrolled
-              ? 'h-10 md:h-12 w-auto drop-shadow-md translate-y-0'
-              : 'h-24 md:h-36 w-auto drop-shadow-[0_0_35px_rgba(92,221,207,0.25)] translate-y-2'}`}
-          >
+          {/* Logo Compacto Centrado de la Barra */}
+          <div className="h-9 md:h-11 w-auto flex items-center justify-center">
             <img
               src="/logo.png"
-              alt="Logo Soltecot"
-              className="w-full h-full object-contain pointer-events-none"
+              alt="Logo Soltecot Sticky"
+              className="h-full w-auto object-contain pointer-events-none"
             />
           </div>
 
-          {/* 🏷️ PILL DE ATENCIÓN EN EL EXTREMO DERECHO */}
-          <div className="w-40 flex justify-end flex-shrink-0">
-            <span className={`text-[10px] sm:text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium whitespace-nowrap transition-all duration-300 shadow-sm
-              ${isScrolled ? 'opacity-80 scale-95' : 'opacity-100'}`}
-            >
+          {/* Pill Derecha */}
+          <div className="w-36 flex justify-end">
+            <span className="text-[10px] sm:text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium whitespace-nowrap shadow-sm">
               Atención a Particulares 🧑‍💻
             </span>
           </div>
-
         </div>
       </header>
 
-      {/* HERO SECTION (Se incrementa el pt para compensar el tamaño monumental del logotipo estático inicial) */}
-      <section className="w-full max-w-4xl text-center space-y-12 z-10 pt-36 sm:pt-44 md:pt-60">
-        <div className="space-y-6">
+      {/* HERO SECTION (Mantenemos el flex col limpio para control total del aire) */}
+      <section className="w-full max-w-4xl text-center z-10 pt-10 sm:pt-14 md:pt-16 flex flex-col items-center">
+
+        {/* 💎 LOGO MONUMENTAL: Escalado masivo para igualar la maqueta premium */}
+        <div className="w-full flex justify-center transition-all duration-300">
+          {/* Subimos los límites drásticamente:
+            - En móvil pasa a ocupar casi todo el ancho disponible (max-w-[320px])
+            - En pantallas medianas/grandes sube hasta 850px / 920px para lograr ese impacto imponente del mockup.
+          */}
+          <div className="w-full max-w-[320px] sm:max-w-[580px] md:max-w-[850px] lg:max-w-[920px] h-auto drop-shadow-[0_0_60px_rgba(92,221,207,0.25)]">
+            <img
+              src="/logo.png"
+              alt="Logo Soltecot Principal"
+              className="w-full h-auto object-contain pointer-events-none"
+            />
+          </div>
+        </div>
+
+        {/* Contenedor del texto (Ajustamos el mt a 2 y 4 para pegarlo justo debajo del logo eliminando el aire) */}
+        <div className="space-y-6 mt-2 md:mt-4">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
             Impulsa el rendimiento <br />
-            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">sin salir de casa</span>
+            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">sin salir de casa</span>
+          </h1>
+          <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
+            Especialistas en mantenimiento integral. Actualización de PCs y laptops. Consolas de videojuegos y controles. Soporte técnico remoto y transparente.
+          </p>
+        </div>
+
+        {/* Contenedor del texto con un margen superior manual ultra ceñido para pegarlo al logo */}
+        <div className="space-y-6 mt-4 md:mt-6">
+          <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
+            Impulsa el rendimiento <br />
+            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">sin salir de casa</span>
           </h1>
           <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
             Especialistas en mantenimiento integral. Actualización de PCs y laptops. Consolas de videojuegos y controles. Soporte técnico remoto y transparente.
@@ -298,10 +319,9 @@ export default function Home() {
         </div>
 
         {/* CONTENEDOR DEL BUSCADOR (SOFT UI) */}
-        <div className="max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl shadow-soltecot-darker/50 space-y-4 hover:border-soltecot-cyan/10 transition-colors">
-          <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
-            🎯 Consulta el estado de tu reparación en tiempo real
-          </h3>
+        <div className="w-full max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl shadow-soltecot-darker/50 space-y-4 hover:border-soltecot-cyan/10 transition-colors mt-12">           <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
+          🎯 Consulta el estado de tu reparación en tiempo real
+        </h3>
           <form onSubmit={handleBuscar} className="flex gap-2">
             <input
               type="text"
