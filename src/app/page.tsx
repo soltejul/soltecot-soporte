@@ -159,6 +159,9 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // ⚡ NUEVO ESTADO: Detectar si el usuario bajó la pantalla
+  const [isScrolled, setIsScrolled] = useState(false);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -167,6 +170,18 @@ export default function Home() {
         setCodigo(folioUrl.toUpperCase());
         ejecutarBusquedaAutomatica(folioUrl.toUpperCase());
       }
+
+      // 🔍 Escucha de scroll para encoger el menú de forma automática
+      const handleScroll = () => {
+        if (window.scrollY > 40) {
+          setIsScrolled(true);
+        } else {
+          setIsScrolled(false);
+        }
+      };
+
+      window.addEventListener('scroll', handleScroll);
+      return () => window.removeEventListener('scroll', handleScroll);
     }
   }, []);
 
@@ -235,33 +250,36 @@ export default function Home() {
       <div className="absolute top-[40%] right-[-25%] w-[700px] h-[700px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none animate-pulse duration-[12000s] z-0" />
       <div className="absolute bottom-[-10%] left-[10%] w-[600px] h-[600px] bg-soltecot-cyan/5 rounded-full blur-[130px] pointer-events-none z-0" />
 
-      {/* NAVBAR CON SOPORTE PARA LOGOTIPO */}
-      <header className="w-full max-w-6xl flex justify-between items-center z-10 border-b border-white/5 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-soltecot-cyan to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-soltecot-cyan/20 border border-white/10 overflow-hidden p-1.5">
-            {/* 📐 Logo de Google Drive formateado para renderizar directo sin romper el JSX */}
+      {/* 🛸 NAVBAR FLOTANTE CON REDUCCIÓN DINÁMICA DE TAMAÑO (SMART SCROLL NAVBAR) */}
+      <header className={`fixed top-0 left-0 right-0 w-full flex justify-center z-50 transition-all duration-300 px-6 md:px-12 
+        ${isScrolled
+          ? 'py-3 bg-soltecot-dark/80 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/20'
+          : 'py-6 md:py-10 bg-transparent border-b border-transparent'}`}
+      >
+        <div className="w-full max-w-6xl flex justify-between items-center transition-all duration-300">
+          {/* Contenedor del logotipo responsivo */}
+          <div className={`transition-all duration-300 flex items-center justify-center select-none
+            ${isScrolled
+              ? 'h-10 md:h-12 w-auto drop-shadow-lg'
+              : 'h-16 md:h-24 w-auto drop-shadow-[0_0_20px_rgba(92,221,207,0.15)]'}`}
+          >
             <img
               src="https://drive.google.com/uc?export=view&id=1VNaIFcgZpfRUrLovOMB-dpET3NWNXkia"
               alt="Logo Soltecot"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain pointer-events-none"
             />
           </div>
-          <div className="flex flex-col">
-            <span className="font-poppins font-extrabold text-2xl tracking-wider text-white leading-none">
-              SOLTECOT<span className="text-soltecot-cyan">_</span>
-            </span>
-            <span className="text-[9px] uppercase tracking-[0.2em] text-soltecot-cyan font-bold mt-1">
-              Solutions & Technology on Time
-            </span>
-          </div>
+
+          <span className={`text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium hidden sm:inline-block transition-all duration-300
+            ${isScrolled ? 'opacity-80 scale-95' : 'opacity-100'}`}
+          >
+            Atención a Particulares 🧑‍💻
+          </span>
         </div>
-        <span className="text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium hidden sm:inline-block">
-          Atención a Particulares 🧑‍💻
-        </span>
       </header>
 
-      {/* HERO SECTION & FORMULARIO DE RASTREO */}
-      <section className="w-full max-w-4xl text-center space-y-12 z-10 mt-10 md:mt-16">
+      {/* HERO SECTION (Se agrega margen superior dinámico para compensar el menú fixed) */}
+      <section className="w-full max-w-4xl text-center space-y-12 z-10 pt-24 sm:pt-32 md:pt-44">
         <div className="space-y-6">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
             Impulsa el rendimiento <br />
