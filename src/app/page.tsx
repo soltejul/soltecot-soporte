@@ -8,38 +8,38 @@ import Chatbot from '../components/Chatbot';
 // 📸 CONSTANTES DE CONTENIDO (MANTENER AQUÍ PARA FACILITAR ACTUALIZACIONES)
 // ----------------------------------------------------------------------------------
 
-// 📹 GALERÍA DE CASOS DE ÉXITO RECIENTES (Adecuado a servicios para particulares)
+// 📹 GALERÍA DE CASOS DE ÉXITO RECIENTES (Imágenes optimizadas de alta fidelidad)
 const RECENT_WORK = [
   {
     id: 1,
     title: "Mantenimiento Integral & Thermal Repaste",
     description: "Limpieza profunda y cambio de pasta térmica en laptop gaming, reduciendo 25°C.",
-    image: "https://images.unsplash.com/photo-1616440347437-b1c73416efc2?q=80&w=600&auto=format&fit=crop", // Cambia por tu archivo real
+    image: "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=600&auto=format&fit=crop",
     tag: "Optimización"
   },
   {
     id: 2,
     title: "Upgrade Hardware: SSD y Memoria RAM",
     description: "Instalación de SSD de 1TB y 32GB RAM en MacBook Air, triplicando velocidad.",
-    image: "https://images.unsplash.com/photo-1591405351990-4726e331f141?q=80&w=600&auto=format&fit=crop", // Cambia por tu archivo real
+    image: "https://images.unsplash.com/photo-1562408590-e32931084e23?q=80&w=600&auto=format&fit=crop",
     tag: "Upgrade"
   },
   {
     id: 3,
-    title: "Reparaciónexperta de Controles DualSense",
+    title: "Reparación experta de Controles DualSense",
     description: "Solución definitiva al problema de drift en analógicos y limpieza de contactos.",
-    image: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?q=80&w=600&auto=format&fit=crop", // Cambia por tu archivo real
+    image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=600&auto=format&fit=crop",
     tag: "Consolas"
   }
 ];
 
-// 💬 TESTIMONIOS (Enfocados a experiencias de particulares)
+// 💬 TESTIMONIALS (Enfocados a experiencias de particulares)
 const TESTIMONIALS = [
   {
     id: 1,
     name: "Camilo Torres",
-    device: "Asus TUF Gaming",
-    text: "En dos horas repararon el drift de mis controles de PS5. Servicio súper transparente por WhatsApp. Un trato impecable.",
+    device: "PlayStation 5 DualSense",
+    text: "Rapidísimo repararon el drift de mis controles de PS5. Servicio súper transparente por WhatsApp. Un trato impecable.",
     rating: 5
   },
   {
@@ -120,7 +120,7 @@ const SERVICES = [
   {
     id: "reparacion_controles",
     title: "Reparación de Controles",
-    description: "Servicio de limpieza y reparaciónexperta para controles de videojuegos. Solución definitiva al drift de analógicos.",
+    description: "Servicio de limpieza y reparación experta para controles de videojuegos. Solución definitiva al drift de analógicos.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -131,7 +131,7 @@ const SERVICES = [
   {
     id: "mantenimiento_impresion",
     title: "Equipos de Impresión",
-    description: "Mantenimiento integral profundo y reparaciónexperta para tus equipos de impresión y multifuncionales.",
+    description: "Mantenimiento integral profundo y reparación experta para tus equipos de impresión y multifuncionales.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 12h-1.586a1 1 0 01-.707-.293l-5.414-5.414a1 1 0 01-.293-.707V19a2 2 0 01-2 2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V12a2 2 0 012 2H19z" />
@@ -142,7 +142,7 @@ const SERVICES = [
 ];
 
 // ----------------------------------------------------------------------------------
-// 🧩 COMPONENTE DE LA PÁGINA (ESTRUCTURA DE RASTREO CONSERVADA)
+// 🧩 COMPONENTE DE LA PÁGINA
 // ----------------------------------------------------------------------------------
 
 const PASOS_ESTADO = [
@@ -159,7 +159,6 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Lógica de búsqueda automática por URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -200,7 +199,6 @@ export default function Home() {
     }
   };
 
-  // Mapeo de estilos y estados (CONSERVADO)
   const obtenerIndiceEstado = (currentEstado: string) => {
     if (currentEstado === 'ENTREGADO') return 5;
     if (currentEstado === 'RECHAZADO') return 2;
@@ -223,18 +221,30 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-soltecot-dark text-slate-100 flex flex-col items-center p-6 md:p-12 font-montserrat relative overflow-hidden gap-20 md:gap-28">
 
-      {/* Efectos de iluminación sutiles de fondo (Motor UI) */}
-      <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-soltecot-cyan/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-[30%] right-[-20%] w-[500px] h-[500px] bg-soltecot-cyan/5 rounded-full blur-[120px] pointer-events-none" />
+      {/* 🌐 CAPA 1: TEXTURA DOT MATRIX */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03] z-0"
+        style={{
+          backgroundImage: `radial-gradient(circle, #5cddcf 1px, transparent 1px)`,
+          backgroundSize: '24px 24px',
+        }}
+      />
 
-      {/* NAVBAR CON SOPORTE PARA LOGOTIPO (Conservado y pulido) */}
+      {/* 🔮 CAPA 2: AURORAS VIVAS */}
+      <div className="absolute top-[-20%] left-[-15%] w-[800px] h-[800px] bg-soltecot-cyan/10 rounded-full blur-[160px] pointer-events-none animate-pulse duration-[8000s] z-0" />
+      <div className="absolute top-[40%] right-[-25%] w-[700px] h-[700px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none animate-pulse duration-[12000s] z-0" />
+      <div className="absolute bottom-[-10%] left-[10%] w-[600px] h-[600px] bg-soltecot-cyan/5 rounded-full blur-[130px] pointer-events-none z-0" />
+
+      {/* NAVBAR CON SOPORTE PARA LOGOTIPO */}
       <header className="w-full max-w-6xl flex justify-between items-center z-10 border-b border-white/5 pb-4">
         <div className="flex items-center gap-3">
-          {/* Reemplaza este SVG por tu <img src="/logo.png" /> */}
-          <div className="w-10 h-10 bg-gradient-to-br from-soltecot-cyan to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-soltecot-cyan/20 border border-white/10">
-            <svg className="w-5 h-5 text-soltecot-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z" />
-            </svg>
+          <div className="w-10 h-10 bg-gradient-to-br from-soltecot-cyan to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-soltecot-cyan/20 border border-white/10 overflow-hidden p-1.5">
+            {/* 📐 Logo de Google Drive formateado para renderizar directo sin romper el JSX */}
+            <img
+              src="https://drive.google.com/uc?export=view&id=1VNaIFcgZpfRUrLovOMB-dpET3NWNXkia"
+              alt="Logo Soltecot"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="flex flex-col">
             <span className="font-poppins font-extrabold text-2xl tracking-wider text-white leading-none">
@@ -250,7 +260,7 @@ export default function Home() {
         </span>
       </header>
 
-      {/* HERO SECTION & FORMULARIO DE RASTREO (Pulido al millón) */}
+      {/* HERO SECTION & FORMULARIO DE RASTREO */}
       <section className="w-full max-w-4xl text-center space-y-12 z-10 mt-10 md:mt-16">
         <div className="space-y-6">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
@@ -291,7 +301,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* RESULTADO DE LA BÚSQUEDA (CONSERVADO INTACTO) */}
+        {/* RESULTADO DE LA BÚSQUEDA */}
         {ticketData && (
           <div className="max-w-2xl mx-auto p-6 bg-soltecot-darker border border-white/5 rounded-2xl shadow-2xl text-left space-y-6 transition-all duration-300 animate-fade-in shadow-soltecot-darker/50">
             <div className="flex justify-between items-start border-b border-white/5 pb-4">
@@ -312,7 +322,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* PANEL DE PRESUPUESTO (CONSERVADO INTACTO) */}
+            {/* PANEL DE PRESUPUESTO */}
             {ticketData.estado === 'ESPERANDO_APROBACION' && ticketData.costoReparacion && (
               <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3 shadow-inner">
                 <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
@@ -331,7 +341,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* LÍNEA DE TIEMPO INTERACTIVA (CONSERVADO INTACTO) */}
+            {/* LÍNEA DE TIEMPO INTERACTIVA */}
             <div className="space-y-5 pt-2">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold font-poppins">Línea de Progreso en Laboratorio</span>
               <div className="relative flex justify-between items-center w-full px-2">
@@ -374,7 +384,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* 📸 SECCIÓN: GALERÍA DE CASOS DE ÉXITO RECIENTES (Pulida) */}
+      {/* 📸 SECCIÓN: GALERÍA DE CASOS DE ÉXITO RECIENTES */}
       <section className="w-full max-w-6xl z-10 space-y-8">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
@@ -389,7 +399,6 @@ export default function Home() {
           {RECENT_WORK.map((work) => (
             <div key={work.id} className="bg-soltecot-darker/60 border border-white/5 rounded-2xl overflow-hidden group hover:border-soltecot-cyan/30 transition-all duration-300 shadow-xl hover:-translate-y-1">
               <div className="h-48 overflow-hidden relative">
-                {/* Capa de tinte cyan al pasar el mouse */}
                 <div className="absolute inset-0 bg-soltecot-cyan/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
                 <img
                   src={work.image}
@@ -413,7 +422,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 🛠️ NUEVA SECCIÓN: BENTO BOX GRID DE SERVICIOS (EL CAMBIO CLAVE) */}
+      {/* 🛠️ SECCIÓN: BENTO BOX GRID DE SERVICIOS */}
       <section className="w-full max-w-6xl z-10 space-y-12">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
@@ -429,12 +438,11 @@ export default function Home() {
           {SERVICES.map((service, index) => (
             <div
               key={service.id}
-              className={`group relative p-6 bg-soltecot-darker/40 backdrop-blur-sm rounded-2xl border border-white/5 hover:border-soltecot-cyan/30 transition-all duration-300 flex flex-col justify-between gap-6 hover:-translate-y-1 shadow-xl hover:shadow-soltecot-cyan/5 
-              ${index === 1 ? 'md:col-span-2 border-soltecot-cyan/20 shadow-soltecot-cyan/10' : ''}`} // Mantenimiento Computo y Soporte Remoto resaltados
+              className={`group relative p-6 bg-soltecot-darker/50 backdrop-blur-xl rounded-2xl border border-white/5 hover:border-soltecot-cyan/30 transition-all duration-300 flex flex-col justify-between gap-6 hover:-translate-y-1 shadow-xl hover:shadow-soltecot-cyan/5 
+              ${index === 1 ? 'md:col-span-2 border-soltecot-cyan/20 shadow-soltecot-cyan/10' : ''}`}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-soltecot-cyan/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl pointer-events-none" />
 
-              {/* Contenido superior de la tarjeta */}
               <div className="space-y-4 relative z-10">
                 <div className={`w-12 h-12 rounded-xl bg-soltecot-cyan/10 border border-soltecot-cyan/20 flex items-center justify-center group-hover:bg-soltecot-cyan group-hover:text-soltecot-dark transition-all duration-300 shadow-inner
                   ${index === 1 ? 'bg-soltecot-cyan text-soltecot-dark shadow-soltecot-cyan/30' : ''}`}>
@@ -448,7 +456,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Botón de Conversión CTA a WhatsApp */}
               <a
                 href={service.whatsapp_cta}
                 target="_blank"
@@ -463,7 +470,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 💬 SECCIÓN: TESTIMONIOS (Pulida) */}
+      {/* 💬 SECCIÓN: TESTIMONIOS */}
       <section className="w-full max-w-6xl z-10 space-y-8 pb-8">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
@@ -478,7 +485,6 @@ export default function Home() {
           {TESTIMONIALS.map((t) => (
             <div key={t.id} className="p-6 bg-soltecot-darker/30 backdrop-blur-sm border border-white/5 rounded-2xl flex flex-col justify-between gap-4 shadow-xl hover:border-white/10 transition-colors shadow-soltecot-darker/50">
               <div className="space-y-3">
-                {/* Estrellas doradas minimalistas */}
                 <div className="flex gap-1 text-amber-400 text-xs">
                   {Array.from({ length: t.rating }).map((_, i) => (
                     <span key={i}>★</span>
