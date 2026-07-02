@@ -21,17 +21,18 @@ const RECENT_WORK = [
     id: 2,
     title: "Upgrade Hardware: SSD y Memoria RAM",
     description: "Instalación de SSD de 1TB y 32GB RAM en MacBook Air, triplicando velocidad.",
-    image: "https://images.unsplash.com/photo-1562408590-e32931084e23?q=80&w=600&auto=format&fit=crop",
+    image: "https://images.unsplash.com/photo-1591238372338-22d30c883a86?q=80&w=600&auto=format&fit=crop",
     tag: "Upgrade"
   },
   {
     id: 3,
     title: "Reparación experta de Controles DualSense",
     description: "Solución definitiva al problema de drift en analógicos y limpieza de contactos.",
-    image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=600&auto=format&fit=crop",
+    image: "https://images.unsplash.com/photo-1567027757540-7b572280fa22?q=80&w=600&auto=format&fit=crop",
     tag: "Consolas"
   }
 ];
+
 
 // 💬 TESTIMONIALS (Enfocados a experiencias de particulares)
 const TESTIMONIALS = [
