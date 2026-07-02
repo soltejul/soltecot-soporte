@@ -33,7 +33,6 @@ const RECENT_WORK = [
   }
 ];
 
-
 // 💬 TESTIMONIALS (Enfocados a experiencias de particulares)
 const TESTIMONIALS = [
   {
@@ -160,7 +159,7 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ⚡ NUEVO ESTADO: Detectar si el usuario bajó la pantalla
+  // ⚡ Estado para detectar scroll y animar la interfaz
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -172,7 +171,6 @@ export default function Home() {
         ejecutarBusquedaAutomatica(folioUrl.toUpperCase());
       }
 
-      // 🔍 Escucha de scroll para encoger el menú de forma automática
       const handleScroll = () => {
         if (window.scrollY > 40) {
           setIsScrolled(true);
@@ -251,36 +249,44 @@ export default function Home() {
       <div className="absolute top-[40%] right-[-25%] w-[700px] h-[700px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none animate-pulse duration-[12000s] z-0" />
       <div className="absolute bottom-[-10%] left-[10%] w-[600px] h-[600px] bg-soltecot-cyan/5 rounded-full blur-[130px] pointer-events-none z-0" />
 
-      {/* 🛸 NAVBAR FLOTANTE CON REDUCCIÓN DINÁMICA DE TAMAÑO (SMART SCROLL NAVBAR) */}
+      {/* 🛸 NAVBAR FLOTANTE INTERACTIVA: LOGOTIPO MONUMENTAL CENTRADO */}
       <header className={`fixed top-0 left-0 right-0 w-full flex justify-center z-50 transition-all duration-300 px-6 md:px-12 
         ${isScrolled
-          ? 'py-3 bg-soltecot-dark/80 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/20'
+          ? 'py-3 bg-soltecot-dark/90 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/40'
           : 'py-6 md:py-10 bg-transparent border-b border-transparent'}`}
       >
-        <div className="w-full max-w-6xl flex justify-between items-center transition-all duration-300">
-          {/* Contenedor del logotipo responsivo */}
-          <div className={`transition-all duration-300 flex items-center justify-center select-none
+        <div className="w-full max-w-6xl flex items-center justify-between relative">
+
+          {/* 🔍 ESPACIO DE EQUILIBRIO EN ESCRITORIO (Mantiene el logo perfectamente centrado en el eje X) */}
+          <div className="w-40 hidden sm:block pointer-events-none flex-shrink-0" />
+
+          {/* 💎 LOGOTIPO ÚNICO, CENTRADO Y DINÁMICO */}
+          <div className={`transition-all duration-500 ease-in-out flex items-center justify-center select-none transform flex-shrink-0
             ${isScrolled
-              ? 'h-10 md:h-12 w-auto drop-shadow-lg'
-              : 'h-16 md:h-24 w-auto drop-shadow-[0_0_20px_rgba(92,221,207,0.15)]'}`}
+              ? 'h-10 md:h-12 w-auto drop-shadow-md translate-y-0'
+              : 'h-24 md:h-36 w-auto drop-shadow-[0_0_35px_rgba(92,221,207,0.25)] translate-y-2'}`}
           >
             <img
-              src="/logo.jpg"
+              src="/logo.png"
               alt="Logo Soltecot"
               className="w-full h-full object-contain pointer-events-none"
             />
           </div>
 
-          <span className={`text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium hidden sm:inline-block transition-all duration-300
-            ${isScrolled ? 'opacity-80 scale-95' : 'opacity-100'}`}
-          >
-            Atención a Particulares 🧑‍💻
-          </span>
+          {/* 🏷️ PILL DE ATENCIÓN EN EL EXTREMO DERECHO */}
+          <div className="w-40 flex justify-end flex-shrink-0">
+            <span className={`text-[10px] sm:text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium whitespace-nowrap transition-all duration-300 shadow-sm
+              ${isScrolled ? 'opacity-80 scale-95' : 'opacity-100'}`}
+            >
+              Atención a Particulares 🧑‍💻
+            </span>
+          </div>
+
         </div>
       </header>
 
-      {/* HERO SECTION (Se agrega margen superior dinámico para compensar el menú fixed) */}
-      <section className="w-full max-w-4xl text-center space-y-12 z-10 pt-24 sm:pt-32 md:pt-44">
+      {/* HERO SECTION (Se incrementa el pt para compensar el tamaño monumental del logotipo estático inicial) */}
+      <section className="w-full max-w-4xl text-center space-y-12 z-10 pt-36 sm:pt-44 md:pt-60">
         <div className="space-y-6">
           <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
             Impulsa el rendimiento <br />
