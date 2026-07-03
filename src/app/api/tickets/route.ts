@@ -13,7 +13,7 @@ export async function POST(request: Request) {
         }
 
         // 🔗 URL de escape local
-        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://192.168.20.13:3000'
+        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
 
         const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
         let nuevoFolio = 'SOL-1001'
