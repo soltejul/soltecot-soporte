@@ -77,7 +77,29 @@ async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, 
     }
 }
 
-async function registrarEnGoogleSheets(
+// 📑 FUNCIÓN A: Mantiene vivo tu historial de tracking tradicional en la 'Hoja 1'
+async function registrarHistorialEnHoja1(telefono: string, mensaje: string, respuesta: string, status: string, nombre: string, dispositivo: string, falla: string) {
+    try {
+        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets'])
+        const sheets = google.sheets({ version: 'v4', auth })
+        const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
+
+        // Estructura original de tus columnas en Hoja 1
+        const valoresFila = [fechaActual, telefono, mensaje, respuesta, status, nombre, dispositivo, falla]
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: "'Hoja 1'!A:H",
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [valoresFila] }
+        })
+    } catch (error: any) {
+        console.error('🔴 Error Sheets Hoja 1:', error.message)
+    }
+}
+
+// 🧾 FUNCIÓN B: Mantiene al día tu pestaña financiera de 'Facturación' (19 columnas)
+async function registrarFinanzasEnFacturacion(
     folio: string, telefono: string, nombre: string, tipoSoporte: string, dispositivoFalla: string, status: string,
     reqFactura: string, rfc: string, nombreFiscal: string, cp: string, regimen: string, usoCfdi: string, correo: string,
     montoNeto: string, iva: string, totalCobrado: string, estatusSat: string
@@ -93,8 +115,10 @@ async function registrarEnGoogleSheets(
         ]
 
         await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID, range: 'Facturación!A:S',
-            valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
+            spreadsheetId: SPREADSHEET_ID,
+            range: "'Facturación'!A:S",
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [valoresFila] }
         })
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
@@ -178,51 +202,72 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         ticketMasReciente = clientePrisma?.tickets[0]
 
-        // 🖥️ 1. INTERCEPTOR INTELIGENTE AUTOMATIZADO CON PARCHE DE MEMORIA V2
+        // 🖥️ 1. INTERCEPTOR DE CÓDIGO GOOGLE REMOTE DESKTOP CON GENERACIÓN DE FOLIOS REALES
         const regexCodigoRemoto = /\b\d{4}\s?\d{4}\s?\d{4}\b|\b\d{12}\b/
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            if (ticketMasReciente) {
-                await prisma.ticket.update({
-                    where: { id: ticketMasReciente.id },
-                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA] Código: ${codigoEncontrado}` }
+            // Aseguramos que el cliente exista en la base de datos local
+            let clienteIdParaTicket = clientePrisma?.id
+            let nombreClienteEstetico = clientePrisma?.nombre && clientePrisma.nombre !== 'Desconocido' ? clientePrisma.nombre : 'Particular Remoto'
+
+            if (!clientePrisma) {
+                const nuevoClienteExpress = await prisma.cliente.create({
+                    data: { telefono: telefono10Digitos, nombre: 'Cliente Remoto' }
                 })
+                clienteIdParaTicket = nuevoClienteExpress.id
+                nombreClienteEstetico = 'amigo'
             }
 
-            // ⚡ CORRECCIÓN: Quitamos el placeholder roto "Nombre" e inyectamos el nombre real dinámico
-            const nombreClienteEstetico = clientePrisma?.nombre && clientePrisma.nombre !== 'Desconocido' ? clientePrisma.nombre : 'amigo'
+            // 🚀 JUGADA DE INGENIERÍA: Si no existe un ticket activo para este soporte remoto, lo CREAMOS de inmediato
+            let ticketActivo = ticketMasReciente
+            if (!ticketActivo || ticketActivo.estado === 'ENTREGADO' || ticketActivo.estado === 'RECHAZADO') {
+                const ultimoTicketGlobal = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
+                let nuevoFolio = 'SOL-1001'
+                if (ultimoTicketGlobal?.numeroOrden) {
+                    nuevoFolio = `SOL-${parseInt(ultimoTicketGlobal.numeroOrden.split('-')[1]) + 1}`
+                }
+
+                ticketActivo = await prisma.ticket.create({
+                    data: {
+                        numeroOrden: nuevoFolio,
+                        equipo: 'Soporte Técnico Remoto',
+                        fallaReportada: 'Instalación de Software / Optimización Express',
+                        clienteId: clienteIdParaTicket!,
+                        estado: 'EN_REPARACION',
+                        notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`
+                    }
+                })
+            } else {
+                // Si ya había un ticket abierto en progreso, lo pasamos al estado de reparación activa
+                ticketActivo = await prisma.ticket.update({
+                    where: { id: ticketActivo.id },
+                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}` }
+                })
+            }
 
             const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito, *${nombreClienteEstetico}*!\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo en este momento vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador y no cierres el código.* Verás la actividad de soporte técnico en tu pantalla en unos segundos. 🔬`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
-            // 🔥 PARCHE DE MEMORIA: Guardamos esta interacción en el historial para que Gemini sepa que ya te conectaste
             let historialLocal = MEMORIA_CHAT.get(numeroCliente) || []
             historialLocal.push({ role: 'user', parts: [{ text: mensajeCliente }] })
             historialLocal.push({ role: 'model', parts: [{ text: mensajeConexion }] })
             if (historialLocal.length > 12) historialLocal = historialLocal.slice(-12)
             MEMORIA_CHAT.set(numeroCliente, historialLocal)
 
-            // 🚀 REGISTRO EN SHEETS DESDE EL INTERCEPTOR PARA NO PERDER LA FILA EN SOPORTES EXPRESS
-            const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
-            await registrarEnGoogleSheets(
-                codigoFolio,
-                telefono10Digitos, // <- Cambio aquí
-                nombreClienteEstetico,
-                'Remoto',
-                ticketMasReciente?.equipo || 'Instalación de Software / Soporte Express',
-                'EN_REPARACION',
-                'NO',
-                '', '', '', '', '', '',
-                '361.21',
-                '57.79',
-                '419.00',
-                'NO REQUIERE'
+            // 📝 Inserción contable inmediata con el FOLIO REAL generado para evitar duplicados estáticos
+            await registrarFinanzasEnFacturacion(
+                ticketActivo.numeroOrden, telefono10Digitos, nombreClienteEstetico, 'Remoto',
+                'Soporte Técnico Remoto / Express', 'EN_REPARACION', 'NO', '', '', '', '', '', '',
+                '361.21', '57.79', '419.00', 'NO REQUIERE'
             )
 
+            // Mantiene el log en la Hoja 1 también para la sesión express
+            await registrarHistorialEnHoja1(telefono10Digitos, mensajeCliente, mensajeConexion, 'EN_REPARACION', nombreClienteEstetico, 'Soporte Remoto', 'Código de Acceso')
+
             const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
-            await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Cliente:* ${nombreClienteEstetico}\n👉 *CÓDIGO:* ${codigoFormateado}\n\nEntra desde tu MacNeo a: https://remotedesktop.google.com/support`)
+            await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Folio:* ${ticketActivo.numeroOrden}\n👉 *CÓDIGO:* ${codigoFormateado}\n\nEntra desde tu MacNeo a: https://remotedesktop.google.com/support`)
             return
         }
 
@@ -240,7 +285,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'RECHAZADO' } })
                 const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nEntendemos perfectamente, *${clientePrisma?.nombre || 'Cliente'}*. Hemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras instalaciones.\n\n¡Gracias por tu confianza y tiempo! 🔬`
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
-                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Rechazado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
+                await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Cancelado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
                 return
             }
         }
@@ -276,22 +321,19 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
 MODALIDADES DE ATENCIÓN DISPONIBLES:
 1. VISITA DIRECTA AL LABORATORIO: De lunes a viernes (10 AM a 6 PM) y sábados (10 AM a 2 PM). El cliente viene en persona.
-2. SERVICIO DE RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
+2. SERVICIO DE RECOLECCIÓN A DOMICILIO: Solo si el cliente pregunta por este servicio. Disponible losSábados y domingos (Radio máximo 10km). Sujeto a disponibilidad. Se agenda por WhatsApp. No se hacen recolecciones entre semana ni en días festivos.
 3. 🖥️ SOPORTE TÉCNICO REMOTO INMEDIATO (NUEVO): Ideal para problemas de software, optimización, eliminación de virus o instalación de paqueterías. Se realiza de forma 100% segura mediante Google Remote Desktop sin que el cliente salga de casa.
 
 💰 TARIFAS Y TRANSPARENCIA FISCAL (SOPORTE REMOTO):
 - La tarifa fija de Soporte Remoto es de $419 MXN neto.
 - REGLA ESTRICTA RESICO: Todos nuestros precios YA INCLUYEN IVA. Si el cliente pregunta por factura, dile con total seguridad: "¡Por supuesto! En Soltecot_ somos un laboratorio formalizado y emitimos factura fiscal CFDI 4.0 en todos nuestros servicios, el precio ya incluye el 16% de IVA."
 
-🚨 FLUJO SECUENCIAL DE APERTURA (OBLIGATORIO PASO A PASO):
-- PASO 1 (Datos Básicos): Cuando el cliente acepte el servicio técnico (remoto o físico), solicítale únicamente su Nombre Completo, confirme su Teléfono y añade la pregunta cerrada: "¿Requieres factura fiscal CFDI 4.0 para tu servicio? (Por favor responde únicamente SÍ o NO)".
-- PASO 2 (Bifurcación Fiscal):
-  • Si el cliente responde "NO" o indica que no requiere factura: Pasa directamente a entregarle las instrucciones de soporte técnico (Pasos de Google Remote Desktop si es remoto, o confirmación de cita si es físico). Envía la etiqueta: __DATOS_FISCALES__:NO||||||
-  • Si el cliente responde "SÍ" o solicita factura: Pasa a pedirle amablemente sus datos fiscales (RFC, Nombre Fiscal, CP, Régimen, Uso de CFDI y Correo) o indícale que puede adjuntar su Constancia de Situación Fiscal en PDF. Una vez que te provea los datos, entrégale las instrucciones de conexión de Google Remote Desktop.
+🚨 SOLICITUD PROACTIVA DE DATOS DE APERTURA:
+- Cuando el cliente acepte el servicio (sea remoto o físico), solicítale en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y PREGÚNTALE proactivamente: "¿Requerirás factura fiscal fiscal CFDI 4.0 para tu servicio? Si es así, puedes proporcionarme de una vez tu RFC, Código Postal Fiscal, Régimen y correo electrónico para dejarlos registrados en tu folio."
 
 🚨 REGLA DE TRIAGE REMOTO:
 - Si acepta la sesión remota e indica los datos, guíalo con los pasos de Google Remote Desktop:
-  1. Entrar desde su computadora a: https://remotedesktop.google.com/support
+  1. Entrar desde su computadora a: https://remotedesktop.google.com/support . No incluyas caractéres antes o despues del link para que sea clickeable.
   2. Descargar la herramienta en "Asistencia remota".
   3. Hacer clic en "+ Generar código" y pasarte los 12 dígitos.
 
@@ -420,6 +462,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         if (exitoEnvio) {
+            // Evaluamos el folio exacto para las hojas de cálculo
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
@@ -447,7 +490,13 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-            await registrarEnGoogleSheets(
+            // 🔥 AQUÍ ESTÁ LA CORRECCIÓN: Disparamos las DOS funciones para rellenar ambas pestañas en simultáneo
+
+            // 1. Escribe en la 'Hoja 1' para no perder tu historial de tracking plano
+            await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
+
+            // 2. Escribe en 'Facturación' para tu tablero fiscal y contable
+            await registrarFinanzasEnFacturacion(
                 codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
                 reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
                 montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
