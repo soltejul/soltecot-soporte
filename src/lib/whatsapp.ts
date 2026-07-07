@@ -1,54 +1,73 @@
-export async function enviarMensajeWhatsApp(telefono: string, mensaje: string) {
-    // 🌐 Lee la variable de Vercel en producción o usa localhost si estás programando en casa
-    const urlBase = process.env.WHATSAPP_BOT_URL || 'http://localhost:8080'
-
-    // ⚡ PARCHE DEFENSIVO: Si la variable de Vercel ya incluye '/sendText', se lo removemos 
-    // temporalmente para que no se duplique con el fetch de abajo
-    const WHATSAPP_API_URL = urlBase.endsWith('/sendText') ? urlBase.replace('/sendText', '') : urlBase
-
-    let numeroLimpio = ''
-
-    // 🛡️ CONFIGURACIÓN INTELIGENTE DE CANALES
-    if (telefono.includes('@')) {
-        // Si ya viene con un JID estructurado (como @lid o @s.whatsapp.net desde el bot), lo respetamos intacto
-        numeroLimpio = telefono.trim()
-    } else {
-        // Si viene del Dashboard manual (solo los 10 dígitos del cliente)
-        // 1. Limpiamos el número de espacios, guiones o símbolos
-        numeroLimpio = telefono.replace(/\D/g, '')
-
-        // 🚨 EL CAMBIO SECRETO PARA MÉXICO:
-        if (numeroLimpio.length === 10) {
-            numeroLimpio = `521${numeroLimpio}`
+export async function enviarMensajeWhatsApp(telefono: string, mensaje: string): Promise<boolean> {
+    try {
+        // 🛡️ ESCUDO LOCAL: Si estás programando en casa y tienes la simulación encendida, no gasta tokens
+        if (process.env.DISABLE_WHATSAPP_LOCAL === 'true') {
+            console.log(`\n📱 [SIMULACIÓN WHATSAPP LOCAL]:`);
+            console.log(`👉 Para: ${telefono}`);
+            console.log(`💬 Mensaje:\n${mensaje}\n-----------------------------------------`);
+            return true;
         }
 
-        // 3. Lo empaquetamos con el sufijo estándar de clientes
-        numeroLimpio = `${numeroLimpio}@s.whatsapp.net`
-    }
+        const TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_TOKEN;
+        const PHONE_NUMBER_ID = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID;
 
-    try {
-        console.log(`📡 [BAILEYS LIB]: Intentando enviar a JID -> ${numeroLimpio}`)
+        if (!TOKEN || !PHONE_NUMBER_ID) {
+            console.error('🔴 [WHATSAPP API ERROR]: Faltan las variables de entorno de Meta en el servidor Vercel/Railway.');
+            return false;
+        }
 
-        // 🚀 Ahora sí, apuntando directo a la nube de Railway en producción
-        const respuesta = await fetch(`${WHATSAPP_API_URL}/sendText`, {
+        // 🧽 SANITIZACIÓN INTELIGENTE DE NÚMEROS (Adiós a los JIDs de Baileys)
+        // 1. Si el teléfono viene con '@' (ej: 5215546088200@s.whatsapp.net o @lid), nos quedamos solo con la parte numérica izquierda
+        let numeroLimpio = telefono.split('@')[0].replace(/\D/g, '');
+
+        // 2. CORRECCIÓN PARA MÉXICO EN API OFICIAL:
+        // Si el número viene con el formato legacy '521' + 10 dígitos (13 caracteres en total), Meta exige remover el '1'
+        if (numeroLimpio.startsWith('521') && numeroLimpio.length === 13) {
+            numeroLimpio = '52' + numeroLimpio.slice(3);
+        }
+        // Si viene solo de 10 dígitos (desde tu Dashboard manual), le inyectamos el prefijo oficial '52'
+        else if (numeroLimpio.length === 10) {
+            numeroLimpio = `52${numeroLimpio}`;
+        }
+
+        console.log(`📡 [META API]: Despachando mensaje directo a la nube -> ${numeroLimpio}`);
+
+        // 🌐 ENDPOINT OFICIAL DE META GRAPH API
+        const url = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`;
+
+        // 📦 PAYLOAD: Estructura reglamentaria para mensajes de texto libre
+        const payload = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: numeroLimpio,
+            type: "text",
+            text: {
+                preview_url: false,
+                body: mensaje
+            }
+        };
+
+        const respuesta = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                to: numeroLimpio,
-                content: mensaje
-            })
-        })
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await respuesta.json();
 
         if (!respuesta.ok) {
-            const dataError = await respuesta.text()
-            console.error(`❌ [BAILEYS API ERROR]: Estatus ${respuesta.status}.`, dataError)
-            return false
+            console.error(`❌ [META API ERROR]: Estatus ${respuesta.status}.`, JSON.stringify(data));
+            return false;
         }
 
-        console.log(`✅ [BAILEYS LIB]: Mensaje enviado exitosamente a ${numeroLimpio}`)
-        return true
+        console.log(`✅ [META API]: Mensaje entregado con éxito. ID: ${data.messages?.[0]?.id}`);
+        return true;
+
     } catch (error: any) {
-        console.error("🔴 [BAILEYS LIB CRASH]:", error.message)
-        return false
+        console.error("🔴 [META API CRASH]:", error.message);
+        return false;
     }
 }

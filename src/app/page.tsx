@@ -5,35 +5,33 @@ import { buscarTicketPorCodigo } from './actions';
 import Chatbot from '../components/Chatbot';
 
 // ----------------------------------------------------------------------------------
-// 📸 CONSTANTES DE CONTENIDO (MANTENER AQUÍ PARA FACILITAR ACTUALIZACIONES)
+// 📸 CONSTANTES DE CONTENIDO (CON LOGÍSTICA INTEGRADA)
 // ----------------------------------------------------------------------------------
 
-// 📹 GALERÍA DE CASOS DE ÉXITO RECIENTES (Imágenes optimizadas de alta fidelidad)
 const RECENT_WORK = [
   {
     id: 1,
     title: "Mantenimiento Integral & Thermal Repaste",
     description: "Limpieza profunda y cambio de pasta térmica en equipos de cómputo.",
     image: "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=600&auto=format&fit=crop",
-    tag: "Optimización"
+    tag: "⚡ Optimización"
   },
   {
     id: 2,
     title: "Upgrade Hardware: SSD y Memoria RAM",
     description: "Instalación de SSD de 1TB y 32GB RAM, triplicando velocidad.",
     image: "https://images.unsplash.com/photo-1591238372338-22d30c883a86?q=80&w=600&auto=format&fit=crop",
-    tag: "Upgrade"
+    tag: "🚀 Upgrade"
   },
   {
     id: 3,
     title: "Reparación experta de Controles DualSense",
     description: "Solución definitiva al problema de drift en analógicos y limpieza de contactos.",
     image: "https://images.unsplash.com/photo-1567027757540-7b572280fa22?q=80&w=600&auto=format&fit=crop",
-    tag: "Consolas"
+    tag: "🎮 Consolas"
   }
 ];
 
-// 💬 TESTIMONIALS (Enfocados a experiencias de particulares)
 const TESTIMONIALS = [
   {
     id: 1,
@@ -58,7 +56,6 @@ const TESTIMONIALS = [
   }
 ];
 
-// 🛠️ LOS 7 SERVICIOS PARA PARTICULARES CON ENLACES A WHATSAPP
 const SERVICES = [
   {
     id: "mantenimiento_computo",
@@ -66,8 +63,7 @@ const SERVICES = [
     description: "Limpieza profunda de componentes, optimización térmica profesional y diagnóstico de hardware experto.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
       </svg>
     ),
     whatsapp_cta: "https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Me%20interesa%20el%20Mantenimiento%20para%20mi%20laptop/PC"
@@ -78,7 +74,8 @@ const SERVICES = [
     description: "Solución inmediata a problemas de software, configuraciones, virus y asistencia técnica a distancia 100% segura.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9h18" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
     whatsapp_cta: "https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Necesito%20el%20Soporte%20Remoto%20urgente%20para%20mi%20equipo"
@@ -111,8 +108,7 @@ const SERVICES = [
     description: "Limpieza avanzada, optimización térmica y reparación experta para tus consolas de videojuegos de todas las generaciones.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 009 11a13.916 13.916 0 00-3.136-8.442l-.054-.09M21 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 0015 11a13.916 13.916 0 00-3.136-8.442l-.054-.09M9 11h6" />
       </svg>
     ),
     whatsapp_cta: "https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Me%20interesa%20el%20Mantenimiento%20para%20mi%20consola"
@@ -123,7 +119,7 @@ const SERVICES = [
     description: "Servicio de limpieza y reparación experta para controles de videojuegos. Solución definitiva al drift de analógicos.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442a.562.562 0 01.308.975l-4.143 3.633a.563.563 0 00-.172.528l1.1 5.38a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.98 20.53a.562.562 0 01-.84-.61l1.1-5.38a.563.563 0 00-.172-.528L2.925 10.4a.562.562 0 01.308-.975l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
       </svg>
     ),
     whatsapp_cta: "https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Me%20interesa%20la%20Reparación%20para%20mi%20control"
@@ -134,16 +130,12 @@ const SERVICES = [
     description: "Mantenimiento integral profundo y reparación experta para tus equipos de impresión y multifuncionales.",
     icon: (
       <svg className="w-6 h-6 text-soltecot-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 12h-1.586a1 1 0 01-.707-.293l-5.414-5.414a1 1 0 01-.293-.707V19a2 2 0 01-2 2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V12a2 2 0 012 2H19z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
       </svg>
     ),
     whatsapp_cta: "https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Me%20interesa%20el%20Mantenimiento%20para%20mi%20impresora"
   }
 ];
-
-// ----------------------------------------------------------------------------------
-// 🧩 COMPONENTE DE LA PÁGINA
-// ----------------------------------------------------------------------------------
 
 const PASOS_ESTADO = [
   { key: 'RECIBIDO', label: 'Recibido' },
@@ -158,8 +150,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [ticketData, setTicketData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
-
-  // ⚡ Detectar scroll para activar la Navbar compacta
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -172,12 +162,8 @@ export default function Home() {
       }
 
       const handleScroll = () => {
-        // Se activa cuando bajas más de 120px de la pantalla
-        if (window.scrollY > 120) {
-          setIsScrolled(true);
-        } else {
-          setIsScrolled(false);
-        }
+        if (window.scrollY > 120) setIsScrolled(true);
+        else setIsScrolled(false);
       };
 
       window.addEventListener('scroll', handleScroll);
@@ -207,11 +193,8 @@ export default function Home() {
     const res = await buscarTicketPorCodigo(codigo.trim().toUpperCase());
     setLoading(false);
 
-    if (res.error) {
-      setErrorMsg(res.error);
-    } else if (res.success) {
-      setTicketData(res.data);
-    }
+    if (res.error) setErrorMsg(res.error);
+    else if (res.success) setTicketData(res.data);
   };
 
   const obtenerIndiceEstado = (currentEstado: string) => {
@@ -234,127 +217,110 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-soltecot-dark text-slate-100 flex flex-col items-center p-6 md:p-12 font-montserrat relative overflow-hidden gap-20 md:gap-28">
+    <main className="min-h-screen bg-soltecot-dark text-slate-100 flex flex-col items-center p-6 md:p-12 font-montserrat relative overflow-hidden gap-20 md:gap-28 selection:bg-soltecot-cyan selection:text-soltecot-dark">
 
       {/* 🌐 CAPA 1: TEXTURA DOT MATRIX */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03] z-0"
+        className="absolute inset-0 pointer-events-none opacity-[0.04] z-0"
         style={{
           backgroundImage: `radial-gradient(circle, #5cddcf 1px, transparent 1px)`,
           backgroundSize: '24px 24px',
         }}
       />
 
-      {/* 🔮 CAPA 2: AURORAS VIVAS */}
-      <div className="absolute top-[-20%] left-[-15%] w-[800px] h-[800px] bg-soltecot-cyan/10 rounded-full blur-[160px] pointer-events-none animate-pulse duration-[8000s] z-0" />
-      <div className="absolute top-[40%] right-[-25%] w-[700px] h-[700px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none animate-pulse duration-[12000s] z-0" />
-      <div className="absolute bottom-[-10%] left-[10%] w-[600px] h-[600px] bg-soltecot-cyan/5 rounded-full blur-[130px] pointer-events-none z-0" />
+      {/* 🔮 CAPA 2: AURORAS MEJORADAS */}
+      <div className="absolute top-[-10%] left-[-10%] w-[600px] sm:w-[900px] h-[600px] sm:h-[900px] bg-soltecot-cyan/15 rounded-full blur-[140px] pointer-events-none mix-blend-screen z-0" />
+      <div className="absolute top-[35%] right-[-15%] w-[500px] sm:w-[800px] h-[500px] sm:h-[800px] bg-teal-500/10 rounded-full blur-[150px] pointer-events-none mix-blend-screen z-0" />
 
-      {/* 🛸 NAVBAR STICKY: Totalmente oculta arriba, aparece elegante al hacer scroll */}
+      {/* 🛸 NAVBAR STICKY GLASSMORPHIC */}
       <header className={`fixed top-0 left-0 right-0 w-full flex justify-center z-50 transition-all duration-500 ease-in-out px-6 md:px-12 
         ${isScrolled
-          ? 'py-3 bg-soltecot-dark/90 backdrop-blur-md border-b border-white/5 shadow-xl shadow-black/40 translate-y-0 opacity-100'
+          ? 'py-3 bg-soltecot-dark/75 backdrop-blur-xl border-b border-white/10 shadow-2xl shadow-black/50 translate-y-0 opacity-100'
           : 'py-4 bg-transparent border-b border-transparent -translate-y-4 opacity-0 pointer-events-none'}`}
       >
         <div className="w-full max-w-6xl flex items-center justify-between relative">
-          {/* Contrapeso izquierdo */}
           <div className="w-36 hidden sm:block pointer-events-none" />
-
-          {/* Logo Compacto Centrado de la Barra */}
           <div className="h-9 md:h-11 w-auto flex items-center justify-center">
-            <img
-              src="/logo.png"
-              alt="Logo Soltecot Sticky"
-              className="h-full w-auto object-contain pointer-events-none"
-            />
+            <img src="/logo.png" alt="Logo Soltecot Sticky" className="h-full w-auto object-contain pointer-events-none" />
           </div>
-
-          {/* Pill Derecha */}
           <div className="w-36 flex justify-end">
-            <span className="text-[10px] sm:text-xs bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-slate-400 font-medium whitespace-nowrap shadow-sm">
-              Atención a Particulares 🧑‍💻
+            <span className="text-[10px] sm:text-xs bg-soltecot-cyan/10 border border-soltecot-cyan/30 px-3 py-1.5 rounded-full text-soltecot-cyan font-semibold tracking-wide shadow-lg shadow-soltecot-cyan/5">
+              Soporte Particular 🧑‍💻
             </span>
           </div>
         </div>
       </header>
 
-      {/* HERO SECTION (Mantenemos el flex col limpio para control total del aire) */}
-      <section className="w-full max-w-4xl text-center z-10 pt-10 sm:pt-14 md:pt-16 flex flex-col items-center">
+      {/* HERO SECTION */}
+      <section className="w-full max-w-4xl text-center z-10 pt-10 sm:pt-14 md:pt-16 flex flex-col items-center gap-8">
 
-        {/* 💎 LOGO MONUMENTAL: Escalado masivo para igualar la maqueta premium */}
-        <div className="w-full flex justify-center transition-all duration-300">
-          {/* Subimos los límites drásticamente:
-            - En móvil pasa a ocupar casi todo el ancho disponible (max-w-[320px])
-            - En pantallas medianas/grandes sube hasta 850px / 920px para lograr ese impacto imponente del mockup.
-          */}
-          <div className="w-full max-w-[320px] sm:max-w-[580px] md:max-w-[850px] lg:max-w-[920px] h-auto drop-shadow-[0_0_60px_rgba(92,221,207,0.25)]">
-            <img
-              src="/logo.png"
-              alt="Logo Soltecot Principal"
-              className="w-full h-auto object-contain pointer-events-none"
-            />
+        {/* LOGO CON EFECTO HOVER ESCALADO Y RESPONSIVE */}
+        <div className="w-full flex justify-center transition-all duration-500 transform hover:scale-[1.02]">
+          <div className="w-full max-w-[280px] sm:max-w-[500px] md:max-w-[750px] lg:max-w-[850px] h-auto drop-shadow-[0_0_50px_rgba(92,221,207,0.2)]">
+            <img src="/logo.png" alt="Logo Soltecot Principal" className="w-full h-auto object-contain pointer-events-none" />
           </div>
         </div>
 
-        {/* Contenedor del texto con un margen superior manual ultra ceñido para pegarlo al logo */}
-        <div className="space-y-6 mt-4 md:mt-6">
-          <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-tight">
+        <div className="space-y-6">
+          <h1 className="font-poppins font-black text-4xl sm:text-6xl tracking-tight text-white leading-[1.15]">
             Impulsa el rendimiento <br />
-            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-200 to-white bg-clip-text drop-shadow-[0_0_25px_rgba(92,221,207,0.35)]">sin salir de casa</span>
+            de tu equipo <span className="bg-gradient-to-r from-soltecot-cyan via-teal-300 to-white bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(92,221,207,0.4)]">sin salir de casa</span>
           </h1>
           <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
-            Especialistas en mantenimiento integral. Actualización de PCs y laptops. Consolas de videojuegos y controles. Soporte técnico remoto y transparente.
+            Soporte por software inmediato 100% remoto, o recolección programada a domicilio para mantenimiento físico de hardware.
           </p>
         </div>
 
-        {/* CONTENEDOR DEL BUSCADOR (SOFT UI) */}
-        <div className="max-w-lg mx-auto p-6 bg-soltecot-darker/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl shadow-soltecot-darker/50 space-y-4 hover:border-soltecot-cyan/10 transition-colors">
-          <h3 className="text-sm font-semibold text-left text-slate-300 font-poppins flex items-center gap-2">
-            🎯 Consulta el estado de tu reparación en tiempo real
+        {/* CONTENEDOR DEL BUSCADOR OPTIMIZADO (GLOW FOCUS) */}
+        <div className="w-full max-w-xl mx-auto p-6 bg-soltecot-darker/70 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/80 space-y-4 hover:border-soltecot-cyan/30 transition-all duration-300 group">
+          <h3 className="text-sm font-semibold text-left text-slate-200 font-poppins flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-soltecot-cyan opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-soltecot-cyan"></span>
+            </span>
+            Consulta el estado de tu reparación en tiempo real
           </h3>
-          <form onSubmit={handleBuscar} className="flex gap-2">
+          <form onSubmit={handleBuscar} className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
               placeholder="Introduce tu Folio (Ej: SOL-1001)"
-              className="flex-1 bg-soltecot-dark border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-soltecot-cyan transition-colors text-white placeholder-slate-600 font-mono uppercase shadow-inner"
+              className="flex-1 bg-soltecot-dark border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-soltecot-cyan focus:ring-1 focus:ring-soltecot-cyan transition-all text-white placeholder-slate-600 font-mono uppercase shadow-inner"
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-soltecot-cyan hover:bg-[#4bcbc0] disabled:bg-slate-700 disabled:text-slate-400 text-soltecot-dark font-poppins font-bold text-sm px-5 py-3 rounded-xl transition-all duration-200 shadow-lg shadow-soltecot-cyan/20 active:scale-95 flex items-center justify-center min-w-[120px]"
+              className="bg-soltecot-cyan hover:bg-[#4bcbc0] disabled:bg-slate-700 disabled:text-slate-400 text-soltecot-dark font-poppins font-bold text-sm px-6 py-3 rounded-xl transition-all duration-300 shadow-lg shadow-soltecot-cyan/10 hover:shadow-[0_0_25px_rgba(92,221,207,0.4)] active:scale-95 flex items-center justify-center min-w-[145px]"
             >
               {loading ? 'Buscando...' : 'Rastrear Equipo'}
             </button>
           </form>
 
           {errorMsg && (
-            <p className="text-xs text-red-400 font-medium text-left bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl">
+            <p className="text-xs text-red-400 font-medium text-left bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
               ⚠️ {errorMsg}
             </p>
           )}
 
-          {/* 🧾 👇 ESTA ES LA NUEVA LÍNEA: SELLO DE FACTURACIÓN FISCAL PREMIUM */}
-          <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-mono tracking-wide">
-            <svg className="w-3.5 h-3.5 text-soltecot-cyan/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="pt-3 border-t border-white/5 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-mono tracking-wide">
+            <svg className="w-3.5 h-3.5 text-soltecot-cyan/60 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
             <span>Precios netos con IVA incluido • Facturación CFDI 4.0 autorizada</span>
           </div>
-
         </div>
 
         {/* RESULTADO DE LA BÚSQUEDA */}
         {ticketData && (
-          <div className="max-w-2xl mx-auto p-6 bg-soltecot-darker border border-white/5 rounded-2xl shadow-2xl text-left space-y-6 transition-all duration-300 animate-fade-in shadow-soltecot-darker/50">
-            <div className="flex justify-between items-start border-b border-white/5 pb-4">
+          <div className="w-full max-w-2xl mx-auto p-6 bg-soltecot-darker/90 border border-soltecot-cyan/20 rounded-2xl shadow-2xl shadow-black text-left space-y-6 transition-all duration-300 animate-fade-in backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-white/5 pb-4">
               <div>
-                <span className="text-xs font-mono text-soltecot-cyan uppercase font-semibold tracking-wider">Folio Oficial: {ticketData.numeroOrden}</span>
+                <span className="text-xs font-mono text-soltecot-cyan uppercase font-bold tracking-wider">Folio Oficial: {ticketData.numeroOrden}</span>
                 <h4 className="font-poppins font-bold text-xl text-white mt-1">{ticketData.equipo}</h4>
                 <p className="text-xs text-slate-400 mt-0.5">Propietario: <span className="text-slate-200 font-medium">{ticketData.cliente.nombre}</span></p>
               </div>
-              <span className={`text-[10px] px-3 py-1 rounded-full font-mono font-bold tracking-wide uppercase border ${mapearEstiloEstado(ticketData.estado)}`}>
+              <span className={`text-[10px] px-3 py-1.5 rounded-full font-mono font-bold tracking-wide uppercase border ${mapearEstiloEstado(ticketData.estado)}`}>
                 {ticketData.estado.replace('_', ' ')}
               </span>
             </div>
@@ -368,19 +334,19 @@ export default function Home() {
 
             {/* PANEL DE PRESUPUESTO */}
             {ticketData.estado === 'ESPERANDO_APROBACION' && ticketData.costoReparacion && (
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3 shadow-inner">
+              <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-4 space-y-3 shadow-inner">
                 <div className="flex justify-between items-center border-b border-amber-500/10 pb-2">
                   <span className="text-xs font-bold text-amber-400 font-poppins uppercase tracking-wider">💼 Presupuesto Técnico Listo</span>
-                  <span className="text-base font-black text-white font-mono">${ticketData.costoReparacion} MXN</span>
+                  <span className="text-base font-black text-white font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">${ticketData.costoReparacion} MXN</span>
                 </div>
                 {ticketData.notasDiagnostico && (
                   <div className="space-y-1">
-                    <span className="text-[9px] text-zinc-500 uppercase font-bold">Nota Técnica del Ingeniero:</span>
+                    <span className="text-[9px] text-zinc-500 uppercase font-bold">Nota Técnico:</span>
                     <p className="text-xs text-slate-300 font-light italic">"{ticketData.notasDiagnostico}"</p>
                   </div>
                 )}
-                <p className="text-[10px] text-amber-400/80 leading-relaxed pt-1 bg-amber-500/5 px-2.5 py-2 rounded-lg border border-amber-500/10 font-medium">
-                  💡 *¿Cómo autorizar?* Por favor, abre el chat de WhatsApp con nuestro laboratorio y responde con la palabra *Aceptar* para iniciar la instalación de refacciones, o *Rechazar* para preparar su devolución.
+                <p className="text-[10px] text-amber-400/90 leading-relaxed pt-1 bg-amber-500/5 px-2.5 py-2 rounded-lg border border-amber-500/10 font-medium">
+                  💡 <strong>¿Cómo autorizar?</strong> Responde al chat de WhatsApp con la palabra <span className="underline font-bold">Aceptar</span> para iniciar el cambio de refacciones, o <span className="underline font-bold">Rechazar</span> para devolución.
                 </p>
               </div>
             )}
@@ -398,21 +364,20 @@ export default function Home() {
 
                   return (
                     <div key={paso.key} className="flex flex-col items-center relative z-10 gap-2">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${esElActual
-                        ? 'bg-soltecot-dark border-soltecot-cyan shadow-[0_0_15px_#5cddcf]'
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${esElActual
+                        ? 'bg-soltecot-dark border-soltecot-cyan shadow-[0_0_20px_#5cddcf]'
                         : estaCompletado
                           ? 'bg-soltecot-cyan border-soltecot-cyan'
                           : 'bg-soltecot-darker border-white/10'
                         }`}>
                         {estaCompletado && !esElActual && (
-                          <span className="text-[9px] text-soltecot-dark font-bold">✓</span>
+                          <span className="text-[10px] text-soltecot-dark font-black">✓</span>
                         )}
                         {esElActual && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-soltecot-cyan animate-ping" />
+                          <div className="w-2 h-2 rounded-full bg-soltecot-cyan animate-pulse" />
                         )}
                       </div>
-                      <span className={`text-[10px] font-medium font-poppins whitespace-nowrap hidden sm:block ${esElActual ? 'text-soltecot-cyan font-bold' : estaCompletado ? 'text-slate-300' : 'text-slate-600'
-                        }`}>
+                      <span className={`text-[10px] font-medium font-poppins whitespace-nowrap hidden sm:block ${esElActual ? 'text-soltecot-cyan font-bold' : estaCompletado ? 'text-slate-300' : 'text-slate-600'}`}>
                         {paso.label}
                       </span>
                     </div>
@@ -428,33 +393,78 @@ export default function Home() {
         )}
       </section>
 
-      {/* 📸 SECCIÓN: GALERÍA DE CASOS DE ÉXITO RECIENTES */}
+      {/* 🚀 NUEVA SECCIÓN LOGÍSTICA: ¿CÓMO FUNCIONA? */}
+      <section className="w-full max-w-5xl z-10 space-y-8 bg-gradient-to-r from-soltecot-darker/60 to-soltecot-darker/20 backdrop-blur-md p-8 rounded-2xl border border-white/5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-soltecot-cyan/5 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="text-center space-y-2">
+          <h2 className="font-poppins font-bold text-xl md:text-2xl text-white tracking-tight">
+            ¿Cómo resolvemos tu problema sin que salgas de casa?
+          </h2>
+          <p className="text-xs text-slate-400 max-w-xl mx-auto font-light">
+            Diseñamos dos canales de atención cómodos y transparentes adaptados a tus tiempos.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+          {/* Bloque 1: Remoto */}
+          <div className="p-5 bg-soltecot-dark/40 rounded-xl border border-white/5 space-y-3 hover:border-soltecot-cyan/20 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-soltecot-cyan/10 flex items-center justify-center font-bold text-soltecot-cyan text-sm">
+                01
+              </div>
+              <h4 className="font-poppins font-semibold text-white text-sm md:text-base">Soporte de Software (Remoto Inmediato)</h4>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed font-light">
+              Problemas de lentitud, virus, instalaciones o configuraciones se resuelven en la semana de forma remota. Te conectas mediante software cifrado y seguro bajo tu estricta supervisión. <strong>Fricción cero.</strong>
+            </p>
+          </div>
+
+          {/* Bloque 2: Físico */}
+          <div className="p-5 bg-soltecot-dark/40 rounded-xl border border-white/5 space-y-3 hover:border-soltecot-cyan/20 transition-colors relative group">
+            <span className="absolute top-3 right-3 text-[9px] bg-soltecot-cyan/10 text-soltecot-cyan border border-soltecot-cyan/20 font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wide">
+              Fines de Semana
+            </span>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-soltecot-cyan/10 flex items-center justify-center font-bold text-soltecot-cyan text-sm">
+                02
+              </div>
+              <h4 className="font-poppins font-semibold text-white text-sm md:text-base">Mantenimiento Físico (Recolección VIP)</h4>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed font-light">
+              Para fallas de hardware, consolas o limpieza profunda: agendamos la <strong>recolección en tu domicilio los días Sábados y Domingos</strong> (disponible en un radio de 10km). Nos llevamos tu equipo a laboratorio y lo regresamos impecable.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 📸 SECCIÓN: GALERÍA DE CASOS DE ÉXITO */}
       <section className="w-full max-w-6xl z-10 space-y-8">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
             ¿En qué nos especializamos?
           </h2>
           <p className="text-sm text-slate-400 max-w-xl font-light leading-relaxed">
-            Casos reales de mantenimiento y upgrade avanzados solucionados en nuestros bancos de trabajo.
+            Casos reales de hardware complejo resueltos con precisión milimétrica en nuestras estaciones de soldado.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {RECENT_WORK.map((work) => (
-            <div key={work.id} className="bg-soltecot-darker/60 border border-white/5 rounded-2xl overflow-hidden group hover:border-soltecot-cyan/30 transition-all duration-300 shadow-xl hover:-translate-y-1">
+            <div key={work.id} className="bg-soltecot-darker/60 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden group hover:border-soltecot-cyan/30 transition-all duration-500 shadow-xl hover:-translate-y-2">
               <div className="h-48 overflow-hidden relative">
                 <div className="absolute inset-0 bg-soltecot-cyan/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
                 <img
                   src={work.image}
                   alt={work.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                 />
-                <span className="absolute bottom-3 left-3 bg-soltecot-dark/80 text-soltecot-cyan border border-soltecot-cyan/30 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md uppercase z-20">
+                <span className="absolute bottom-3 left-3 bg-soltecot-dark/90 text-soltecot-cyan border border-soltecot-cyan/30 font-mono text-[9px] font-bold px-2.5 py-1 rounded-md uppercase z-20 shadow-md">
                   {work.tag}
                 </span>
               </div>
               <div className="p-5 space-y-2">
-                <h4 className="font-poppins font-semibold text-base text-white group-hover:text-soltecot-cyan transition-colors">
+                <h4 className="font-poppins font-semibold text-base text-white group-hover:text-soltecot-cyan transition-colors duration-300">
                   {work.title}
                 </h4>
                 <p className="text-xs text-slate-400 font-light leading-relaxed">
@@ -470,29 +480,28 @@ export default function Home() {
       <section className="w-full max-w-6xl z-10 space-y-12">
         <div className="text-center md:text-left space-y-2">
           <h2 className="font-poppins font-bold text-2xl md:text-3xl text-white tracking-tight">
-            Servicios para tu Hogar
+            Servicios de Laboratorio
           </h2>
           <p className="text-sm text-slate-400 max-w-xl font-light leading-relaxed">
-            Soluciones expertas y formalidad para tus equipos del día a día, con triage inteligente por WhatsApp.
+            Asistencia profesional directa con triage inteligente y reportes transparentes vía WhatsApp.
           </p>
         </div>
 
-        {/* 🧱 BENTO GRID LAYOUT */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {SERVICES.map((service, index) => (
             <div
               key={service.id}
-              className={`group relative p-6 bg-soltecot-darker/50 backdrop-blur-xl rounded-2xl border border-white/5 hover:border-soltecot-cyan/30 transition-all duration-300 flex flex-col justify-between gap-6 hover:-translate-y-1 shadow-xl hover:shadow-soltecot-cyan/5 
-              ${index === 1 ? 'md:col-span-2 border-soltecot-cyan/20 shadow-soltecot-cyan/10' : ''}`}
+              className={`group relative p-6 bg-gradient-to-b from-soltecot-darker/90 to-soltecot-darker/40 backdrop-blur-xl rounded-2xl border border-white/5 hover:border-soltecot-cyan/40 transition-all duration-500 flex flex-col justify-between gap-6 hover:-translate-y-2 shadow-xl hover:shadow-[0_10px_30px_rgba(92,221,207,0.05)] 
+              ${index === 1 ? 'md:col-span-2 border-soltecot-cyan/20 shadow-[0_4px_30px_rgba(92,221,207,0.08)]' : ''}`}
             >
-              <div className="absolute inset-0 bg-gradient-to-b from-soltecot-cyan/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-soltecot-cyan/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl pointer-events-none" />
 
               <div className="space-y-4 relative z-10">
-                <div className={`w-12 h-12 rounded-xl bg-soltecot-cyan/10 border border-soltecot-cyan/20 flex items-center justify-center group-hover:bg-soltecot-cyan group-hover:text-soltecot-dark transition-all duration-300 shadow-inner
-                  ${index === 1 ? 'bg-soltecot-cyan text-soltecot-dark shadow-soltecot-cyan/30' : ''}`}>
+                <div className={`w-12 h-12 rounded-xl bg-soltecot-cyan/10 border border-soltecot-cyan/20 flex items-center justify-center text-soltecot-cyan group-hover:bg-soltecot-cyan group-hover:text-soltecot-dark group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(92,221,207,0.4)] transition-all duration-500 shadow-inner
+                  ${index === 1 ? 'bg-soltecot-cyan text-soltecot-dark shadow-lg shadow-soltecot-cyan/20' : ''}`}>
                   {service.icon}
                 </div>
-                <h3 className="font-poppins font-semibold text-lg text-white group-hover:text-soltecot-cyan transition-colors duration-200">
+                <h3 className="font-poppins font-semibold text-lg text-white group-hover:text-soltecot-cyan transition-colors duration-300">
                   {service.title}
                 </h3>
                 <p className={`text-xs text-slate-400 font-light leading-relaxed ${index === 1 ? 'text-slate-300' : ''}`}>
@@ -504,10 +513,10 @@ export default function Home() {
                 href={service.whatsapp_cta}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] font-poppins font-medium text-soltecot-cyan/60 group-hover:text-soltecot-cyan flex items-center gap-1.5 mt-2 relative z-10 transition-colors duration-200 cursor-pointer w-fit"
+                className="text-[11px] font-poppins font-semibold text-soltecot-cyan/70 group-hover:text-soltecot-cyan flex items-center gap-1.5 mt-2 relative z-10 transition-colors duration-300 cursor-pointer w-fit"
               >
                 Consultar soporte técnico
-                <span className="transform group-hover:translate-x-1 transition-transform duration-200 text-xs">➔</span>
+                <span className="transform group-hover:translate-x-1.5 transition-transform duration-300 text-xs">➔</span>
               </a>
             </div>
           ))}
@@ -521,26 +530,26 @@ export default function Home() {
             Opiniones de Usuarios
           </h2>
           <p className="text-sm text-slate-400 max-w-xl font-light leading-relaxed">
-            La confianza de nuestros clientes particulares respalda la formalidad de nuestro laboratorio.
+            La confianza de nuestra comunidad respalda el rigor de nuestro laboratorio técnico.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {TESTIMONIALS.map((t) => (
-            <div key={t.id} className="p-6 bg-soltecot-darker/30 backdrop-blur-sm border border-white/5 rounded-2xl flex flex-col justify-between gap-4 shadow-xl hover:border-white/10 transition-colors shadow-soltecot-darker/50">
+            <div key={t.id} className="p-6 bg-soltecot-darker/40 backdrop-blur-md border border-white/5 rounded-2xl flex flex-col justify-between gap-5 shadow-xl hover:border-white/10 transition-all duration-300 group">
               <div className="space-y-3">
-                <div className="flex gap-1 text-amber-400 text-xs">
+                <div className="flex gap-1 text-amber-400 text-[10px]">
                   {Array.from({ length: t.rating }).map((_, i) => (
-                    <span key={i}>★</span>
+                    <span key={i} className="group-hover:scale-110 transition-transform duration-300">★</span>
                   ))}
                 </div>
-                <p className="text-xs text-slate-300 font-light leading-relaxed italic shadow-inner">
+                <p className="text-xs text-slate-300 font-light leading-relaxed italic">
                   "{t.text}"
                 </p>
               </div>
-              <div className="border-t border-white/5 pt-3 mt-1">
+              <div className="border-t border-white/5 pt-3">
                 <h5 className="font-poppins font-semibold text-sm text-white">{t.name}</h5>
-                <span className="text-[10px] font-mono text-soltecot-cyan">{t.device}</span>
+                <span className="text-[10px] font-mono text-soltecot-cyan/80 bg-soltecot-cyan/5 px-2 py-0.5 rounded border border-soltecot-cyan/10 mt-1 inline-block">{t.device}</span>
               </div>
             </div>
           ))}

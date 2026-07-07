@@ -156,17 +156,15 @@ async function eliminarCitaEnCalendar(telefono: string) {
 
         const tiempoMinimo = new Date().toISOString()
 
-        // 🔍 Buscamos en el calendario eventos futuros que contengan el teléfono del cliente
         const listaEventos = await calendar.events.list({
             calendarId: CALENDAR_ID,
-            q: telefono, // Filtro clave de Google API
+            q: telefono,
             timeMin: tiempoMinimo,
             singleEvents: true
         })
 
         if (listaEventos.data.items && listaEventos.data.items.length > 0) {
             for (const evento of listaEventos.data.items) {
-                // Si el evento es una recolección y tiene su ID, al búnker
                 if (evento.id && evento.summary?.includes('Recolección')) {
                     await calendar.events.delete({
                         calendarId: CALENDAR_ID,
@@ -204,7 +202,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let clientePrisma: any = null
 
     try {
-        const clientePrisma = await prisma.cliente.findFirst({
+        // ✨ SOLUCIONADO: Quitamos el 'const' interno para evitar shadowing de variables
+        clientePrisma = await prisma.cliente.findFirst({
             where: {
                 OR: [
                     { telefono: numeroCliente },
@@ -225,7 +224,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             let clienteIdParaTicket = clientePrisma?.id
             let nombreClienteEstetico = clientePrisma?.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp' ? clientePrisma.nombre : 'Cliente WhatsApp'
 
-            // 🛡️ PARCHE DE SEGURIDAD 1: Bloqueamos la creación con JIDs crudos en Neon
             if (!clientePrisma) {
                 const nuevoClienteExpress = await prisma.cliente.create({
                     data: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp' }
@@ -259,7 +257,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 })
             }
 
-            // 🎫 OTORGAMOS EL FOLIO REAL DIRECTAMENTE COMO REFERENCIA PROFESIONAL EN EL WHATSAPP
             const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador.* Verás la actividad de soporte técnico en tu pantalla en unos segundos.`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
@@ -270,7 +267,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             if (historialLocal.length > 12) historialLocal = historialLocal.slice(-12)
             MEMORIA_CHAT.set(numeroCliente, historialLocal)
 
-            // Guardado blindado con folio dinámico y 10 dígitos puros
             await registrarFinanzasEnFacturacion(
                 ticketActivo.numeroOrden, telefono10Digitos, nombreClienteEstetico, 'Remoto',
                 'Soporte Técnico Remoto / Express', 'EN_REPARACION', 'NO', '', '', '', '', '', '',
@@ -326,7 +322,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de computadoras y laptops. Tu objetivo es guiar al cliente de manera clara y profesional para agendar citas de entrega o recolección, y extraer información relevante para el CRM. Debes mantener un tono cordial, profesional y empático, evitando tecnicismos innecesarios.
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de computadoras y laptops. Tu objetivo es guiar al cliente de manera clara y profesional para agendar citas de entrega o recolección, y extraer información relevante para el CRM. Debes mantener un tono cordial, profesional y empático, evitando tecnicismos unnecessarily.
                     
 📅 HOY ES: ${fechaHoyString}.
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
@@ -411,12 +407,9 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
         }
 
-        // 🛡️ PARCHE DE SEGURIDAD 2: El teléfono de respaldo es SIEMPRE los 10 dígitos puros, NUNCA el JID crudo con letras
         const telefonoParaCita = (telefonoRealCrm && telefonoRealCrm.length >= 10) ? telefonoRealCrm.slice(-10) : telefono10Digitos
 
-        // 🛡️ PARCHE DE SEGURIDAD 3: Sanitización estricta de cadenas de la plantilla de la IA
         if (nombreCrm.toLowerCase() === 'nombre' || nombreCrm.toLowerCase() === 'desconocido' || nombreCrm.includes('@')) {
-            // Evaluamos la existencia formal de clientePrisma en un bloque limpio para complacer a TypeScript
             if (clientePrisma && clientePrisma.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp') {
                 nombreCrm = clientePrisma.nombre
             } else {
@@ -480,9 +473,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 if (kilometrosReal !== -1 && kilometrosReal <= RADIO_MAXIMO_KM) {
                     // ... (Tu lógica normal de éxito)
                 } else {
-                    // 🚨 COBERTURA EXCEDIDA: Disparamos la búsqueda y eliminación dinámica por teléfono
                     await eliminarCitaEnCalendar(telefonoParaCita)
-
                     respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra fuera de nuestro rango de cobertura de recolección.\n\n⚠️ Nuestro límite es de **${RADIO_MAXIMO_KM} km**.\n\nCon gusto te recibimos directamente en nuestras instalaciones para un diagnóstico sin costo. ¿Te comparto la ubicación? 🛠️`
                     estatusLead = 'FUERA_DE_COBERTURA'
                     await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango. Dirección: ${direccionExtraida}`)
@@ -522,7 +513,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-            // Envíos paralelos y limpios a ambas pestañas
             await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
 
             await registrarFinanzasEnFacturacion(
@@ -536,14 +526,72 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
     }
 }
 
+// 🌐 MÉTODO GET: Validador Oficial de Webhooks exigido por Meta
+export async function GET(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url)
+        const mode = searchParams.get('hub.mode')
+        const token = searchParams.get('hub.verify_token')
+        const challenge = searchParams.get('hub.challenge')
+
+        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
+
+        if (mode && token) {
+            if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+                console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.');
+                return new Response(challenge, { status: 200 })
+            } else {
+                return new Response('Forbidden', { status: 403 })
+            }
+        }
+        return new Response('Bad Request', { status: 400 })
+    } catch (error: any) {
+        return new Response('Error', { status: 500 })
+    }
+}
+
+// 📥 MÉTODO POST: Receptor de Mensajes de WhatsApp desde la Nube de Meta
 export async function POST(req: Request) {
     try {
-        const event = await req.json()
-        if (event.type !== 'message' || !event.data || event.data.type !== 'chat') return new Response('Ignorado', { status: 200 })
-        if (event.data.fromMe === true || event.data.from.includes('5546088200')) return new Response('Eco Ignorado', { status: 200 })
-        await ejecutarLogicaIA(event.data.body, event.data.from)
+        const body = await req.json()
+
+        // 🛡️ Filtro 1: Validamos que el payload provenga del ecosistema comercial de WhatsApp
+        if (body.object !== 'whatsapp_business_account') {
+            return new Response('Ignorado', { status: 200 })
+        }
+
+        const entry = body.entry?.[0]
+        const change = entry?.changes?.[0]
+        const value = change?.value
+
+        // 🛡️ Filtro 2: Ignorar si es una actualización de estatus (sent, delivered, read) o está vacío
+        if (!value || !value.messages || value.messages.length === 0) {
+            return new Response('Ignorado Estatus', { status: 200 })
+        }
+
+        const message = value.messages[0]
+
+        // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto para no romper a Gemini
+        if (message.type !== 'text') {
+            return new Response('Ignorado Multimedia', { status: 200 })
+        }
+
+        const mensajeCliente = message.text?.body
+        const numeroCliente = message.from // Meta nos da la cadena limpia (ej: "525546088200")
+
+        // 🛡️ Filtro 4: Evitamos el eco infinito si nos llega a escribir el mismo número del bot
+        if (numeroCliente.includes('5546088200')) {
+            return new Response('Eco Ignorado', { status: 200 })
+        }
+
+        if (mensajeCliente && numeroCliente) {
+            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
+            await ejecutarLogicaIA(mensajeCliente, numeroCliente)
+        }
+
         return new Response('Processed', { status: 200 })
-    } catch (error) {
+    } catch (error: any) {
+        console.error('🔴 Error en Receptor Webhook Meta:', error.message)
         return new Response('Error', { status: 500 })
     }
 }
