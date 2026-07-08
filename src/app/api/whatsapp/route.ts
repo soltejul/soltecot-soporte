@@ -236,7 +236,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let clientePrisma: any = null
 
     try {
-        // ✨ SOLUCIONADO: Quitamos el 'const' interno para evitar shadowing de variables
         clientePrisma = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -260,7 +259,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             if (!clientePrisma) {
                 const nuevoClienteExpress = await prisma.cliente.create({
-                    data: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp' }
+                    data: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: true }
                 })
                 clienteIdParaTicket = nuevoClienteExpress.id
                 nombreClienteEstetico = 'Cliente WhatsApp'
@@ -356,51 +355,42 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita (física/recolección) o vender soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático y al grano.
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita o vender soporte remoto, extrayendo la información para el CRM. Tono: Cordial, profesional, empático y al grano.
 
 📅 HOY ES: ${fechaHoyString}.
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
 🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
-• OPCIÓN 1: Soporte técnico remoto (Exclusivo para fallas de software en PC/Laptop).
-• OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware y limpieza).
-• OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos y controles (Xbox, PlayStation, Nintendo).
+• OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop).
+• OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
+• OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
 --- 2. MODALIDADES DE ENTREGA Y TARIFAS ---
 1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM).
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
-3. SOPORTE REMOTO: Conexión por Google Remote Desktop. Tarifa fija: $419 MXN neto (Ya incluye IVA).
+3. SOPORTE REMOTO: $419 MXN neto.
 
---- 3. REGLAS ESTRICTAS DE ATENCIÓN (TRIAGE) ---
-🚨 REGLA DEL MENÚ INTELIGENTE (EVITAR BUCLES):
-- Si el cliente solo saluda (ej: "hola"), preséntate y muestra el menú de 3 opciones en formato de lista.
-- ¡CRÍTICO!: Si el cliente describe directamente su problema desde el inicio (ej: "cambio de batería de laptop"), NO le repitas el menú. Identifica inmediatamente que pertenece a la "Opción 2", menciónaselo de forma natural y avanza directo a ofrecerle las modalidades de entrega (Visita o Recolección).
+--- 3. REGLAS ESTRICTAS DE ATENCIÓN ---
+🚨 REGLA DEL MENÚ INTELIGENTE:
+Si el cliente solo saluda, muestra el menú de 3 opciones. Si describe su problema desde el inicio (ej: "cambio de batería"), NO repitas el menú, asume la Opción correcta y ofrécele las modalidades (Visita o Recolección).
 
-🚨 REGLA DE VALIDACIÓN PARA CONSOLAS (OPCIÓN 3):
-Las consolas y controles NO se pueden reparar por soporte remoto. Si eligen la Opción 3, ofrece únicamente "Visita al laboratorio" o "Recolección". NUNCA les ofrezcas Google Remote Desktop.
+🚨 REGLA DE AMORTIGUACIÓN DE PRECIOS (EVITAR RECHAZO):
+- Si el cliente exige un precio antes de agendar (ej: "cuánto cuesta el cambio de batería"), NUNCA le digas textualmente "no te puedo dar precio".
+- Amortigua dando un rango aproximado del mercado. Ejemplo: "Los cambios de batería suelen oscilar entre $790 y $1,400 MXN dependiendo del modelo exacto. Para darte tu costo exacto, déjame pasarte con el Ing. Julio..."
 
-🚨 REGLA DE AGENDAMIENTO OBLIGATORIO:
-NUNCA le digas al cliente que "venga cuando guste". Es obligatorio fijar un DÍA y HORA exacta. Pregúntale siempre: "¿Qué día y a qué hora te gustaría agendar tu espacio para revisar disponibilidad?".
+🚨 REGLA DE DETECCIÓN DE FRUSTRACIÓN Y HANDOFF (¡CRÍTICO!):
+- Si el cliente escribe rechazos como "no gracias", "está muy caro", "quiero hablar con un humano" o se nota molesto, NO te despidas formalmente.
+- Responde con empatía extrema: "Entiendo perfectamente. Para darte una atención personalizada y revisar alternativas, voy a transferir este chat directamente con el Ingeniero Julio. Él se comunicará contigo por aquí en unos minutos. ¡Un momento por favor!"
+- Al final de este mensaje, incluye OBLIGATORIAMENTE la etiqueta: __TRANSFERIR_HUMANO__
 
-🚨 RESCATE DE VENTAS (FUERA DE COBERTURA):
-Si piden recolección para PC/Laptop pero están a más de 10km, ofrece inmediatamente migrar al "Soporte Técnico Remoto Inmediato" por $419 MXN, explicando que se soluciona el mismo día por internet.
+🚨 REGLA DE AGENDAMIENTO: NUNCA digas "venga cuando guste". Obliga a fijar DÍA y HORA exacta.
 
-🚨 DATOS DE APERTURA:
-Cuando acepten el servicio, pide en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y: "¿Requerirás factura CFDI 4.0? (SÍ o NO)".
+🚨 DATOS DE APERTURA: Cuando acepten el servicio, pide Nombre Completo, Teléfono y "¿Requerirás factura CFDI 4.0? (SÍ/NO)".
 
 --- 4. FORMATO OBLIGATORIO DE SALIDA (ETIQUETAS) ---
-🚨 REGLA DE FORMATO DE FECHA ESTRICTO:
-- Al usar las etiquetas de agenda, el valor DEBE ser una fecha ISO válida basada en el año actual 2026. Formato: AAAA-MM-DDTHH:MM:00.
-- Ejemplo (Si hoy es miércoles 8 de julio de 2026 y el cliente dice "mañana a las 2 pm", debes calcular matemáticamente que mañana es jueves 9 de julio y escribir exactamente): __AGENDAR_VISITA__:2026-07-09T14:00:00
-- NUNCA pongas palabras descriptivas como "mañana", "lunes" o "Invalid" dentro del valor de la etiqueta.
-- Incluye la etiqueta UNA SOLA VEZ en toda la conversación, justo cuando confirmen la hora por primera vez.
-- NUNCA escribas por tu cuenta "🎫 Cita en Laboratorio Confirmada", deja que el sistema lo inyecte.
-
-Etiquetas disponibles:
-- Cita en local: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
-- Cita recolección: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
-- Dirección de ruta: __DIRECCION_CLIENTE__:[dirección completa limpia]
+- Usa fechas ISO (AAAA-MM-DDTHH:MM:00).
+- Usa etiquetas UNA SOLA VEZ: __AGENDAR_VISITA__: / __AGENDAR_RECOLECCION__: / __DIRECCION_CLIENTE__:
 
 AL FINAL DE CADA MENSAJE, INCLUYE SIEMPRE ESTOS DOS BLOQUES:
 __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
@@ -419,18 +409,22 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         let estatusLead = 'PROSPECTO'
         let tipoSoporteCalculado = 'Remoto'
 
+        // 🔍 Buscamos las etiquetas en la respuesta cruda
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
         const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
+        const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/)
 
+        // 🧹 Limpiamos TODAS las etiquetas para que el cliente lea un texto humano
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
             .replace(/__AGENDAR_RECOLECCION__:.+/, '')
             .replace(/__DIRECCION_CLIENTE__:.+/, '')
             .replace(/__DATOS_CRM__:.+/, '')
             .replace(/__DATOS_FISCALES__:.+/, '')
+            .replace(/__TRANSFERIR_HUMANO__/g, '')
             .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
@@ -476,11 +470,30 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
+        // 🚨 INTERCEPTOR DE HANDOFF (TRANSFERENCIA A HUMANO)
+        if (matchAgente) {
+            if (clientePrisma?.id) {
+                await prisma.cliente.update({
+                    where: { id: clientePrisma.id },
+                    data: { atendidoPorBot: false }
+                })
+            } else {
+                await prisma.cliente.create({
+                    data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                })
+            }
+
+            estatusLead = 'REVISION_MANUAL'
+            await dispararAlertaInmediata(
+                telefonoParaCita,
+                '🚨 S.O.S. AGENTE',
+                `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
+            )
+        }
+
         if (matchVisita) {
             tipoSoporteCalculado = 'Visita Física'
             const fechaExtraida = matchVisita[1].trim()
-
-            // 🛡️ CONTROL DE DAÑOS: Validar si la IA generó una fecha comprensible para JavaScript
             const fechaParseada = new Date(fechaExtraida)
 
             if (isNaN(fechaParseada.getTime())) {
@@ -488,9 +501,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? (Por ejemplo: "el jueves a las 2 pm" o "mañana a las 14:00"). Así podré asegurar tu espacio en el calendario. 🗓️`
                 estatusLead = 'POR_AGENDAR'
             } else {
-                // Si la fecha es completamente válida, procedemos con Google Calendar
                 const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
-
                 if (resultadoAgenda.exitoso) {
                     respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
                     estatusLead = 'AGENDADO'
@@ -529,19 +540,13 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             } else {
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
 
-                // 🚨 CASO A: Google Maps no pudo calcular la distancia (Error de API o dirección incomprensible)
                 if (kilometrosReal === -1) {
                     respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente en unos momentos para confirmar la ruta de recolección. Mientras tanto, tu espacio sigue apartado. 🙏`
                     estatusLead = 'REVISION_MANUAL'
                     await dispararAlertaInmediata(telefonoParaCita, '🔴', `Error al calcular distancia para: ${direccionExtraida}. Requiere aprobación manual de Julio.`)
-                }
-                // 🟢 CASO B: Está dentro del rango reglamentario
-                else if (kilometrosReal <= RADIO_MAXIMO_KM) {
-                    // ... (Tu código de éxito normal se mantiene aquí)
+                } else if (kilometrosReal <= RADIO_MAXIMO_KM) {
                     estatusLead = 'AGENDADO'
-                }
-                // 🟡 CASO C: Fuera de cobertura real (Más de 10km)
-                else {
+                } else {
                     await eliminarCitaEnCalendar(telefonoParaCita)
                     respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo de recolección gratuita de **${RADIO_MAXIMO_KM} km**.\n\n💻 *¡Pero no te preocupes!* Podemos resolver tu problema hoy mismo de forma 100% remota y segura mediante *Google Remote Desktop* por solo $419 MXN neto, o si lo prefieres, recibirte directamente en nuestro laboratorio. ¿Cuál opción te acomoda mejor?`
                     estatusLead = 'FUERA_DE_COBERTURA'
@@ -558,14 +563,10 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
-            let totalCobrado = ""
-            let montoNeto = ""
-            let ivaCalculado = ""
+            let totalCobrado = "", montoNeto = "", ivaCalculado = ""
 
             if (tipoSoporteCalculado === 'Remoto') {
-                totalCobrado = "419.00"
-                montoNeto = "361.21"
-                ivaCalculado = "57.79"
+                totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
             } else if (ticketMasReciente?.costoReparacion) {
                 const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
                 if (!isNaN(costoTotal)) {
@@ -575,9 +576,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     ivaCalculado = (costoTotal - neto).toFixed(2)
                 }
             } else {
-                totalCobrado = "Por cotizar"
-                montoNeto = "Pendiente"
-                ivaCalculado = "Pendiente"
+                totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
             }
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
@@ -655,6 +654,38 @@ export async function POST(req: Request) {
 
         if (mensajeCliente && numeroCliente) {
             console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
+
+            // 🛑 INTERCEPTOR DE HANDOFF: ¿El cliente ya está en atención humana?
+            const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
+            const telefono10Digitos = telefonoLimpio.slice(-10)
+
+            const clienteExistente = await prisma.cliente.findFirst({
+                where: {
+                    OR: [
+                        { telefono: numeroCliente },
+                        { telefono: telefonoLimpio },
+                        { telefono: telefono10Digitos }
+                    ]
+                }
+            })
+
+            // 👤 Si el cliente existe y tú apagaste su bot (atendidoPorBot === false)
+            // `atendidoPorBot` puede no existir en el tipo generado por Prisma, casteamos a any para evitar error
+            if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
+                console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}.`);
+
+                // Te manda una notificación en tiempo real a Google Chat para que no pierdas el hilo
+                await dispararAlertaInmediata(
+                    telefono10Digitos,
+                    '📥 ATENCIÓN MANUAL',
+                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele manualmente por tus canales oficiales.`
+                )
+
+                // Respondemos con estatus 200 a Meta para decirle que recibimos el mensaje, pero frenamos la IA
+                return new Response('Atendido de forma manual', { status: 200 })
+            }
+
+            // 🤖 Si el bot sigue activo, procesamos la conversación de forma automática con Gemini
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 
