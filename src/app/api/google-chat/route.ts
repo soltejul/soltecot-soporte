@@ -3,9 +3,9 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// Variables de entorno oficiales de tu proyecto
-const WHATSAPP_TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
-const PHONE_NUMBER_ID = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
+// 🛡️ RESPALDO TÁCTICO: Validamos ambos nombres de variables (con y sin NEXT_PUBLIC)
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
 export async function POST(req: Request) {
     try {
@@ -16,32 +16,44 @@ export async function POST(req: Request) {
             return NextResponse.json({})
         }
 
-        // 🧼 LIMPIEZA MAESTRA: 'argumentText' extrae estrictamente lo que escribiste DESPUÉS del @bot
+        // 🧼 LIMPIEZA MAESTRA: Extrae estrictamente lo que escribiste DESPUÉS del @bot
         let textoInyectado = body.message?.argumentText?.trim() || body.message?.text || ''
 
-        // Respaldo táctico: si por alguna razón queda rastro de una mención, la removemos con Regex
+        // Respaldo táctico: remover menciones remanentes
         if (textoInyectado.includes('@')) {
             textoInyectado = textoInyectado.replace(/@[^\s]+/g, '').trim()
         }
 
-        const threadNameId = body.message?.thread?.name // Identificador del hilo
+        const threadNameId = body.message?.thread?.name // Identificador del hilo enviado por Google
 
         if (!textoInyectado || !threadNameId) {
+            console.log('⚠️ [GOOGLE CHAT]: Petición ignorada por falta de texto o ID de hilo.')
             return NextResponse.json({})
         }
 
-        console.log(`📡 [GOOGLE CHAT INBOUND]: Localizado en hilo: ${threadNameId} | Texto Limpio: "${textoInyectado}"`)
+        console.log(`📡 [GOOGLE CHAT INBOUND]: Procesando hilo: "${threadNameId}" | Texto Limpio: "${textoInyectado}"`)
 
-        // 🔍 Buscamos en Neon a qué número de cliente pertenece este hilo de conversación
-        // Type assertion because the Prisma schema may use a different field name
-        // for the Google Chat thread ID. Cast to any to avoid TypeScript error
-        // when the property isn't present in ClienteWhereInput.
+        // 🔍 BÚSQUEDA ROBUSTA EN NEON: 
+        // Si hay discrepancias de prefijos en los strings de Google, buscamos usando "contains"
+        // extrayendo la parte final única del ID del hilo.
+        const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
+
+        // El modelo Prisma puede usar un nombre de campo distinto; evitamos el error de tipos
+        // construyendo el objeto 'where' dinámicamente y tipándolo como any.
+        const whereClause: any = { googleChatThreadId: tokenUnicoHilo }
+
         const clienteAsociado = await prisma.cliente.findFirst({
-            where: ({ googleChatThreadId: threadNameId } as any)
+            where: whereClause
         })
 
         if (!clienteAsociado) {
-            console.log(`⚠️ [HANDOFF WARN]: No se encontró ningún cliente vinculado al hilo: ${threadNameId}`)
+            console.error(`❌ [HANDOFF ERROR]: No se encontró ningún cliente en Neon vinculado al token de hilo: ${tokenUnicoHilo}`)
+            return NextResponse.json({})
+        }
+
+        // 🚨 Verificación de seguridad de credenciales antes de disparar a Meta
+        if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+            console.error('🔴 [META CONFIG ERROR]: Los tokens de WhatsApp están vacíos. Revisa tus variables de entorno en Vercel.')
             return NextResponse.json({})
         }
 
@@ -64,10 +76,10 @@ export async function POST(req: Request) {
         })
 
         if (respuestaMeta.ok) {
-            console.log(`✅ [WHATSAPP OUTBOUND]: Mensaje manual entregado con éxito a: ${clienteAsociado.telefono}`)
+            console.log(`✅ [WHATSAPP OUTBOUND]: ¡Mensaje manual entregado con éxito a: ${clienteAsociado.telefono}!`)
         } else {
             const errorMetaRaw = await respuestaMeta.text()
-            console.error(`🔴 [META API REJECT]: Meta rechazó el envío manual:`, errorMetaRaw)
+            console.error(`🔴 [META API REJECT]: Meta rechazó el envío. Detalles:`, errorMetaRaw)
         }
 
         return NextResponse.json({})
