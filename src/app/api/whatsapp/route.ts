@@ -36,36 +36,63 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡'
         if (estatus === 'EN_REPARACION') icono = '⚡'
 
-        // 🧵 REGLA DE ORO: Forzamos a Google Chat a agrupar todo este teléfono en un solo hilo limpio
-        if (!CHAT_WEBHOOK_URL.includes('messageReplyOption')) {
-            CHAT_WEBHOOK_URL = `${CHAT_WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE`
+        // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados
+        let urlConHilos = CHAT_WEBHOOK_URL
+        if (!urlConHilos.includes('messageReplyOption')) {
+            urlConHilos = `${urlConHilos}&messageReplyOption=REPLY_MESSAGE`
         }
 
-        const payload = {
+        const payloadConHilos = {
             text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`,
             thread: {
-                threadKey: `whatsapp_${telefono}` // Crea o responde al hilo exclusivo de este cliente
+                threadKey: `whatsapp_${telefono}`
             }
         }
 
-        const respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
+        console.log(`📡 [GOOGLE CHAT]: Intentando envío con hilos para el cliente ${telefono}...`);
+        let respuestaGoogle = await fetch(urlConHilos, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payloadConHilos)
         })
 
-        const datosRespuesta = await respuestaGoogle.json()
-        const threadNameId = datosRespuesta?.thread?.name // Ejemplo: "spaces/AAAA/threads/BBBB"
+        // 🛡️ DEFENSA DE RESPALDO: Si Google rechaza los hilos (Status 400), disparamos mensaje plano
+        if (!respuestaGoogle.ok) {
+            console.warn(`⚠️ [GOOGLE CHAT WARN]: La sala no soporta hilos (Status ${respuestaGoogle.status}). Activando respaldo plano...`);
 
-        // 🧠 Si Google nos devuelve el ID del hilo, lo guardamos de inmediato en Neon
-        if (threadNameId) {
-            await prisma.cliente.updateMany({
-                where: { telefono: { endsWith: telefono } },
-                data: { googleChatThreadId: threadNameId }
+            const payloadPlano = {
+                text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`
+            }
+
+            respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payloadPlano)
             })
         }
+
+        // 🧠 Si cualquiera de los dos intentos fue exitoso, procesamos la respuesta
+        if (respuestaGoogle.ok) {
+            const datosRespuesta = await respuestaGoogle.json()
+            const threadNameId = datosRespuesta?.thread?.name
+
+            // Solo guardamos el ID del hilo en Neon si la sala realmente lo generó
+            if (threadNameId) {
+                await prisma.cliente.updateMany({
+                    where: { telefono: { endsWith: telefono } },
+                    data: { googleChatThreadId: threadNameId }
+                })
+                console.log(`✅ [GOOGLE CHAT]: Mensaje enviado e hilo registrado: ${threadNameId}`);
+            } else {
+                console.log(`✅ [GOOGLE CHAT]: Mensaje plano de respaldo entregado con éxito.`);
+            }
+        } else {
+            const errorTexto = await respuestaGoogle.text()
+            console.error(`🔴 [GOOGLE CHAT CRITICAL]: Ambos intentos de comunicación fallaron. Respuesta: ${errorTexto}`);
+        }
+
     } catch (error: any) {
-        console.error('🔴 Error Alerta Google Chat Hilos:', error.message)
+        console.error('🔴 Error Crítico en dispararAlertaInmediata:', error.message)
     }
 }
 
