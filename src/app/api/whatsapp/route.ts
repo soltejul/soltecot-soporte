@@ -287,6 +287,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let clientePrisma: any = null
 
     try {
+        // 🔍 Localizamos al cliente y su último ticket activo
         clientePrisma = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -300,7 +301,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         ticketMasReciente = clientePrisma?.tickets[0]
 
-        // 🖥️ 1. INTERCEPTOR DE CÓDIGO GOOGLE REMOTE DESKTOP
+        // 👤 [ESCUDO INTERCEPTOR]: Si el humano tiene el control, el bot se retira de inmediato
+        if (clientePrisma && clientePrisma.atendidoPorBot === false) {
+            console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para el cliente ${telefono10Digitos}.`);
+            return;
+        }
+
+        // 🖥️ 1. INTERCEPTOR DE CÓDIGO GOOGLE REMOTE DESKTOP (Cliente envía los 12 dígitos)
         const regexCodigoRemoto = /\b\d{4}\s?\d{4}\s?\d{4}\b|\b\d{12}\b/
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
@@ -364,6 +371,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             return
         }
 
+        // 📝 2. INTERCEPTOR DE APROBACIÓN DE PRESUPUESTOS
         if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             if (textoNormalizado === 'aceptar' || textoNormalizado === 'acepto' || textoNormalizado === 'autorizar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'EN_REPARACION' } })
@@ -383,12 +391,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             }
         }
 
-        if (ticketMasReciente && ticketMasReciente.botActivo === false) return
-
     } catch (dbError: any) {
         console.error('🔴 Error al validar escudos en el webhook:', dbError.message)
     }
 
+    // 🧠 3. MOTOR DE GENERACIÓN DE CONTENIDO DE GEMINI IA
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
@@ -420,7 +427,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 • OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
 --- 2. MODALIDADES DE ENTREGA ---
-1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM).
+1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) and sábados (10 AM - 2 PM).
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
 3. SOPORTE REMOTO: Conexión inmediata vía internet tras registro.
 
@@ -470,20 +477,23 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         }
     }
 
+    // 📬 4. PROCESAMIENTO POST-RESPUESTA (EXTRACCIÓN DE ETIQUETAS)
     try {
         let estatusLead = 'PROSPECTO'
         let tipoSoporteCalculado = 'Remoto'
 
-        // 🔍 Buscamos las etiquetas en la respuesta cruda
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
         const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
+
+        // El disparador de asistencia humana unificado (Por etiqueta o gancho semántico)
         const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
             respuestaRaw.toLowerCase().includes('transferir este chat') ||
             respuestaRaw.toLowerCase().includes('ingeniero julio');
-        // 🧹 Limpiamos TODAS las etiquetas para que el cliente lea un texto humano
+
+        // 🧹 Purificamos el mensaje final removiendo códigos de control
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
             .replace(/__AGENDAR_RECOLECCION__:.+/, '')
@@ -536,8 +546,8 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        // 🚨 INTERCEPTOR DE HANDOFF (TRANSFERENCIA A HUMANO)
-        if (matchAgente) {
+        // 🚨 5. INTERCEPTOR MAESTRO DE HANDOFF (SILENCIADOR DE BOT)
+        if (matchAgente || (matchCrm && (respuestaRaw.toLowerCase().includes('remoto') || respuestaRaw.toLowerCase().includes('remote')))) {
             if (clientePrisma?.id) {
                 await prisma.cliente.update({
                     where: { id: clientePrisma.id },
@@ -549,14 +559,25 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 })
             }
 
-            estatusLead = 'REVISION_MANUAL'
-            await dispararAlertaInmediata(
-                telefonoParaCita,
-                '🚨 S.O.S. AGENTE',
-                `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
-            )
+            if (matchAgente) {
+                estatusLead = 'REVISION_MANUAL'
+                await dispararAlertaInmediata(
+                    telefonoParaCita,
+                    '🚨 S.O.S. AGENTE',
+                    `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
+                )
+            } else {
+                estatusLead = 'EN_REPARACION'
+                await dispararAlertaInmediata(
+                    telefonoParaCita,
+                    '⚡ EN_REPARACION',
+                    `¡Sesión Remota Solicidada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario. Entra al chat para recibir su código de 12 dígitos e iniciar el soporte.`
+                )
+                console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado automáticamente por registro de Soporte Remoto.`);
+            }
         }
 
+        // 📅 6. PROCESAMIENTO DE CITAS DE VISITA FÍSICA
         if (matchVisita) {
             tipoSoporteCalculado = 'Visita Física'
             const fechaExtraida = matchVisita[1].trim()
@@ -580,6 +601,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
+        // 🚚 7. PROCESAMIENTO DE CITAS DE RECOLECCIÓN
         if (matchRecoleccion) {
             tipoSoporteCalculado = 'Recolección'
             const fechaExtraida = matchRecoleccion[1].trim()
@@ -595,6 +617,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
+        // 🗺️ 8. PROCESAMIENTO DE DIRECCIÓN / GEOCERCAS
         if (matchDireccion) {
             tipoSoporteCalculado = 'Recolección'
             const direccionExtraida = matchDireccion[1].trim()
@@ -621,9 +644,11 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
+        // 💾 Actualizamos la memoria caché local del Chat
         historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
         MEMORIA_CHAT.set(numeroCliente, historial)
 
+        // 🚀 9. DISPARO DEL MENSAJE FINAL A WHATSAPP Y ESCRITURA EN EXCEL/CRM
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         if (exitoEnvio) {
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
@@ -647,7 +672,9 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
+            // Registro físico en la Hoja 1 e Historial de Facturación
             await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
+            console.log(`✅ [CRM GOOGLE SHEETS]: Fila guardada de forma exitosa en el Excel.`);
 
             await registrarFinanzasEnFacturacion(
                 codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
@@ -656,7 +683,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             )
         }
     } catch (error: any) {
-        console.error('🔴 Error bloque salida total:', error.message)
+        console.error('🔴 Error crítico en el bloque de salida total:', error.message)
     }
 }
 
