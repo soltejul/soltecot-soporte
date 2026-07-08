@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,18 +12,22 @@ datasource db {
 // ==========================================
 
 model Cliente {
-  id        String   @id @default(uuid())
-  nombre    String
-  email     String?  @unique 
-  telefono  String   @unique 
-  tickets   Ticket[] 
-  createdAt DateTime @default(now())
+  id                 String   @id @default(uuid())
+  nombre             String
+  email              String?  @unique 
+  telefono           String   @unique 
+  tickets            Ticket[] 
+  createdAt          DateTime @default(now())
+
+  // 🚨 CONTROL HÍBRIDO BOT / HUMANO (NUEVOS SUPERPODERES)
+  atendidoPorBot     Boolean  @default(true)
+  googleChatThreadId String?  @unique 
 
   @@index([telefono]) 
 }
 
 model Ticket {
-  id               String       @id @default(uuid()) // 
+  id               String       @id @default(uuid()) 
   numeroOrden      String       @unique 
   equipo           String       
   fallaReportada   String       
