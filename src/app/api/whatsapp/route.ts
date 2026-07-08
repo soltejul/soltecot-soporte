@@ -27,21 +27,45 @@ function obtenerAuthGoogle(scopes: string[]) {
 }
 
 async function dispararAlertaInmediata(telefono: string, estatus: string, detalles: string) {
-    const CHAT_WEBHOOK_URL = process.env.GOOGLE_CHAT_WEBHOOK || ''
+    let CHAT_WEBHOOK_URL = process.env.GOOGLE_CHAT_WEBHOOK || ''
     if (!CHAT_WEBHOOK_URL) return
+
     try {
         let icono = '🟢'
-        if (estatus === '🔴' || estatus === 'RECHAZADO') icono = '🔴'
+        if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨'
+        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡'
         if (estatus === 'EN_REPARACION') icono = '⚡'
-        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡' // 🟡 ¡Mucho mejor para alertar visualmente!
 
-        await fetch(CHAT_WEBHOOK_URL, {
+        // 🧵 REGLA DE ORO: Forzamos a Google Chat a agrupar todo este teléfono en un solo hilo limpio
+        if (!CHAT_WEBHOOK_URL.includes('messageReplyOption')) {
+            CHAT_WEBHOOK_URL = `${CHAT_WEBHOOK_URL}&messageReplyOption=REPLY_MESSAGE`
+        }
+
+        const payload = {
+            text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`,
+            thread: {
+                threadKey: `whatsapp_${telefono}` // Crea o responde al hilo exclusivo de este cliente
+            }
+        }
+
+        const respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}` })
+            body: JSON.stringify(payload)
         })
+
+        const datosRespuesta = await respuestaGoogle.json()
+        const threadNameId = datosRespuesta?.thread?.name // Ejemplo: "spaces/AAAA/threads/BBBB"
+
+        // 🧠 Si Google nos devuelve el ID del hilo, lo guardamos de inmediato en Neon
+        if (threadNameId) {
+            await prisma.cliente.updateMany({
+                where: { telefono: { endsWith: telefono } },
+                data: { googleChatThreadId: threadNameId }
+            })
+        }
     } catch (error: any) {
-        console.error('🔴 Error Alerta:', error.message)
+        console.error('🔴 Error Alerta Google Chat Hilos:', error.message)
     }
 }
 
