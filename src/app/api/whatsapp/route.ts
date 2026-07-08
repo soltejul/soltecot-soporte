@@ -694,6 +694,15 @@ export async function POST(req: Request) {
                 }
             })
 
+            // 🔄 TRUCO DE DESARROLLADOR: Comando secreto para reactivar el bot desde WhatsApp
+            if (mensajeCliente.trim().toLowerCase() === 'reset') {
+                await prisma.cliente.updateMany({
+                    where: { telefono: { endsWith: telefono10Digitos } },
+                    data: { atendidoPorBot: true, googleChatThreadId: null }
+                })
+                await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
+                return new Response('Bot reseteado', { status: 200 })
+            }
             // 👤 Si el cliente existe y tú apagaste su bot (atendidoPorBot === false)
             // `atendidoPorBot` puede no existir en el tipo generado por Prisma, casteamos a any para evitar error
             if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
