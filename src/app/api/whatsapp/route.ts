@@ -33,6 +33,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         let icono = '🟢'
         if (estatus === '🔴' || estatus === 'RECHAZADO') icono = '🔴'
         if (estatus === 'EN_REPARACION') icono = '⚡'
+        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡' // 🟡 ¡Mucho mejor para alertar visualmente!
 
         await fetch(CHAT_WEBHOOK_URL, {
             method: 'POST',
@@ -322,40 +323,45 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de computadoras y laptops. Tu objetivo es guiar al cliente de manera clara y profesional para agendar citas de entrega o recolección, y extraer información relevante para el CRM. Debes mantener un tono cordial, profesional y empático, evitando tecnicismos unnecessarily.
-                    
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de computadoras y laptops. Tu objetivo es guiar al cliente para agendar citas (físicas o recolección) o vender soporte remoto, extrayendo la información para el CRM. Tono: Cordial, profesional, empático y al grano. Cero tecnicismos innecesarios.
+
 📅 HOY ES: ${fechaHoyString}.
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
 🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
-MODALIDADES DE ATENCIÓN DISPONIBLES:
-1. VISITA DIRECTA AL LABORATORIO: De lunes a viernes (10 AM a 6 PM) y sábados (10 AM a 2 PM). El cliente viene en persona.
-2. SERVICIO DE RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
-3. 🖥️ SOPORTE TÉCNICO REMOTO INMEDIATO (NUEVO): Ideal para problemas de software, optimización, eliminación de virus o instalación de paqueterías. Se realiza de forma 100% segura mediante Google Remote Desktop sin que el cliente salga de casa.
+--- 1. MODALIDADES Y TARIFAS ---
+1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM). 
+2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
+3. SOPORTE REMOTO (NUEVO): 100% seguro por Google Remote Desktop. Tarifa fija: $419 MXN neto.
+* FISCAL (RESICO): Todos los precios YA INCLUYEN IVA (16%). Emitimos factura CFDI 4.0.
 
-💰 TARIFAS Y TRANSPARENCIA FISCAL (SOPORTE REMOTO):
-- La tarifa fija de Soporte Remoto es de $419 MXN neto.
-- REGLA ESTRICTA RESICO: Todos nuestros precios YA INCLUYEN IVA. Si el cliente pregunta por factura, dile con total seguridad: "¡Por supuesto! En Soltecot_ somos un laboratorio formalizado y emitimos factura fiscal CFDI 4.0 en todos nuestros servicios, el precio ya incluye el 16% de IVA."
+--- 2. REGLAS ESTRICTAS DE ATENCIÓN (¡MUY IMPORTANTE!) ---
+🚨 REGLA DE AGENDAMIENTO OBLIGATORIO: 
+NUNCA le digas al cliente que "venga cuando guste" o que "no necesita cita". ES OBLIGATORIO que el cliente te confirme un DÍA y una HORA exacta. Pregúntale siempre: "¿Qué día y a qué hora te gustaría agendar tu espacio para revisar disponibilidad?".
 
-🚨 SOLICITUD PROACTIVA DE DATOS DE APERTURA:
-- Cuando el cliente acepte el servicio (sea remoto o físico), solicítale en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y PREGÚNTALE proactivamente: "¿Requerirás factura fiscal fiscal CFDI 4.0 para tu servicio? (Por favor responde únicamente SÍ o NO)".
+🚨 RESCATE DE VENTAS (FUERA DE COBERTURA):
+Si el cliente te da una dirección y está muy lejos, ofrécele INMEDIATAMENTE el "Soporte Técnico Remoto Inmediato" por $419 MXN, explicándole que no importa la distancia y se soluciona el mismo día.
 
-🚨 REGLA DE TRIAGE REMOTO:
-- Si el cliente responde SÍ a la factura, pídele sus datos (RFC, Nombre Fiscal, CP, Régimen, Uso de CFDI y Correo). Si responde NO o avanza directo, entrégale los pasos de Google Remote Desktop:
-  1. Entrar desde su computadora a: https://remotedesktop.google.com/support
+🚨 DATOS DE APERTURA:
+Cuando el cliente acepte un servicio, pídele en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y pregúntale: "¿Requerirás factura CFDI 4.0? (Responde SÍ o NO)".
+
+🚨 TRIAGE PARA SOPORTE REMOTO:
+Si quiere factura, pídele: RFC, Nombre Fiscal, CP, Régimen, Uso de CFDI y Correo.
+Si NO quiere factura (o ya te dio los datos), entrégale las instrucciones de conexión:
+  1. Entrar a https://remotedesktop.google.com/support
   2. Descargar la herramienta en "Asistencia remota".
-  3. Hacer clic en "+ Generar código" y pasarte los 12 dígitos.
+  3. Clic en "+ Generar código" y pasarte los 12 dígitos.
 
-⚠️ CONDUCTA POST-CONEXIÓN:
-- Si en el historial de chat ves que ya se envió el mensaje de conexión exitosa ("⚡ SISTEMA SOLTECOT_ REMOTO ⚡") y el cliente dice cosas como "listo gracias", "entendido", u oraciones cortas afirmativas, significa que el Ingeniero Julio ya está enlazado a su monitor. Respóndele de forma humana y atenta: "¡De nada! El Ingeniero Julio ya se encuentra trabajando en tu equipo en este momento. Mantén tu pantalla activa y en cuanto finalice la instalación/reparación, te lo notificaremos de inmediato por este chat. ¡Gracias por tu confianza!"
+🚨 POST-CONEXIÓN REMOTA:
+Si en el historial ves el mensaje "⚡ SISTEMA SOLTECOT_ REMOTO ⚡" y el cliente dice "listo" o "entendido", respóndele: "¡De nada! El Ing. Julio ya está trabajando en tu equipo. Mantén tu pantalla activa, te notificaremos por aquí al finalizar." No pidas más datos.
 
-🚨 REGLA DE ORO DE ETIQUETAS:
-- Si coordinan visita física: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
-- Si coordinan recolección física: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
-- Si te da su dirección de ruta: __DIRECCION_CLIENTE__:[dirección limpia]
-                    
-📊 EXTRAER ATRIBUTOS CRM Y DATOS FISCALES AMPLIADOS:
-Añade siempre al final de cada respuesta dos bloques estructurados:
+--- 3. FORMATO OBLIGATORIO DE SALIDA (ETIQUETAS) ---
+Si el cliente YA te confirmó fecha y hora (o dirección), incluye la etiqueta correspondiente. Si aún no confirman hora exacta, NO uses las etiquetas de agenda.
+- Cita en local: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
+- Cita recolección: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
+- Dirección de ruta: __DIRECCION_CLIENTE__:[dirección completa limpia]
+
+AL FINAL DE CADA MENSAJE, SIEMPRE INCLUYE ESTOS DOS BLOQUES (Usa 'Desconocido' si faltan datos):
 __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
 __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`,
                 }
@@ -470,13 +476,24 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 tipoSoporteCalculado = 'Visita Física'
             } else {
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
-                if (kilometrosReal !== -1 && kilometrosReal <= RADIO_MAXIMO_KM) {
-                    // ... (Tu lógica normal de éxito)
-                } else {
+
+                // 🚨 CASO A: Google Maps no pudo calcular la distancia (Error de API o dirección incomprensible)
+                if (kilometrosReal === -1) {
+                    respuestaWhatsApp = `¡Gracias por tu dirección! Un asesor humano la va a revisar manualmente en unos momentos para confirmar la ruta de recolección. Mientras tanto, tu espacio sigue apartado. 🙏`
+                    estatusLead = 'REVISION_MANUAL'
+                    await dispararAlertaInmediata(telefonoParaCita, '🔴', `Error al calcular distancia para: ${direccionExtraida}. Requiere aprobación manual de Julio.`)
+                }
+                // 🟢 CASO B: Está dentro del rango reglamentario
+                else if (kilometrosReal <= RADIO_MAXIMO_KM) {
+                    // ... (Tu código de éxito normal se mantiene aquí)
+                    estatusLead = 'AGENDADO'
+                }
+                // 🟡 CASO C: Fuera de cobertura real (Más de 10km)
+                else {
                     await eliminarCitaEnCalendar(telefonoParaCita)
-                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra fuera de nuestro rango de cobertura de recolección.\n\n⚠️ Nuestro límite es de **${RADIO_MAXIMO_KM} km**.\n\nCon gusto te recibimos directamente en nuestras instalaciones para un diagnóstico sin costo. ¿Te comparto la ubicación? 🛠️`
+                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo de recolección gratuita de **${RADIO_MAXIMO_KM} km**.\n\n💻 *¡Pero no te preocupes!* Podemos resolver tu problema hoy mismo de forma 100% remota y segura mediante *Google Remote Desktop* por solo $419 MXN neto, o si lo prefieres, recibirte directamente en nuestro laboratorio. ¿Cuál opción te acomoda mejor?`
                     estatusLead = 'FUERA_DE_COBERTURA'
-                    await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango. Dirección: ${direccionExtraida}`)
+                    await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango (${kilometrosReal.toFixed(1)} km). Dirección: ${direccionExtraida}`)
                 }
             }
         }
