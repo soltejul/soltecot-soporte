@@ -15,6 +15,9 @@ const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
 
+// 🛡️ CACHÉ ANTIDUPLICADOS DE META (Usando Array para máxima compatibilidad TypeScript)
+const processedMessagesCache: string[] = [];
+
 function obtenerAuthGoogle(scopes: string[]) {
     const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
     if (!credencialesRaw) {
@@ -37,7 +40,6 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         if (estatus === 'EN_REPARACION') icono = '⚡';
 
         // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados (La forma estricta de Google)
-        // Usamos el objeto URL de JavaScript que formatea los parámetros de forma 100% segura
         const urlConHilos = new URL(CHAT_WEBHOOK_URL);
         urlConHilos.searchParams.append('threadKey', `whatsapp_${telefono}`);
         urlConHilos.searchParams.append('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
@@ -50,7 +52,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         let respuestaGoogle = await fetch(urlConHilos.toString(), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadConHilos) // Ya no mandamos el objeto "thread" aquí adentro
+            body: JSON.stringify(payloadConHilos)
         });
 
         // 🛡️ DEFENSA DE RESPALDO: Si por alguna razón extraña falla
@@ -73,10 +75,9 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             const datosRespuesta = await respuestaGoogle.json();
             const threadNameId = datosRespuesta?.thread?.name;
 
-            // Guardamos el ID del hilo en Neon si la sala realmente lo generó
             if (threadNameId) {
                 await prisma.cliente.updateMany({
-                    where: { telefono: { endsWith: telefono } }, // Mantiene tu lógica de seguridad endsWith
+                    where: { telefono: { endsWith: telefono } },
                     data: { googleChatThreadId: threadNameId }
                 });
                 console.log(`✅ [GOOGLE CHAT]: Hilo registrado con éxito en Neon: ${threadNameId}`);
@@ -157,7 +158,6 @@ async function registrarFinanzasEnFacturacion(
             reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
         ]
 
-        // 🔍 1. LEER LA COLUMNA 'A' PARA VER SI EL FOLIO YA EXISTE
         const respuestaSábana = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
             range: "'Facturación'!A:A"
@@ -166,7 +166,6 @@ async function registrarFinanzasEnFacturacion(
         const filasExistentes = respuestaSábana.data.values || []
         let numeroDeFilaDestino = -1
 
-        // Buscamos el folio en la lista (index + 1 porque Sheets no empieza en 0)
         for (let i = 0; i < filasExistentes.length; i++) {
             if (filasExistentes[i][0] === folio) {
                 numeroDeFilaDestino = i + 1
@@ -174,7 +173,6 @@ async function registrarFinanzasEnFacturacion(
             }
         }
 
-        // 🔄 2. SI YA EXISTE, ACTUALIZAMOS LA FILA EXACTA (Evita duplicados)
         if (numeroDeFilaDestino !== -1) {
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
@@ -183,9 +181,7 @@ async function registrarFinanzasEnFacturacion(
                 requestBody: { values: [valoresFila] }
             })
             console.log(`🔄 [CRM GOOGLE SHEETS]: Fila actualizada con éxito para el Folio: ${folio}`)
-        }
-        // 📦 3. SI NO EXISTE, INYECTAMOS UNA NUEVA FILA (Registro inicial)
-        else {
+        } else {
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
                 range: "'Facturación'!A:S",
@@ -284,7 +280,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let clientePrisma: any = null
 
     try {
-        // 🔍 Localizamos al cliente y su último ticket activo
         clientePrisma = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -298,13 +293,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         ticketMasReciente = clientePrisma?.tickets[0]
 
-        // 👤 [ESCUDO INTERCEPTOR]: Si el humano tiene el control, el bot se retira de inmediato
         if (clientePrisma && clientePrisma.atendidoPorBot === false) {
             console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para el cliente ${telefono10Digitos}.`);
             return;
         }
 
-        // 🖥️ 1. INTERCEPTOR DE CÓDIGO GOOGLE REMOTE DESKTOP (Cliente envía los 12 dígitos)
         const regexCodigoRemoto = /\b\d{4}\s?\d{4}\s?\d{4}\b|\b\d{12}\b/
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
@@ -368,7 +361,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             return
         }
 
-        // 📝 2. INTERCEPTOR DE APROBACIÓN DE PRESUPUESTOS
         if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             if (textoNormalizado === 'aceptar' || textoNormalizado === 'acepto' || textoNormalizado === 'autorizar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'EN_REPARACION' } })
@@ -392,7 +384,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         console.error('🔴 Error al validar escudos en el webhook:', dbError.message)
     }
 
-    // 🧠 3. MOTOR DE GENERACIÓN DE CONTENIDO DE GEMINI IA
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
@@ -474,7 +465,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         }
     }
 
-    // 📬 4. PROCESAMIENTO POST-RESPUESTA (EXTRACCIÓN DE ETIQUETAS)
     try {
         let estatusLead = 'PROSPECTO'
         let tipoSoporteCalculado = 'Remoto'
@@ -485,12 +475,10 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
         const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
 
-        // El disparador de asistencia humana unificado (Por etiqueta o gancho semántico)
         const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
             respuestaRaw.toLowerCase().includes('transferir este chat') ||
             respuestaRaw.toLowerCase().includes('ingeniero julio');
 
-        // 🧹 Purificamos el mensaje final removiendo códigos de control
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
             .replace(/__AGENDAR_RECOLECCION__:.+/, '')
@@ -543,7 +531,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        // 🚨 5. INTERCEPTOR MAESTRO DE HANDOFF (SILENCIADOR DE BOT)
         if (matchAgente || (matchCrm && (respuestaRaw.toLowerCase().includes('remoto') || respuestaRaw.toLowerCase().includes('remote')))) {
             if (clientePrisma?.id) {
                 await prisma.cliente.update({
@@ -574,7 +561,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
-        // 📅 6. PROCESAMIENTO DE CITAS DE VISITA FÍSICA
         if (matchVisita) {
             tipoSoporteCalculado = 'Visita Física'
             const fechaExtraida = matchVisita[1].trim()
@@ -598,7 +584,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
-        // 🚚 7. PROCESAMIENTO DE CITAS DE RECOLECCIÓN
         if (matchRecoleccion) {
             tipoSoporteCalculado = 'Recolección'
             const fechaExtraida = matchRecoleccion[1].trim()
@@ -606,7 +591,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             if (resultadoAgenda.exitoso) {
                 respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
-                await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Pendiente de dirección', fechaExtraida, 0, 'RECOLECCION')
+                await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
                 estatusLead = 'POR_AGENDAR'
             } else {
                 respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
@@ -614,7 +599,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
-        // 🗺️ 8. PROCESAMIENTO DE DIRECCIÓN / GEOCERCAS
         if (matchDireccion) {
             tipoSoporteCalculado = 'Recolección'
             const direccionExtraida = matchDireccion[1].trim()
@@ -641,11 +625,9 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
-        // 💾 Actualizamos la memoria caché local del Chat
         historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
         MEMORIA_CHAT.set(numeroCliente, historial)
 
-        // 🚀 9. DISPARO DEL MENSAJE FINAL A WHATSAPP Y ESCRITURA EN EXCEL/CRM
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         if (exitoEnvio) {
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
@@ -669,7 +651,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-            // Registro físico en la Hoja 1 e Historial de Facturación
             await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
             console.log(`✅ [CRM GOOGLE SHEETS]: Fila guardada de forma exitosa en el Excel.`);
 
@@ -722,22 +703,38 @@ export async function POST(req: Request) {
         const change = entry?.changes?.[0]
         const value = change?.value
 
-        // 🛡️ Filtro 2: Ignorar si es una actualización de estatus (sent, delivered, read) o está vacío
+        // 🛡️ Filtro 2: Ignorar si es una actualización de estatus o está vacío
         if (!value || !value.messages || value.messages.length === 0) {
             return new Response('Ignorado Estatus', { status: 200 })
         }
 
         const message = value.messages[0]
 
-        // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto para no romper a Gemini
+        // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto
         if (message.type !== 'text') {
             return new Response('Ignorado Multimedia', { status: 200 })
         }
 
-        const mensajeCliente = message.text?.body
-        const numeroCliente = message.from // Meta nos da la cadena limpia (ej: "525546088200")
+        // 🛡️ NUEVO FILTRO ANTIDUPLICADOS DE META:
+        // Evita que un webhook reintentado por Meta active todo el proceso nuevamente.
+        const messageId = message.id;
+        if (messageId && processedMessagesCache.includes(messageId)) {
+            console.log(`♻️ [WEBHOOK RETRY IGNORADO]: Mensaje ID ${messageId} ya fue procesado anteriormente.`);
+            return new Response('Retry Ignorado', { status: 200 });
+        }
 
-        // 🛡️ Filtro 4: Evitamos el eco infinito si nos llega a escribir el mismo número del bot
+        // Si es un mensaje nuevo, lo agregamos al caché (limitamos el caché a 1000 IDs para no saturar memoria)
+        if (messageId) {
+            processedMessagesCache.push(messageId);
+            if (processedMessagesCache.length > 1000) {
+                processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia y nativa
+            }
+        }
+
+        const mensajeCliente = message.text?.body
+        const numeroCliente = message.from // Cadena limpia (ej: "525546088200")
+
+        // 🛡️ Filtro 4: Evitamos el eco infinito si nos escribe el mismo número del bot
         if (numeroCliente.includes('5546088200')) {
             return new Response('Eco Ignorado', { status: 200 })
         }
@@ -745,7 +742,7 @@ export async function POST(req: Request) {
         if (mensajeCliente && numeroCliente) {
             console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
 
-            // 🛑 INTERCEPTOR DE HANDOFF: ¿El cliente ya está en atención humana?
+            // 🛑 INTERCEPTOR DE HANDOFF
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
 
@@ -759,7 +756,7 @@ export async function POST(req: Request) {
                 }
             })
 
-            // 🔄 TRUCO DE DESARROLLADOR: Comando secreto para reactivar el bot desde WhatsApp
+            // 🔄 TRUCO DE DESARROLLADOR: Comando secreto
             if (mensajeCliente.trim().toLowerCase() === 'reset') {
                 await prisma.cliente.updateMany({
                     where: { telefono: { endsWith: telefono10Digitos } },
@@ -768,23 +765,21 @@ export async function POST(req: Request) {
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 return new Response('Bot reseteado', { status: 200 })
             }
-            // 👤 Si el cliente existe y tú apagaste su bot (atendidoPorBot === false)
-            // `atendidoPorBot` puede no existir en el tipo generado por Prisma, casteamos a any para evitar error
-            if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
-                console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}.`);
 
-                // Te manda una notificación en tiempo real a Google Chat para que no pierdas el hilo
+            // 👤 HUMAN TAKEOVER
+            if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
+                console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
+
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '📥 ATENCIÓN MANUAL',
-                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele manualmente por tus canales oficiales.`
+                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele directamente a este hilo para chatear con el cliente.`
                 )
 
-                // Respondemos con estatus 200 a Meta para decirle que recibimos el mensaje, pero frenamos la IA
                 return new Response('Atendido de forma manual', { status: 200 })
             }
 
-            // 🤖 Si el bot sigue activo, procesamos la conversación de forma automática con Gemini
+            // 🤖 LÓGICA DE IA
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 

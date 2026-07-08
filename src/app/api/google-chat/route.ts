@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// 🛡️ RESPALDO TÁCTICO: Validamos ambos nombres de variables (con y sin NEXT_PUBLIC)
+// Respaldo táctico de variables de entorno
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
@@ -11,39 +11,49 @@ export async function POST(req: Request) {
     try {
         const body = await req.json()
 
-        // 🛡️ Filtro 1: Si el mensaje lo envió un BOT, lo ignoramos para evitar ecos infinitos
+        // 🎯 LOG ULTRA-DIAGNÓSTICO: Esto imprimirá el JSON exacto en tu consola de Vercel
+        console.log("📥 [GOOGLE CHAT FULL PAYLOAD]:", JSON.stringify(body))
+
+        // 🛡️ Filtro 0: Si Google solo te está avisando que el Bot fue agregado a la sala, respondemos amigablemente
+        if (body.type === 'ADDED_TO_SPACE') {
+            console.log("👋 [GOOGLE CHAT]: El bot fue agregado exitosamente al espacio.")
+            return NextResponse.json({ text: '¡Hola! Soltecot CRM Bot se ha enlazado a este espacio con éxito. Listo para recibir tus respuestas.' })
+        }
+
+        // 🛡️ Filtro 1: Si el mensaje lo envió un BOT, lo ignoramos para evitar bucles
         if (body.message?.sender?.type === 'BOT') {
             return NextResponse.json({})
         }
 
-        // 🧼 LIMPIEZA MAESTRA: Extrae estrictamente lo que escribiste DESPUÉS del @bot
+        // Extraemos los identificadores esenciales
+        const threadNameId = body.message?.thread?.name
         let textoInyectado = body.message?.argumentText?.trim() || body.message?.text || ''
 
-        // Respaldo táctico: remover menciones remanentes
+        // Limpieza de menciones remanentes si existen
         if (textoInyectado.includes('@')) {
             textoInyectado = textoInyectado.replace(/@[^\s]+/g, '').trim()
         }
 
-        const threadNameId = body.message?.thread?.name // Identificador del hilo enviado por Google
+        // Log de control previo a la validación
+        console.log(`🔍 [DEBUG VALS]: threadNameId="${threadNameId}" | textoInyectado="${textoInyectado}"`)
 
         if (!textoInyectado || !threadNameId) {
-            console.log('⚠️ [GOOGLE CHAT]: Petición ignorada por falta de texto o ID de hilo.')
+            console.warn('⚠️ [GOOGLE CHAT]: Petición rechazada por falta de texto o ID de hilo en el objeto message.')
             return NextResponse.json({})
         }
 
-        console.log(`📡 [GOOGLE CHAT INBOUND]: Procesando hilo: "${threadNameId}" | Texto Limpio: "${textoInyectado}"`)
+        console.log(`📡 [GOOGLE CHAT INBOUND]: Localizado en hilo: ${threadNameId} | Texto Limpio: "${textoInyectado}"`)
 
-        // 🔍 BÚSQUEDA ROBUSTA EN NEON: 
-        // Si hay discrepancias de prefijos en los strings de Google, buscamos usando "contains"
-        // extrayendo la parte final única del ID del hilo.
+        // Extraemos el token único del final del ID del hilo
         const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
 
-        // El modelo Prisma puede usar un nombre de campo distinto; evitamos el error de tipos
-        // construyendo el objeto 'where' dinámicamente y tipándolo como any.
-        const whereClause: any = { googleChatThreadId: tokenUnicoHilo }
-
+        // Buscamos en Neon al cliente
         const clienteAsociado = await prisma.cliente.findFirst({
-            where: whereClause
+            where: {
+                googleChatThreadId: {
+                    contains: tokenUnicoHilo
+                }
+            }
         })
 
         if (!clienteAsociado) {
@@ -51,13 +61,12 @@ export async function POST(req: Request) {
             return NextResponse.json({})
         }
 
-        // 🚨 Verificación de seguridad de credenciales antes de disparar a Meta
         if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
-            console.error('🔴 [META CONFIG ERROR]: Los tokens de WhatsApp están vacíos. Revisa tus variables de entorno en Vercel.')
+            console.error('🔴 [META CONFIG ERROR]: Las credenciales de WhatsApp están vacías. Revisa Vercel.')
             return NextResponse.json({})
         }
 
-        // 🚀 ¡EL DISPARO MAESTRO!: Enviamos la respuesta limpia al WhatsApp del cliente
+        // 🚀 DISPARO MANUAL DE REGRESO A META
         const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
 
         const respuestaMeta = await fetch(urlMeta, {
@@ -76,10 +85,10 @@ export async function POST(req: Request) {
         })
 
         if (respuestaMeta.ok) {
-            console.log(`✅ [WHATSAPP OUTBOUND]: ¡Mensaje manual entregado con éxito a: ${clienteAsociado.telefono}!`)
+            console.log(`✅ [WHATSAPP OUTBOUND]: Mensaje manual entregado con éxito a: ${clienteAsociado.telefono}`)
         } else {
             const errorMetaRaw = await respuestaMeta.text()
-            console.error(`🔴 [META API REJECT]: Meta rechazó el envío. Detalles:`, errorMetaRaw)
+            console.error(`🔴 [META API REJECT]: Meta rechazó el envío manual. Detalles:`, errorMetaRaw)
         }
 
         return NextResponse.json({})
