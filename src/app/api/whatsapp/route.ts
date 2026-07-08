@@ -439,8 +439,9 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
         const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
-        const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/)
-
+        const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
+            respuestaRaw.toLowerCase().includes('transferir este chat') ||
+            respuestaRaw.toLowerCase().includes('ingeniero julio');
         // 🧹 Limpiamos TODAS las etiquetas para que el cliente lea un texto humano
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
