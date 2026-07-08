@@ -107,7 +107,7 @@ export default function Chatbot() {
                     <div className="bg-zinc-900 p-4 border-b border-zinc-800 flex justify-between items-center">
                         <div>
                             <h3 className="text-white font-bold text-sm">Asistencia Soltecot</h3>
-                            <p className="text-xs text-[#00e676]">En línea 24/7</p>
+                            <p className="text-xs text-[#5cddcf]">En línea 24/7</p>
                         </div>
 
                         {/* 📥 CONTENEDOR DE BOTONES (WhatsApp + Cerrar) */}
@@ -141,7 +141,7 @@ export default function Chatbot() {
                             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div
                                     className={`max-w-[85%] rounded-xl p-3 text-xs leading-relaxed ${m.role === 'user'
-                                        ? 'bg-[#00e676] text-black font-medium rounded-tr-none'
+                                        ? 'bg-[#5cddcf] text-black font-medium rounded-tr-none'
                                         : 'bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none'
                                         }`}
                                 >
@@ -166,7 +166,7 @@ export default function Chatbot() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="bg-[#00e676] hover:bg-[#00c853] disabled:bg-zinc-700 text-black font-bold px-4 py-2 rounded-xl text-xs transition-colors"
+                            className="bg-[#5cddcf] hover:bg-[#00c853] disabled:bg-zinc-700 text-black font-bold px-4 py-2 rounded-xl text-xs transition-colors"
                         >
                             Enviar
                         </button>
