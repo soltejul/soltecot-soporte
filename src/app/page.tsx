@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { buscarTicketPorCodigo } from './actions';
-import Chatbot from '../components/Chatbot';
 
 // ----------------------------------------------------------------------------------
 // 📸 CONSTANTES DE CONTENIDO (CON LOGÍSTICA INTEGRADA)
@@ -563,7 +562,26 @@ export default function Home() {
         </p>
       </footer>
 
-      <Chatbot />
+      {/* 💬 BOTÓN FLOTANTE VIP DE WHATSAPP CON EFECTO RADAR */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center justify-center">
+        {/* Anillo de pulso infinito (Radar) */}
+        <span className="absolute w-full h-full rounded-full bg-[#25D366]/40 animate-ping pointer-events-none" />
+
+        {/* Botón Principal */}
+        <a
+          href="https://wa.me/525546088200?text=¡Hola%20Soltecot_!%20Vengo%20de%20la%20página%20web%20y%20me%20gustaría%20cotizar%20o%20agendar%20una%20reparación."
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative flex items-center gap-2.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-poppins font-bold text-xs sm:text-sm px-5 py-3.5 rounded-full shadow-[0_4px_25px_rgba(37,211,102,0.4)] hover:shadow-[0_4px_35px_rgba(37,211,102,0.7)] hover:scale-105 active:scale-95 transition-all duration-300 group select-none border border-white/10"
+        >
+          {/* Icono nativo SVG de WhatsApp */}
+          <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.457L0 24zm6.59-4.846c1.66.986 3.288 1.48 4.921 1.481 5.482 0 9.94-4.461 9.943-9.94.002-2.654-1.029-5.148-2.902-7.023C16.73 1.8 14.238.767 11.595.767c-5.485 0-9.946 4.463-9.948 9.943-.001 1.777.49 3.493 1.42 5.04L2.081 21.9l6.236-1.636zM17.513 14.4c-.29-.145-1.722-.85-1.99-.948-.266-.1-.462-.146-.656.146-.196.29-.757.948-.927 1.14-.17.19-.34.21-.63.064-1.127-.566-1.917-1.01-2.69-2.333-.203-.347.203-.322.58-.1.34-.2.373-.03.553-.1.18-.07.09-.145-.045-.29-.136-.29-.462-1.114-.634-1.53-.168-.406-.339-.35-.463-.356-.12-.006-.258-.007-.396-.007-.138 0-.363.05-.554.258-.19.208-.73.713-.73 1.74s.747 2.02.85 2.16c.1.135 1.47 2.246 3.563 3.148.498.215.886.343 1.19.439.5.158.955.135 1.317.08.404-.06 1.722-.703 1.963-1.385.24-.683.24-1.27.168-1.386-.073-.12-.266-.192-.556-.337z" />
+          </svg>
+          <span>💬 Cotizar o Agendar Reparación por WhatsApp</span>
+        </a>
+      </div>
+
     </main>
   );
 }
