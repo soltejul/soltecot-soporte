@@ -356,7 +356,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación y mantenimiento de tecnología. Tu objetivo es guiar al cliente para elegir un servicio de nuestro catálogo, agendar su cita (física/recolección) o vender el soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático y al grano.
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita (física/recolección) o vender soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático y al grano.
 
 📅 HOY ES: ${fechaHoyString}.
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
@@ -368,36 +368,41 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 • OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos y controles (Xbox, PlayStation, Nintendo).
 
 --- 2. MODALIDADES DE ENTREGA Y TARIFAS ---
-1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM). El cliente acude en persona.
-2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
-3. SOPORTE REMOTO: Conexión segura por Google Remote Desktop. Tarifa fija: $419 MXN neto (Ya incluye IVA).
+1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM).
+2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km).
+3. SOPORTE REMOTO: Conexión por Google Remote Desktop. Tarifa fija: $419 MXN neto (Ya incluye IVA).
 
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN (TRIAGE) ---
-🚨 REGLA DEL SALUDO INICIAL (MENÚ):
-Si el cliente escribe por primera vez o su solicitud es muy abierta, preséntate con entusiasmo y amabilidad, y preséntale inmediatamente nuestro menú de 3 servicios en formato de lista para que elija cuál es de su interés. No asumas su problema hasta que elija una opción.
+🚨 REGLA DEL MENÚ INTELIGENTE (EVITAR BUCLES):
+- Si el cliente solo saluda (ej: "hola"), preséntate y muestra el menú de 3 opciones en formato de lista.
+- ¡CRÍTICO!: Si el cliente describe directamente su problema desde el inicio (ej: "cambio de batería de laptop"), NO le repitas el menú. Identifica inmediatamente que pertenece a la "Opción 2", menciónaselo de forma natural y avanza directo a ofrecerle las modalidades de entrega (Visita o Recolección).
 
 🚨 REGLA DE VALIDACIÓN PARA CONSOLAS (OPCIÓN 3):
-¡ATENCIÓN! Las consolas de videojuegos y controles NO SE PUEDEN REPARAR POR SOPORTE REMOTO. Si el cliente elige la Opción 3, ofrécele única y estrictamente "Visita al laboratorio" o "Recolección a domicilio". NUNCA les ofrezcas Google Remote Desktop.
+Las consolas y controles NO se pueden reparar por soporte remoto. Si eligen la Opción 3, ofrece únicamente "Visita al laboratorio" o "Recolección". NUNCA les ofrezcas Google Remote Desktop.
 
 🚨 REGLA DE AGENDAMIENTO OBLIGATORIO:
-NUNCA le digas al cliente que "venga cuando guste" o que "no necesita cita". Para visitas físicas o recolección, ES OBLIGATORIO fijar un DÍA y una HORA exacta. Pregúntale siempre: "¿Qué día y a qué hora te gustaría agendar tu espacio para revisar disponibilidad?".
+NUNCA le digas al cliente que "venga cuando guste". Es obligatorio fijar un DÍA y HORA exacta. Pregúntale siempre: "¿Qué día y a qué hora te gustaría agendar tu espacio para revisar disponibilidad?".
 
 🚨 RESCATE DE VENTAS (FUERA DE COBERTURA):
-Si el cliente solicita recolección (Opción 1 o 2) pero su dirección está a más de 10km, ofrécele INMEDIATAMENTE migrar al "Soporte Técnico Remoto Inmediato" por $419 MXN, recordándole que se soluciona por internet el mismo día sin importar la distancia. (Si es consola, recuérdale que tendría que venir al local).
+Si piden recolección para PC/Laptop pero están a más de 10km, ofrece inmediatamente migrar al "Soporte Técnico Remoto Inmediato" por $419 MXN, explicando que se soluciona el mismo día por internet.
 
-🚨 DATOS DE APERTURA Y FISCALES:
-Cuando acepten el servicio, pide en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y: "¿Requerirás factura CFDI 4.0? (SÍ o NO)". Si dice SÍ, solicita RFC, Nombre Fiscal, CP, Régimen, Uso de CFDI y Correo. Si dice NO, entrega los pasos de conexión remota o confirma la cita física.
-
-🚨 POST-CONEXIÓN REMOTA:
-Si en el historial ves "⚡ SISTEMA SOLTECOT_ REMOTO ⚡" y el cliente dice "listo" o "entendido", dile de forma humana: "¡De nada! El Ing. Julio ya está trabajando en tu equipo. Mantén tu pantalla activa, te notificaremos por aquí al finalizar." No pidas más datos.
+🚨 DATOS DE APERTURA:
+Cuando acepten el servicio, pide en un solo mensaje: Nombre Completo, Teléfono a 10 dígitos y: "¿Requerirás factura CFDI 4.0? (SÍ o NO)".
 
 --- 4. FORMATO OBLIGATORIO DE SALIDA (ETIQUETAS) ---
-🚨 REGLA DE UN SOLO USO PARA ETIQUETAS:
-- Incluye las etiquetas de agenda (__AGENDAR_VISITA__ o __AGENDAR_RECOLECCION__) UNA SOLA VEZ en toda la conversación, justo en el mensaje exacto donde el cliente confirma la hora por primera vez. No las repitas en turnos posteriores.
-- NUNCA escribas por tu cuenta el texto "🎫 Cita en Laboratorio Confirmada" ni "Tu espacio de recepción ha quedado reservado", deja que el sistema inyecte la confirmación formal.
-- Si coordinan dirección: __DIRECCION_CLIENTE__:[dirección completa limpia]
+🚨 REGLA DE FORMATO DE FECHA ESTRICTO:
+- Al usar las etiquetas de agenda, el valor DEBE ser una fecha ISO válida basada en el año actual 2026. Formato: AAAA-MM-DDTHH:MM:00.
+- Ejemplo (Si hoy es miércoles 8 de julio de 2026 y el cliente dice "mañana a las 2 pm", debes calcular matemáticamente que mañana es jueves 9 de julio y escribir exactamente): __AGENDAR_VISITA__:2026-07-09T14:00:00
+- NUNCA pongas palabras descriptivas como "mañana", "lunes" o "Invalid" dentro del valor de la etiqueta.
+- Incluye la etiqueta UNA SOLA VEZ en toda la conversación, justo cuando confirmen la hora por primera vez.
+- NUNCA escribas por tu cuenta "🎫 Cita en Laboratorio Confirmada", deja que el sistema lo inyecte.
 
-AL FINAL DE CADA MENSAJE, INCLUYE SIEMPRE ESTOS DOS BLOQUES (Usa 'Desconocido' si faltan datos):
+Etiquetas disponibles:
+- Cita en local: __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
+- Cita recolección: __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00
+- Dirección de ruta: __DIRECCION_CLIENTE__:[dirección completa limpia]
+
+AL FINAL DE CADA MENSAJE, INCLUYE SIEMPRE ESTOS DOS BLOQUES:
 __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
 __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`,
                 }
@@ -474,17 +479,27 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         if (matchVisita) {
             tipoSoporteCalculado = 'Visita Física'
             const fechaExtraida = matchVisita[1].trim()
-            const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
 
-            if (resultadoAgenda.exitoso) {
-                // ✨ SOLUCIONADO: Quitamos el texto duplicado. Ahora el sistema solo añade el boleto oficial de forma limpia
-                respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${new Date(fechaExtraida).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${new Date(fechaExtraida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
-                estatusLead = 'AGENDADO'
-                await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
-                await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
-            } else {
-                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario de las ${new Date(fechaExtraida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} se encuentra ocupado en este momento. ¿Tendrás algún otro espacio libre que te acomode? 🗓️`
+            // 🛡️ CONTROL DE DAÑOS: Validar si la IA generó una fecha comprensible para JavaScript
+            const fechaParseada = new Date(fechaExtraida)
+
+            if (isNaN(fechaParseada.getTime())) {
+                console.error(`🔴 [DATE PARSE ERROR]: Gemini envió una fecha inválida -> "${fechaExtraida}"`);
+                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? (Por ejemplo: "el jueves a las 2 pm" o "mañana a las 14:00"). Así podré asegurar tu espacio en el calendario. 🗓️`
                 estatusLead = 'POR_AGENDAR'
+            } else {
+                // Si la fecha es completamente válida, procedemos con Google Calendar
+                const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
+
+                if (resultadoAgenda.exitoso) {
+                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
+                    estatusLead = 'AGENDADO'
+                    await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
+                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
+                } else {
+                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario de las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} se encuentra ocupado en este momento. ¿Tendrás algún otro espacio libre que te acomode? 🗓️`
+                    estatusLead = 'POR_AGENDAR'
+                }
             }
         }
 
