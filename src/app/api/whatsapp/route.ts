@@ -27,72 +27,69 @@ function obtenerAuthGoogle(scopes: string[]) {
 }
 
 async function dispararAlertaInmediata(telefono: string, estatus: string, detalles: string) {
-    let CHAT_WEBHOOK_URL = process.env.GOOGLE_CHAT_WEBHOOK || ''
-    if (!CHAT_WEBHOOK_URL) return
+    const CHAT_WEBHOOK_URL = process.env.GOOGLE_CHAT_WEBHOOK || '';
+    if (!CHAT_WEBHOOK_URL) return;
 
     try {
-        let icono = '🟢'
-        if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨'
-        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡'
-        if (estatus === 'EN_REPARACION') icono = '⚡'
+        let icono = '🟢';
+        if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨';
+        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
+        if (estatus === 'EN_REPARACION') icono = '⚡';
 
-        // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados
-        let urlConHilos = CHAT_WEBHOOK_URL
-        if (!urlConHilos.includes('messageReplyOption')) {
-            urlConHilos = `${urlConHilos}&messageReplyOption=REPLY_MESSAGE`
-        }
+        // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados (La forma estricta de Google)
+        // Usamos el objeto URL de JavaScript que formatea los parámetros de forma 100% segura
+        const urlConHilos = new URL(CHAT_WEBHOOK_URL);
+        urlConHilos.searchParams.append('threadKey', `whatsapp_${telefono}`);
+        urlConHilos.searchParams.append('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
 
         const payloadConHilos = {
-            text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`,
-            thread: {
-                threadKey: `whatsapp_${telefono}`
-            }
-        }
+            text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`
+        };
 
         console.log(`📡 [GOOGLE CHAT]: Intentando envío con hilos para el cliente ${telefono}...`);
-        let respuestaGoogle = await fetch(urlConHilos, {
+        let respuestaGoogle = await fetch(urlConHilos.toString(), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadConHilos)
-        })
+            body: JSON.stringify(payloadConHilos) // Ya no mandamos el objeto "thread" aquí adentro
+        });
 
-        // 🛡️ DEFENSA DE RESPALDO: Si Google rechaza los hilos (Status 400), disparamos mensaje plano
+        // 🛡️ DEFENSA DE RESPALDO: Si por alguna razón extraña falla
         if (!respuestaGoogle.ok) {
-            console.warn(`⚠️ [GOOGLE CHAT WARN]: La sala no soporta hilos (Status ${respuestaGoogle.status}). Activando respaldo plano...`);
+            console.warn(`⚠️ [GOOGLE CHAT WARN]: Falló el hilo (Status ${respuestaGoogle.status}). Activando respaldo plano...`);
 
             const payloadPlano = {
                 text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`
-            }
+            };
 
             respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payloadPlano)
-            })
+            });
         }
 
-        // 🧠 Si cualquiera de los dos intentos fue exitoso, procesamos la respuesta
+        // 🧠 Procesar respuesta exitosa
         if (respuestaGoogle.ok) {
-            const datosRespuesta = await respuestaGoogle.json()
-            const threadNameId = datosRespuesta?.thread?.name
+            const datosRespuesta = await respuestaGoogle.json();
+            const threadNameId = datosRespuesta?.thread?.name;
 
-            // Solo guardamos el ID del hilo en Neon si la sala realmente lo generó
+            // Guardamos el ID del hilo en Neon si la sala realmente lo generó
             if (threadNameId) {
                 await prisma.cliente.updateMany({
-                    where: { telefono: { endsWith: telefono } },
+                    where: { telefono: { endsWith: telefono } }, // Mantiene tu lógica de seguridad endsWith
                     data: { googleChatThreadId: threadNameId }
-                })
-                console.log(`✅ [GOOGLE CHAT]: Mensaje enviado e hilo registrado: ${threadNameId}`);
+                });
+                console.log(`✅ [GOOGLE CHAT]: Hilo registrado con éxito en Neon: ${threadNameId}`);
             } else {
-                console.log(`✅ [GOOGLE CHAT]: Mensaje plano de respaldo entregado con éxito.`);
+                console.log(`✅ [GOOGLE CHAT]: Mensaje plano entregado.`);
             }
         } else {
-            const errorTexto = await respuestaGoogle.text()
-            console.error(`🔴 [GOOGLE CHAT CRITICAL]: Ambos intentos de comunicación fallaron. Respuesta: ${errorTexto}`);
+            const errorTexto = await respuestaGoogle.text();
+            console.error(`🔴 [GOOGLE CHAT CRITICAL]: Fallaron ambos intentos. Error: ${errorTexto}`);
         }
 
     } catch (error: any) {
-        console.error('🔴 Error Crítico en dispararAlertaInmediata:', error.message)
+        console.error('🔴 Error Crítico en dispararAlertaInmediata:', error.message);
     }
 }
 
