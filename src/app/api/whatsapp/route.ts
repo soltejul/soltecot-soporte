@@ -109,10 +109,43 @@ async function registrarFinanzasEnFacturacion(
             reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
         ]
 
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:S",
-            valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
+        // 🔍 1. LEER LA COLUMNA 'A' PARA VER SI EL FOLIO YA EXISTE
+        const respuestaSábana = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: "'Facturación'!A:A"
         })
+
+        const filasExistentes = respuestaSábana.data.values || []
+        let numeroDeFilaDestino = -1
+
+        // Buscamos el folio en la lista (index + 1 porque Sheets no empieza en 0)
+        for (let i = 0; i < filasExistentes.length; i++) {
+            if (filasExistentes[i][0] === folio) {
+                numeroDeFilaDestino = i + 1
+                break
+            }
+        }
+
+        // 🔄 2. SI YA EXISTE, ACTUALIZAMOS LA FILA EXACTA (Evita duplicados)
+        if (numeroDeFilaDestino !== -1) {
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `'Facturación'!A${numeroDeFilaDestino}:S${numeroDeFilaDestino}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [valoresFila] }
+            })
+            console.log(`🔄 [CRM GOOGLE SHEETS]: Fila actualizada con éxito para el Folio: ${folio}`)
+        }
+        // 📦 3. SI NO EXISTE, INYECTAMOS UNA NUEVA FILA (Registro inicial)
+        else {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_ID,
+                range: "'Facturación'!A:S",
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [valoresFila] }
+            })
+            console.log(`📦 [CRM GOOGLE SHEETS]: Nueva entrada creada para el Folio: ${folio}`)
+        }
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
     }
