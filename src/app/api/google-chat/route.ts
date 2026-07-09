@@ -52,7 +52,7 @@ export async function POST(req: Request) {
         const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
 
         // 🔄 [NUEVO] COMANDO DE RETURN-HANDOFF: El ingeniero devuelve el control a la IA
-        if (textoInyectado.toUpperCase().trim() === '_REACTIVAR_') {
+        if (textoInyectado.toUpperCase().trim() === '__REACTIVAR__') {
 
             const clienteReactivar = await prisma.cliente.findFirst({
                 where: { googleChatThreadId: { contains: tokenUnicoHilo } }
