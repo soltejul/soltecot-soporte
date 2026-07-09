@@ -59,8 +59,8 @@ export async function POST(req: Request) {
             let mensajeSistemaWhatsApp = "🤖 _[SISTEMA]: El Ingeniero Julio ha registrado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y guardar tus datos de orden._\n\n¡Hola de nuevo! Ya tengo los detalles listos. Para confirmar tu espacio, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?"
 
             if (matchCotizacion) {
-                nuevoCosto = matchCotizacion[1] // Extrae la cadena "1299"
-                const costoNumerico = parseFloat(nuevoCosto) // 🧠 SOLUCIÓN: Convertimos a número Float para Prisma
+                nuevoCosto = matchCotizacion[1]
+                const costoNumerico = parseFloat(nuevoCosto)
                 let ticketActivo = clienteAsociado.tickets[0]
 
                 // Si no hay ticket activo o ya están cerrados, creamos uno express en Neon
@@ -78,14 +78,13 @@ export async function POST(req: Request) {
                             fallaReportada: 'Cotización física realizada por el Ingeniero',
                             clienteId: clienteAsociado.id,
                             estado: 'ESPERANDO_APROBACION',
-                            costoReparacion: costoNumerico // 📝 Inyectamos como número
+                            costoReparacion: costoNumerico
                         }
                     })
                 } else {
-                    // Si ya existía uno abierto, le actualizamos el costo pactado
                     await prisma.ticket.update({
                         where: { id: ticketActivo.id },
-                        data: { costoReparacion: costoNumerico } // 📝 Inyectamos como número
+                        data: { costoReparacion: costoNumerico }
                     })
                 }
 

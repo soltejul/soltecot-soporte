@@ -207,6 +207,11 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
         })
 
         if (listaEventos.data.items && listaEventos.data.items.length > 0) {
+            // 🧠 DETECTOR DE AUTO-RESERVA: Si el evento ya tiene el teléfono de este cliente, significa que ya es suyo.
+            const yaAgendadoPorMismoCliente = listaEventos.data.items.some(evento => evento.summary?.includes(`[${telefono}]`))
+            if (yaAgendadoPorMismoCliente) {
+                return { exitoso: true, eventId: listaEventos.data.items[0].id, yaExistia: true } // Bypass exitoso
+            }
             return { exitoso: false, motivo: 'ocupado' }
         }
 
@@ -221,7 +226,7 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
                 end: { dateTime: finCita.toISOString(), timeZone: 'America/Mexico_City' },
             },
         })
-        return { exitoso: true, eventId: nuevoEvento.data.id }
+        return { exitoso: true, eventId: nuevoEvento.data.id, yaExistia: false }
     } catch (error: any) {
         return { exitoso: false, motivo: 'error' }
     }
@@ -595,10 +600,13 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             } else {
                 const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
                 if (resultadoAgenda.exitoso) {
-                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
+                    // 🛡️ Solo alteramos el mensaje y guardamos en Neon si la cita es NUEVA en esta ejecución
+                    if (!resultadoAgenda.yaExistia) {
+                        respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
+                        await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
+                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
+                    }
                     estatusLead = 'AGENDADO'
-                    await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
-                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
                 } else {
                     respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario se encuentra ocupado. ¿Tendrás algún otro espacio libre? 🗓️`
                     estatusLead = 'POR_AGENDAR'
@@ -611,8 +619,11 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
 
             if (resultadoAgenda.exitoso) {
-                respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
-                await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
+                // 🛡️ Solo alteramos el mensaje y guardamos en Neon si la cita es NUEVA en esta ejecución
+                if (!resultadoAgenda.yaExistia) {
+                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
+                    await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
+                }
                 estatusLead = 'POR_AGENDAR'
             } else {
                 respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
