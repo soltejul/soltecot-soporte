@@ -389,6 +389,18 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
 
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
+    const tieneHandoffPrevio = historial.some(h =>
+        h.parts?.some((p: any) =>
+            p.text?.includes('transferir este chat') ||
+            p.text?.includes('Ingeniero Julio') ||
+            p.text?.includes('__TRANSFERIR_HUMANO__')
+        )
+    )
+
+    if (tieneHandoffPrevio) {
+        console.log(`🧼 [SANEAMIENTO MEMORIA]: Detectado handoff previo en el historial. Limpiando fantasmas para el cliente ${telefono10Digitos}.`)
+        historial = [] // Vaciamos el pasado para que la IA responda fresco el mensaje actual
+    }
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
