@@ -406,10 +406,14 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     if (historial.length > 12) historial = historial.slice(-12)
 
     // 📋 EXTRACCIÓN LIMPIA DE VARIABLES DE NEON
-    const folioOrden = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE';
-    const equipoRegistro = ticketMasReciente?.equipo || 'No especificado';
-    const fallaRegistro = ticketMasReciente?.fallaReportada || 'No especificada';
-    const costoPactado = ticketMasReciente?.costoReparacion ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
+    const esPreventaActiva = ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION';
+
+    const folioOrden = esPreventaActiva ? ticketMasReciente.numeroOrden : 'SOL-REM-PENDIENTE';
+    const equipoRegistro = esPreventaActiva ? ticketMasReciente.equipo : 'No especificado';
+    const fallaRegistro = esPreventaActiva ? ticketMasReciente.fallaReportada : 'No especificada';
+    const costoPactado = (esPreventaActiva && ticketMasReciente.costoReparacion)
+        ? `$${ticketMasReciente.costoReparacion} MXN`
+        : 'Por cotizar';
 
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
@@ -445,7 +449,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
 
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
-
+🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
+- Si el cliente menciona explícitamente en su mensaje que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON" (ej: el sistema dice Dell pero el usuario escribe "este es otro equipo, es una Lenovo"), debes ignorar por completo el costo total pactado y los datos del ticket actual. Trata el caso inmediatamente como un flujo nuevo desde cero ('Por cotizar'), vuelve a aplicar los rangos de precio base ($790-$2,500 MXN) para el nuevo dispositivo y solicita las modalidades de entrega.
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
 - Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio de forma personalizada con el cliente. Queda TERMINANTEMENTE PROHIBIDO mencionar diagnósticos gratuitos, revisiones de presupuesto o repetir los rangos de precios base ($790-$2500). Asume con total naturalidad que el costo ya está cerrado.
 - ¡PROHIBICIÓN DE CATÁLOGO GENERAL!: Si el costo ya está pactado, tienes estrictamente PROHIBIDO mostrar el menú de las 3 opciones o preguntar qué servicio requiere. Tu único rol es explicar el proceso de la modalidad elegida (Visita o Recolección), proveer dirección u horarios si el cliente los pide de forma explícita, y recolectar los datos CRM faltantes. No divagues con saludos comerciales de bienvenida.
