@@ -51,6 +51,41 @@ export async function POST(req: Request) {
         // Extraemos el token alfanumérico único del final del ID del hilo (ej: b9gP6vFLIoc)
         const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
 
+        // 🔄 [NUEVO] COMANDO DE RETURN-HANDOFF: El ingeniero devuelve el control a la IA
+        if (textoInyectado.toUpperCase().trim() === '_REACTIVAR_') {
+
+            const clienteReactivar = await prisma.cliente.findFirst({
+                where: { googleChatThreadId: { contains: tokenUnicoHilo } }
+            })
+
+            if (clienteReactivar) {
+                // 1. Encendemos al Bot en Neon
+                await prisma.cliente.update({
+                    where: { id: clienteReactivar.id },
+                    data: { atendidoPorBot: true }
+                })
+
+                // 2. Avisamos al cliente amigablemente que el Asistente retoma el control
+                const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+                await fetch(urlMeta, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messaging_product: 'whatsapp',
+                        recipient_type: 'individual',
+                        to: clienteReactivar.telefono,
+                        type: 'text',
+                        text: { body: "🤖 _[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos._\n\n¡Hola de nuevo! Ya tengo la información del ingeniero. ¿Te gustaría agendar una visita al laboratorio o prefieres la recolección a domicilio?" }
+                    })
+                })
+
+                console.log(`🔄 [RETURN-HANDOFF]: Bot reactivado para el cliente ${clienteReactivar.telefono}`)
+
+                // 3. Confirmamos al ingeniero en Google Chat
+                return NextResponse.json({ text: '✅ Asistente Virtual reactivado. La IA se encargará de agendar y pedir los datos.' })
+            }
+        }
+
         // 🔍 Buscamos en Neon al cliente usando el token extraído
         const clienteAsociado = await prisma.cliente.findFirst({
             where: {
