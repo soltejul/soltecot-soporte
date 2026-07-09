@@ -400,7 +400,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
-    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES
+    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES DE NEON
     const folioOrden = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE';
     const equipoRegistro = ticketMasReciente?.equipo || 'No especificado';
     const fallaRegistro = ticketMasReciente?.fallaReportada || 'No especificada';
@@ -431,16 +431,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - Costo Total pactado por el Ingeniero Julio: ${costoPactado}
 
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
-• OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). 
-  - Tarifa: $419 MXN neto.
-  - Herramienta: Se realiza de forma 100% segura mediante Chrome Remote Desktop.
+• OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
 • OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
 • OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
 --- 2. MODALIDADES DE ENTREGA ---
 1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) and sábados (10 AM - 2 PM).
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
-3. SOPORTE REMOTO: Conexión inmediata vía internet tras registro.
 
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
 
@@ -449,23 +446,17 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - ¡PROHIBICIÓN DE CATÁLOGO GENERAL!: Si el costo ya está pactado, tienes estrictamente PROHIBIDO mostrar el menú de las 3 opciones o preguntar qué servicio requiere. Tu único rol es explicar el proceso de la modalidad elegida (Visita o Recolección), proveer dirección u horarios si el cliente los pide de forma explícita, y recolectar los datos CRM faltantes. No divagues con saludos comerciales de bienvenida.
 
 🚨 REGLA DE PROGRESIÓN LINEAL DE AGENDA (EVITAR CAMBIOS DE MODALIDAD):
-- Si el cliente ya decidió una modalidad (ej: "visita mañana") o si ya le pediste sus datos (Nombre, Teléfono, Factura), mantén el flujo hacia adelante. NO intentes ofrecerle cambiar a recolección si ya eligió visita. 
+- Si el cliente ya decidió una modalidad (ej: "visita mañana") o si ya le pediste sus datos, mantén el flujo hacia adelante. NO intentes ofrecerle cambiar a recolección si ya eligió visita. 
 - No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores. Si el cliente dice "la falla ya la expliqué", avanza directo a confirmar la cita y solicitar los datos faltantes sin insistir.
 
 🚨 REGLA DEL MENÚ INTELIGENTE:
 Si el cliente solo saluda y el costo es 'Por cotizar', muestra el menú de 3 opciones. Si describe su problema desde el inicio, NO repitas el menú completo; asume la opción correcta de inmediato y ofrécele las modalidades correspondientes.
 
 🚨 REGLA PARA SOPORTE TÉCNICO REMOTO (OPCIÓN 1):
-- Si el cliente elige o requiere la Opción 1, aclara de inmediato el costo fijo ($419 MXN neto) y que se usará Chrome Remote Desktop.
-- Solicita de inmediato sus datos de apertura obligatorios: Nombre completo, teléfono a 10 dígitos y si requerirá factura (SÍ/NO).
-- ¡REGLA DE CIERRE REMOTO OBLIGATORIA!: En el momento exacto en que el cliente te proporcione sus datos de registro para la Opción 1, debes responder amigablemente confirmando su registro e incluyendo textualmente estos 3 pasos instructivos:
-  "Perfecto. Tu solicitud de soporte técnico remoto ha sido registrada con éxito. Mientras el Ingeniero Julio se conecta contigo en este chat en unos instantes, por favor apóyanos preparando tu acceso siguiendo estos pasos:
-  1. Abre tu navegador Chrome en tu computadora e ingresa a: remotedesktop.google.com/support
-  2. En la sección 'Recibir asistencia', haz clic en el botón azul que dice '+ Generar código'.
-  3. Escribe ese código de 12 dígitos aquí en nuestro chat para que el ingeniero pueda iniciar tu sesión de inmediato."
+- Si el cliente elige la Opción 1, aclara de inmediato el costo fijo ($419 MXN neto) y que se usará Chrome Remote Desktop. Solicita Nombre completo, teléfono a 10 dígitos y si requerirá factura (SÍ/NO).
 - Al enviar este mensaje instructivo final, incluye obligatoriamente la etiqueta __TRANSFERIR_REMOTO__ al final del bloque.
 
-🚨 REGLA DE AMORTIGUACIÓN DE PRECIOS FÍSIPOS (EVITAR RECHAZO):
+🚨 REGLA DE AMORTIGUACIÓN DE PRECIOS FÍSICOS (EVITAR RECHAZO):
 - Si el cliente exige un precio exacto para reparaciones físicas antes de agendar y el costo es 'Por cotizar', NUNCA le digas textualmente "no te puedo dar precio". Amortigua dando un rango de entre $790 y $1,400 MXN.
 
 🚨 REGLA DE PRECIOS ANTE INSISTENCIA (EVITAR BUCLES EN VIVO):
@@ -475,15 +466,15 @@ Si el cliente solo saluda y el costo es 'Por cotizar', muestra el menú de 3 opc
 
 🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
 
-🚨 DATOS DE APERTURA CRM: Cuando el cliente acepte cualquier servicio (físico o remoto), pide siempre: Nombre Completo, Teléfono a 10 dígitos y "¿Requerirás factura CFDI 4.0? (SÍ/NO)".
+🚨 DATOS DE APERTURA CRM: Cuando el cliente acepte cualquier servicio (físico o remoto), pide siempre: Nombre Completo, Teléfono a 10 dígitos y "¿Requerirás factura? (SÍ/NO)".
 
---- 4. FORMATO OBLIGATORIO DE SALIDA (ETIQUETAS) ---
+--- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
 - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
 - Usa estas etiquetas de agenda una sola vez por flujo según corresponda: __AGENDAR_VISITA__: / __AGENDAR_RECOLECCION__: / __DIRECCION_CLIENTE__:
 
-AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS BLOQUES DE CONTROL ACTUALIZADOS CON LA INFO QUE TENGAS HASTA EL MOMENTO (SI NO LA TIENES, DÉJALA VACÍA):
-__DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
-__DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`
+AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS BLOQUES DE CONTROL EXACTAMENTE CON ESTE FORMATO PARA NUESTRO PROCESADOR CRM:
+[DATA_CRM]:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
+[DATA_FISCAL]:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`
                 }
             })
             respuestaRaw = response.text || ''
@@ -492,20 +483,10 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             console.error(`🔴 [GEMINI REINTENTO ${intento}/3 FALLÓ]:`, error.message)
 
             if (intento === MAX_REINTENTOS) {
-                console.error("🔴 [GEMINI CRITICAL]: Se agotaron los reintentos de la IA de forma definitiva.");
-
                 if (clientePrisma?.id) {
-                    await prisma.cliente.update({
-                        where: { id: clientePrisma.id },
-                        data: { atendidoPorBot: false }
-                    })
+                    await prisma.cliente.update({ where: { id: clientePrisma.id }, data: { atendidoPorBot: false } })
                 }
-
-                await dispararAlertaInmediata(
-                    telefono10Digitos,
-                    '🚨 FALLA TÉCNICA IA',
-                    `El motor de IA sufrió una anomalía y no pudo responderle al cliente de forma automática. El bot ha sido apagado por seguridad. Releva el chat de inmediato.\n\n💬 *Último mensaje cliente:* "${mensajeCliente}"`
-                )
+                await dispararAlertaInmediata(telefono10Digitos, '🚨 FALLA TÉCNICA IA', `El motor de IA sufrió una anomalía.`)
                 return
             }
             await new Promise(resolve => setTimeout(resolve, 2000))
@@ -519,10 +500,11 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
-        const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
-        const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
 
-        // 🛡️ REQUISITO DE AGENTE CONSEGUIDO POR ETIQUETAS EXPLÍCITAS
+        // Soportamos extracción tanto del formato nuevo con corchetes como del viejo con guiones bajos
+        const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:(.+)/i) || respuestaRaw.match(/__DATOS_CRM__:(.+)/i)
+        const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:(.+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:(.+)/i)
+
         const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
             respuestaRaw.toLowerCase().includes('transferir este chat') ||
             respuestaRaw.toLowerCase().includes('ingeniero julio');
@@ -530,14 +512,17 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         const matchRemoteHandoff = respuestaRaw.match(/__TRANSFERIR_REMOTO__/) ||
             respuestaRaw.toLowerCase().includes('solicitud de soporte técnico remoto ha sido registrada con éxito');
 
+        // 🛡️ LIMPIADOR MÁXIMO (Regex híbrida que fulmina cualquier rastro de etiquetas viejas o nuevas)
         let respuestaWhatsApp = respuestaRaw
-            .replace(/__AGENDAR_VISITA__:.+/, '')
-            .replace(/__AGENDAR_RECOLECCION__:.+/, '')
-            .replace(/__DIRECCION_CLIENTE__:.+/, '')
-            .replace(/__DATOS_CRM__:.+/, '')
-            .replace(/__DATOS_FISCALES__:.+/, '')
-            .replace(/__TRANSFERIR_HUMANO__/g, '')
-            .replace(/__TRANSFERIR_REMOTO__/g, '')
+            .replace(/__AGENDAR_VISITA__:.+/i, '')
+            .replace(/__AGENDAR_RECOLECCION__:.+/i, '')
+            .replace(/__DIRECCION_CLIENTE__:.+/i, '')
+            .replace(/\[DATA_CRM\]:.+/i, '')
+            .replace(/__DATOS_CRM__:.+/i, '')
+            .replace(/\[DATA_FISCAL\]:.+/i, '')
+            .replace(/_*DATOS_FISCAL(ES)?_*:.+/i, '')
+            .replace(/__TRANSFERIR_HUMANO__/gi, '')
+            .replace(/__TRANSFERIR_REMOTO__/gi, '')
             .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
@@ -575,41 +560,22 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         if (fallaCrm.toLowerCase() === 'falla' || fallaCrm.toLowerCase() === 'no especificada') fallaCrm = 'Soporte General'
 
         if (reqFactura.includes('REQUIEREFACTURA') || reqFactura !== 'SI') reqFactura = 'NO'
-        if (rfcCrm.toLowerCase() === 'rfc' || rfcCrm.includes('RFC')) rfcCrm = ''
-        if (nombreFiscalCrm.toLowerCase() === 'nombrefiscal' || nombreFiscalCrm.includes('NOMBREFISCAL')) nombreFiscalCrm = ''
-        if (cpCrm.toLowerCase() === 'cp' || cpCrm.includes('CP')) cpCrm = ''
-        if (usoCfdiCrm.toLowerCase() === 'usocfdi' || usoCfdiCrm.includes('USOCFDI')) usoCfdiCrm = ''
-        if (correoCrm.toLowerCase() === 'correo' || correoCrm.includes('CORREO')) correoCrm = ''
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        // 🧠 MEJORA INTEGRAL: Intercepción estricta y segura de Handoffs
         if (matchAgente || matchRemoteHandoff) {
             if (clientePrisma?.id) {
-                await prisma.cliente.update({
-                    where: { id: clientePrisma.id },
-                    data: { atendidoPorBot: false }
-                })
+                await prisma.cliente.update({ where: { id: clientePrisma.id }, data: { atendidoPorBot: false } })
             } else {
-                await prisma.cliente.create({
-                    data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
-                })
+                await prisma.cliente.create({ data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false } })
             }
 
             if (matchAgente) {
                 estatusLead = 'REVISION_MANUAL'
-                await dispararAlertaInmediata(
-                    telefonoParaCita,
-                    '🚨 S.O.S. AGENTE',
-                    `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
-                )
+                await dispararAlertaInmediata(telefonoParaCita, '🚨 S.O.S. AGENTE', `¡Julio, entra al chat!`)
             } else {
                 estatusLead = 'EN_REPARACION'
-                await dispararAlertaInmediata(
-                    telefonoParaCita,
-                    '⚡ EN_REPARACION',
-                    `¡Sesión Remota Solicitada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario.`
-                )
+                await dispararAlertaInmediata(telefonoParaCita, '⚡ EN_REPARACION', `¡Sesión Remota Solicitada!`)
             }
         }
 
@@ -626,8 +592,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             const fechaParseada = new Date(fechaExtraida)
 
             if (isNaN(fechaParseada.getTime())) {
-                console.error(`🔴 [DATE PARSE ERROR]: Gemini envió una fecha inválida -> "${fechaExtraida}"`);
-                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? (Por ejemplo: "el jueves a las 2 pm" o "mañana a las 14:00"). Así podré asegurar tu espacio en el calendario. 🗓️`
+                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? 🗓️`
                 estatusLead = 'POR_AGENDAR'
             } else {
                 const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
@@ -637,7 +602,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
                     await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
                 } else {
-                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario de las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} se encuentra ocupado en este momento. ¿Tendrás algún otro espacio libre que te acomode? 🗓️`
+                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario se encuentra ocupado. ¿Tendrás algún otro espacio libre? 🗓️`
                     estatusLead = 'POR_AGENDAR'
                 }
             }
@@ -667,16 +632,14 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
 
                 if (kilometrosReal === -1) {
-                    respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente en unos momentos para confirmar la ruta de recolección. Mientras tanto, tu espacio sigue apartado. 🙏`
+                    respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente.`
                     estatusLead = 'REVISION_MANUAL'
-                    await dispararAlertaInmediata(telefonoParaCita, '🔴', `Error al calcular distancia para: ${direccionExtraida}. Requiere aprobación manual de Julio.`)
                 } else if (kilometrosReal <= RADIO_MAXIMO_KM) {
                     estatusLead = 'AGENDADO'
                 } else {
                     await eliminarCitaEnCalendar(telefonoParaCita)
-                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo de recolección gratuita de **${RADIO_MAXIMO_KM} km**.\n\n💻 *¡Pero no te preocupes!* Podemos resolver tu problema hoy mismo de forma 100% remota y segura mediante *Google Remote Desktop* por solo $419 MXN neto, o si lo prefieres, recibirte directamente en nuestro laboratorio. ¿Cuál opción te acomoda mejor?`
+                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo...`
                     estatusLead = 'FUERA_DE_COBERTURA'
-                    await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango (${kilometrosReal.toFixed(1)} km). Dirección: ${direccionExtraida}`)
                 }
             }
         }
@@ -698,8 +661,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     montoNeto = neto.toFixed(2)
                     ivaCalculado = (costoTotal - neto).toFixed(2)
                 }
-            } else if (tipoSoporteCalculado === 'Remoto') {
-                totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
             } else {
                 totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
             }
@@ -707,8 +668,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
             await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
-            console.log(`✅ [CRM GOOGLE SHEETS]: Fila guardada de forma exitosa en el Excel.`);
-
             await registrarFinanzasEnFacturacion(
                 codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
                 reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
