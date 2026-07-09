@@ -59,10 +59,11 @@ export async function POST(req: Request) {
             let mensajeSistemaWhatsApp = "🤖 _[SISTEMA]: El Ingeniero Julio ha registrado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y guardar tus datos de orden._\n\n¡Hola de nuevo! Ya tengo los detalles listos. Para confirmar tu espacio, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?"
 
             if (matchCotizacion) {
-                nuevoCosto = matchCotizacion[1]
+                nuevoCosto = matchCotizacion[1] // Extrae la cadena "1299"
+                const costoNumerico = parseFloat(nuevoCosto) // 🧠 SOLUCIÓN: Convertimos a número Float para Prisma
                 let ticketActivo = clienteAsociado.tickets[0]
 
-                // Si no hay ticket activo o ya cerrados, creamos uno express en Neon
+                // Si no hay ticket activo o ya están cerrados, creamos uno express en Neon
                 if (!ticketActivo || ticketActivo.estado === 'ENTREGADO' || ticketActivo.estado === 'RECHAZADO') {
                     const ultimoTicketGlobal = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
                     let nuevoFolio = 'SOL-1001'
@@ -77,14 +78,14 @@ export async function POST(req: Request) {
                             fallaReportada: 'Cotización física realizada por el Ingeniero',
                             clienteId: clienteAsociado.id,
                             estado: 'ESPERANDO_APROBACION',
-                            costoReparacion: nuevoCosto
+                            costoReparacion: costoNumerico // 📝 Inyectamos como número
                         }
                     })
                 } else {
-                    // Si ya existía uno abierto, le inyectamos el precio directo
+                    // Si ya existía uno abierto, le actualizamos el costo pactado
                     await prisma.ticket.update({
                         where: { id: ticketActivo.id },
-                        data: { costoReparacion: nuevoCosto }
+                        data: { costoReparacion: costoNumerico } // 📝 Inyectamos como número
                     })
                 }
 
