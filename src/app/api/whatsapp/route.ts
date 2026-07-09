@@ -498,327 +498,341 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     })
                 }
 
-                try {
-                    let estatusLead = 'PROSPECTO'
-                    let tipoSoporteCalculado = 'Remoto'
-
-                    const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
-                    const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
-                    const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
-                    const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
-                    const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
-
-                    const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
-                        respuestaRaw.toLowerCase().includes('transferir este chat') ||
-                        respuestaRaw.toLowerCase().includes('ingeniero julio');
-
-                    let respuestaWhatsApp = respuestaRaw
-                        .replace(/__AGENDAR_VISITA__:.+/, '')
-                        .replace(/__AGENDAR_RECOLECCION__:.+/, '')
-                        .replace(/__DIRECCION_CLIENTE__:.+/, '')
-                        .replace(/__DATOS_CRM__:.+/, '')
-                        .replace(/__DATOS_FISCALES__:.+/, '')
-                        .replace(/__TRANSFERIR_HUMANO__/g, '')
-                        .trim()
-
-                    let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
-                    if (matchCrm) {
-                        const campos = matchCrm[1].split('|')
-                        if (campos[0]) nombreCrm = campos[0].trim()
-                        if (campos[1]) dispositivoCrm = campos[1].trim()
-                        if (campos[2]) fallaCrm = campos[2].trim()
-                        if (campos[3]) telefonoRealCrm = campos[3].trim().replace(/\D/g, '')
-                    }
-
-                    let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
-                    if (matchFiscal) {
-                        const camposFiscales = matchFiscal[1].split('|')
-                        if (camposFiscales[0]) reqFactura = camposFiscales[0].trim().toUpperCase()
-                        if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
-                        if (camposFiscales[2]) nombreFiscalCrm = camposFiscales[2].trim().toUpperCase()
-                        if (camposFiscales[3]) cpCrm = camposFiscales[3].trim()
-                        if (camposFiscales[4]) regimenCrm = camposFiscales[4].trim()
-                        if (camposFiscales[5]) usoCfdiCrm = camposFiscales[5].trim()
-                        if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
-                    }
-
-                    const telefonoParaCita = (telefonoRealCrm && telefonoRealCrm.length >= 10) ? telefonoRealCrm.slice(-10) : telefono10Digitos
-
-                    if (nombreCrm.toLowerCase() === 'nombre' || nombreCrm.toLowerCase() === 'desconocido' || nombreCrm.includes('@')) {
-                        if (clientePrisma && clientePrisma.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp') {
-                            nombreCrm = clientePrisma.nombre
-                        } else {
-                            nombreCrm = 'Cliente WhatsApp'
-                        }
-                    }
-
-                    if (dispositivoCrm.toLowerCase() === 'dispositivo' || dispositivoCrm.toLowerCase() === 'no especificado') dispositivoCrm = 'PC/Laptop'
-                    if (fallaCrm.toLowerCase() === 'falla' || fallaCrm.toLowerCase() === 'no especificada') fallaCrm = 'Soporte General'
-
-                    if (reqFactura.includes('REQUIEREFACTURA') || reqFactura !== 'SI') reqFactura = 'NO'
-                    if (rfcCrm.toLowerCase() === 'rfc' || rfcCrm.includes('RFC')) rfcCrm = ''
-                    if (nombreFiscalCrm.toLowerCase() === 'nombrefiscal' || nombreFiscalCrm.includes('NOMBREFISCAL')) nombreFiscalCrm = ''
-                    if (cpCrm.toLowerCase() === 'cp' || cpCrm.includes('CP')) cpCrm = ''
-                    if (usoCfdiCrm.toLowerCase() === 'usocfdi' || usoCfdiCrm.includes('USOCFDI')) usoCfdiCrm = ''
-                    if (correoCrm.toLowerCase() === 'correo' || correoCrm.includes('CORREO')) correoCrm = ''
-
-                    await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
-
-                    if (matchAgente || (matchCrm && (respuestaRaw.toLowerCase().includes('remoto') || respuestaRaw.toLowerCase().includes('remote')))) {
-                        if (clientePrisma?.id) {
-                            await prisma.cliente.update({
-                                where: { id: clientePrisma.id },
-                                data: { atendidoPorBot: false }
-                            })
-                        } else {
-                            await prisma.cliente.create({
-                                data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
-                            })
-                        }
-
-                        if (matchAgente) {
-                            estatusLead = 'REVISION_MANUAL'
-                            await dispararAlertaInmediata(
-                                telefonoParaCita,
-                                '🚨 S.O.S. AGENTE',
-                                `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
-                            )
-                        } else {
-                            estatusLead = 'EN_REPARACION'
-                            await dispararAlertaInmediata(
-                                telefonoParaCita,
-                                '⚡ EN_REPARACION',
-                                `¡Sesión Remota Solicidada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario. Entra al chat para recibir su código de 12 dígitos e iniciar el soporte.`
-                            )
-                            console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado automáticamente por registro de Soporte Remoto.`);
-                        }
-                    }
-
-                    if (matchVisita) {
-                        tipoSoporteCalculado = 'Visita Física'
-                        const fechaExtraida = matchVisita[1].trim()
-                        const fechaParseada = new Date(fechaExtraida)
-
-                        if (isNaN(fechaParseada.getTime())) {
-                            console.error(`🔴 [DATE PARSE ERROR]: Gemini envió una fecha inválida -> "${fechaExtraida}"`);
-                            respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? (Por ejemplo: "el jueves a las 2 pm" o "mañana a las 14:00"). Así podré asegurar tu espacio en el calendario. 🗓️`
-                            estatusLead = 'POR_AGENDAR'
-                        } else {
-                            const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
-                            if (resultadoAgenda.exitoso) {
-                                respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
-                                estatusLead = 'AGENDADO'
-                                await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
-                                await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
-                            } else {
-                                respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario de las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} se encuentra ocupado en este momento. ¿Tendrás algún otro espacio libre que te acomode? 🗓️`
-                                estatusLead = 'POR_AGENDAR'
-                            }
-                        }
-                    }
-
-                    if (matchRecoleccion) {
-                        tipoSoporteCalculado = 'Recolección'
-                        const fechaExtraida = matchRecoleccion[1].trim()
-                        const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
-
-                        if (resultadoAgenda.exitoso) {
-                            respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
-                            await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
-                            estatusLead = 'POR_AGENDAR'
-                        } else {
-                            respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
-                            estatusLead = 'POR_AGENDAR'
-                        }
-                    }
-
-                    if (matchDireccion) {
-                        tipoSoporteCalculado = 'Recolección'
-                        const direccionExtraida = matchDireccion[1].trim()
-                        const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
-
-                        if (ultimaCitaPrisma?.tipo === 'ENTREGA') {
-                            estatusLead = 'AGENDADO'
-                            tipoSoporteCalculado = 'Visita Física'
-                        } else {
-                            const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
-
-                            if (kilometrosReal === -1) {
-                                respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente en unos momentos para confirmar la ruta de recolección. Mientras tanto, tu espacio sigue apartado. 🙏`
-                                estatusLead = 'REVISION_MANUAL'
-                                await dispararAlertaInmediata(telefonoParaCita, '🔴', `Error al calcular distancia para: ${direccionExtraida}. Requiere aprobación manual de Julio.`)
-                            } else if (kilometrosReal <= RADIO_MAXIMO_KM) {
-                                estatusLead = 'AGENDADO'
-                            } else {
-                                await eliminarCitaEnCalendar(telefonoParaCita)
-                                respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo de recolección gratuita de **${RADIO_MAXIMO_KM} km**.\n\n💻 *¡Pero no te preocupes!* Podemos resolver tu problema hoy mismo de forma 100% remota y segura mediante *Google Remote Desktop* por solo $419 MXN neto, o si lo prefieres, recibirte directamente en nuestro laboratorio. ¿Cuál opción te acomoda mejor?`
-                                estatusLead = 'FUERA_DE_COBERTURA'
-                                await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango (${kilometrosReal.toFixed(1)} km). Dirección: ${direccionExtraida}`)
-                            }
-                        }
-                    }
-
-                    historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
-                    MEMORIA_CHAT.set(numeroCliente, historial)
-
-                    const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
-                    if (exitoEnvio) {
-                        const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
-                        const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
-
-                        let totalCobrado = "", montoNeto = "", ivaCalculado = ""
-
-                        if (tipoSoporteCalculado === 'Remoto') {
-                            totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
-                        } else if (ticketMasReciente?.costoReparacion) {
-                            const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
-                            if (!isNaN(costoTotal)) {
-                                totalCobrado = costoTotal.toFixed(2)
-                                const neto = costoTotal / 1.16
-                                montoNeto = neto.toFixed(2)
-                                ivaCalculado = (costoTotal - neto).toFixed(2)
-                            }
-                        } else {
-                            totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
-                        }
-
-                        const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
-
-                        await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
-                        console.log(`✅ [CRM GOOGLE SHEETS]: Fila guardada de forma exitosa en el Excel.`);
-
-                        await registrarFinanzasEnFacturacion(
-                            codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
-                            reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
-                            montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
-                        )
-                    }
-                } catch (error: any) {
-                    console.error('🔴 Error crítico en el bloque de salida total:', error.message)
-                }
+                // 🚨 RED DE SEGURIDAD: Te avisa en tiempo real en tu búnker que la IA se cayó
+                await dispararAlertaInmediata(
+                    telefono10Digitos,
+                    '🚨 FALLA TÉCNICA IA',
+                    `El motor de IA sufrió una anomalía y no pudo responderle al cliente de forma automática. El bot ha sido apagado por seguridad. Releva el chat de inmediato.\n\n💬 *Último mensaje cliente:* "${mensajeCliente}"`
+                )
+                return // Salimos de la función de forma controlada
             }
 
-            // 🌐 MÉTODO GET: Validador Oficial de Webhooks exigido por Meta
-            export async function GET(req: Request) {
-                try {
-                    const { searchParams } = new URL(req.url)
-                    const mode = searchParams.get('hub.mode')
-                    const token = searchParams.get('hub.verify_token')
-                    const challenge = searchParams.get('hub.challenge')
+            // Esperamos 2 segundos antes del siguiente intento
+            await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+    }
 
-                    const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
+    try {
+        let estatusLead = 'PROSPECTO'
+        let tipoSoporteCalculado = 'Remoto'
 
-                    if (mode && token) {
-                        if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-                            console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.');
-                            return new Response(challenge, { status: 200 })
-                        } else {
-                            return new Response('Forbidden', { status: 403 })
-                        }
-                    }
-                    return new Response('Bad Request', { status: 400 })
-                } catch (error: any) {
-                    return new Response('Error', { status: 500 })
-                }
+        const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
+        const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
+        const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
+        const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
+        const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
+
+        const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
+            respuestaRaw.toLowerCase().includes('transferir este chat') ||
+            respuestaRaw.toLowerCase().includes('ingeniero julio');
+
+        let respuestaWhatsApp = respuestaRaw
+            .replace(/__AGENDAR_VISITA__:.+/, '')
+            .replace(/__AGENDAR_RECOLECCION__:.+/, '')
+            .replace(/__DIRECCION_CLIENTE__:.+/, '')
+            .replace(/__DATOS_CRM__:.+/, '')
+            .replace(/__DATOS_FISCALES__:.+/, '')
+            .replace(/__TRANSFERIR_HUMANO__/g, '')
+            .trim()
+
+        let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
+        if (matchCrm) {
+            const campos = matchCrm[1].split('|')
+            if (campos[0]) nombreCrm = campos[0].trim()
+            if (campos[1]) dispositivoCrm = campos[1].trim()
+            if (campos[2]) fallaCrm = campos[2].trim()
+            if (campos[3]) telefonoRealCrm = campos[3].trim().replace(/\D/g, '')
+        }
+
+        let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
+        if (matchFiscal) {
+            const camposFiscales = matchFiscal[1].split('|')
+            if (camposFiscales[0]) reqFactura = camposFiscales[0].trim().toUpperCase()
+            if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
+            if (camposFiscales[2]) nombreFiscalCrm = camposFiscales[2].trim().toUpperCase()
+            if (camposFiscales[3]) cpCrm = camposFiscales[3].trim()
+            if (camposFiscales[4]) regimenCrm = camposFiscales[4].trim()
+            if (camposFiscales[5]) usoCfdiCrm = camposFiscales[5].trim()
+            if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
+        }
+
+        const telefonoParaCita = (telefonoRealCrm && telefonoRealCrm.length >= 10) ? telefonoRealCrm.slice(-10) : telefono10Digitos
+
+        if (nombreCrm.toLowerCase() === 'nombre' || nombreCrm.toLowerCase() === 'desconocido' || nombreCrm.includes('@')) {
+            if (clientePrisma && clientePrisma.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp') {
+                nombreCrm = clientePrisma.nombre
+            } else {
+                nombreCrm = 'Cliente WhatsApp'
+            }
+        }
+
+        if (dispositivoCrm.toLowerCase() === 'dispositivo' || dispositivoCrm.toLowerCase() === 'no especificado') dispositivoCrm = 'PC/Laptop'
+        if (fallaCrm.toLowerCase() === 'falla' || fallaCrm.toLowerCase() === 'no especificada') fallaCrm = 'Soporte General'
+
+        if (reqFactura.includes('REQUIEREFACTURA') || reqFactura !== 'SI') reqFactura = 'NO'
+        if (rfcCrm.toLowerCase() === 'rfc' || rfcCrm.includes('RFC')) rfcCrm = ''
+        if (nombreFiscalCrm.toLowerCase() === 'nombrefiscal' || nombreFiscalCrm.includes('NOMBREFISCAL')) nombreFiscalCrm = ''
+        if (cpCrm.toLowerCase() === 'cp' || cpCrm.includes('CP')) cpCrm = ''
+        if (usoCfdiCrm.toLowerCase() === 'usocfdi' || usoCfdiCrm.includes('USOCFDI')) usoCfdiCrm = ''
+        if (correoCrm.toLowerCase() === 'correo' || correoCrm.includes('CORREO')) correoCrm = ''
+
+        await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
+
+        if (matchAgente || (matchCrm && (respuestaRaw.toLowerCase().includes('remoto') || respuestaRaw.toLowerCase().includes('remote')))) {
+            if (clientePrisma?.id) {
+                await prisma.cliente.update({
+                    where: { id: clientePrisma.id },
+                    data: { atendidoPorBot: false }
+                })
+            } else {
+                await prisma.cliente.create({
+                    data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                })
             }
 
-            // 📥 MÉTODO POST: Receptor de Mensajes de WhatsApp desde la Nube de Meta
-            export async function POST(req: Request) {
-                try {
-                    const body = await req.json()
+            if (matchAgente) {
+                estatusLead = 'REVISION_MANUAL'
+                await dispararAlertaInmediata(
+                    telefonoParaCita,
+                    '🚨 S.O.S. AGENTE',
+                    `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`
+                )
+            } else {
+                estatusLead = 'EN_REPARACION'
+                await dispararAlertaInmediata(
+                    telefonoParaCita,
+                    '⚡ EN_REPARACION',
+                    `¡Sesión Remota Solicidada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario. Entra al chat para recibir su código de 12 dígitos e iniciar el soporte.`
+                )
+                console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado automáticamente por registro de Soporte Remoto.`);
+            }
+        }
 
-                    // 🛡️ Filtro 1: Validamos que el payload provenga del ecosistema comercial de WhatsApp
-                    if (body.object !== 'whatsapp_business_account') {
-                        return new Response('Ignorado', { status: 200 })
-                    }
+        if (matchVisita) {
+            tipoSoporteCalculado = 'Visita Física'
+            const fechaExtraida = matchVisita[1].trim()
+            const fechaParseada = new Date(fechaExtraida)
 
-                    const entry = body.entry?.[0]
-                    const change = entry?.changes?.[0]
-                    const value = change?.value
-
-                    // 🛡️ Filtro 2: Ignorar si es una actualización de estatus o está vacío
-                    if (!value || !value.messages || value.messages.length === 0) {
-                        return new Response('Ignorado Estatus', { status: 200 })
-                    }
-
-                    const message = value.messages[0]
-
-                    // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto
-                    if (message.type !== 'text') {
-                        return new Response('Ignorado Multimedia', { status: 200 })
-                    }
-
-                    // 🛡️ NUEVO FILTRO ANTIDUPLICADOS DE META:
-                    // Evita que un webhook reintentado por Meta active todo el proceso nuevamente.
-                    const messageId = message.id;
-                    if (messageId && processedMessagesCache.includes(messageId)) {
-                        console.log(`♻️ [WEBHOOK RETRY IGNORADO]: Mensaje ID ${messageId} ya fue procesado anteriormente.`);
-                        return new Response('Retry Ignorado', { status: 200 });
-                    }
-
-                    // Si es un mensaje nuevo, lo agregamos al caché (limitamos el caché a 1000 IDs para no saturar memoria)
-                    if (messageId) {
-                        processedMessagesCache.push(messageId);
-                        if (processedMessagesCache.length > 1000) {
-                            processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia y nativa
-                        }
-                    }
-
-                    const mensajeCliente = message.text?.body
-                    const numeroCliente = message.from // Cadena limpia (ej: "525546088200")
-
-                    // 🛡️ Filtro 4: Evitamos el eco infinito si nos escribe el mismo número del bot
-                    if (numeroCliente.includes('5546088200')) {
-                        return new Response('Eco Ignorado', { status: 200 })
-                    }
-
-                    if (mensajeCliente && numeroCliente) {
-                        console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
-
-                        // 🛑 INTERCEPTOR DE HANDOFF
-                        const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
-                        const telefono10Digitos = telefonoLimpio.slice(-10)
-
-                        const clienteExistente = await prisma.cliente.findFirst({
-                            where: {
-                                OR: [
-                                    { telefono: numeroCliente },
-                                    { telefono: telefonoLimpio },
-                                    { telefono: telefono10Digitos }
-                                ]
-                            }
-                        })
-
-                        // 🔄 TRUCO DE DESARROLLADOR: Comando secreto
-                        if (mensajeCliente.trim().toLowerCase() === 'reset') {
-                            await prisma.cliente.updateMany({
-                                where: { telefono: { endsWith: telefono10Digitos } },
-                                data: { atendidoPorBot: true, googleChatThreadId: null }
-                            })
-                            await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
-                            return new Response('Bot reseteado', { status: 200 })
-                        }
-
-                        // 👤 HUMAN TAKEOVER
-                        if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
-                            console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
-
-                            await dispararAlertaInmediata(
-                                telefono10Digitos,
-                                '📥 ATENCIÓN MANUAL',
-                                `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele directamente a este hilo para chatear con el cliente.`
-                            )
-
-                            return new Response('Atendido de forma manual', { status: 200 })
-                        }
-
-                        // 🤖 LÓGICA DE IA
-                        await ejecutarLogicaIA(mensajeCliente, numeroCliente)
-                    }
-
-                    return new Response('Processed', { status: 200 })
-                } catch (error: any) {
-                    console.error('🔴 Error en Receptor Webhook Meta:', error.message)
-                    return new Response('Error', { status: 500 })
+            if (isNaN(fechaParseada.getTime())) {
+                console.error(`🔴 [DATE PARSE ERROR]: Gemini envió una fecha inválida -> "${fechaExtraida}"`);
+                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? (Por ejemplo: "el jueves a las 2 pm" o "mañana a las 14:00"). Así podré asegurar tu espacio en el calendario. 🗓️`
+                estatusLead = 'POR_AGENDAR'
+            } else {
+                const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
+                if (resultadoAgenda.exitoso) {
+                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
+                    estatusLead = 'AGENDADO'
+                    await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
+                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
+                } else {
+                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario de las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} se encuentra ocupado en este momento. ¿Tendrás algún otro espacio libre que te acomode? 🗓️`
+                    estatusLead = 'POR_AGENDAR'
                 }
             }
+        }
+
+        if (matchRecoleccion) {
+            tipoSoporteCalculado = 'Recolección'
+            const fechaExtraida = matchRecoleccion[1].trim()
+            const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
+
+            if (resultadoAgenda.exitoso) {
+                respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
+                await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
+                estatusLead = 'POR_AGENDAR'
+            } else {
+                respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
+                estatusLead = 'POR_AGENDAR'
+            }
+        }
+
+        if (matchDireccion) {
+            tipoSoporteCalculado = 'Recolección'
+            const direccionExtraida = matchDireccion[1].trim()
+            const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
+
+            if (ultimaCitaPrisma?.tipo === 'ENTREGA') {
+                estatusLead = 'AGENDADO'
+                tipoSoporteCalculado = 'Visita Física'
+            } else {
+                const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
+
+                if (kilometrosReal === -1) {
+                    respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente en unos momentos para confirmar la ruta de recolección. Mientras tanto, tu espacio sigue apartado. 🙏`
+                    estatusLead = 'REVISION_MANUAL'
+                    await dispararAlertaInmediata(telefonoParaCita, '🔴', `Error al calcular distancia para: ${direccionExtraida}. Requiere aprobación manual de Julio.`)
+                } else if (kilometrosReal <= RADIO_MAXIMO_KM) {
+                    estatusLead = 'AGENDADO'
+                } else {
+                    await eliminarCitaEnCalendar(telefonoParaCita)
+                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo de recolección gratuita de **${RADIO_MAXIMO_KM} km**.\n\n💻 *¡Pero no te preocupes!* Podemos resolver tu problema hoy mismo de forma 100% remota y segura mediante *Google Remote Desktop* por solo $419 MXN neto, o si lo prefieres, recibirte directamente en nuestro laboratorio. ¿Cuál opción te acomoda mejor?`
+                    estatusLead = 'FUERA_DE_COBERTURA'
+                    await dispararAlertaInmediata(telefonoParaCita, 'FUERA_DE_COBERTURA', `${nombreCrm} fuera de rango (${kilometrosReal.toFixed(1)} km). Dirección: ${direccionExtraida}`)
+                }
+            }
+        }
+
+        historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
+        MEMORIA_CHAT.set(numeroCliente, historial)
+
+        const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
+        if (exitoEnvio) {
+            const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
+            const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
+
+            let totalCobrado = "", montoNeto = "", ivaCalculado = ""
+
+            if (tipoSoporteCalculado === 'Remoto') {
+                totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
+            } else if (ticketMasReciente?.costoReparacion) {
+                const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
+                if (!isNaN(costoTotal)) {
+                    totalCobrado = costoTotal.toFixed(2)
+                    const neto = costoTotal / 1.16
+                    montoNeto = neto.toFixed(2)
+                    ivaCalculado = (costoTotal - neto).toFixed(2)
+                }
+            } else {
+                totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
+            }
+
+            const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
+
+            await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
+            console.log(`✅ [CRM GOOGLE SHEETS]: Fila guardada de forma exitosa en el Excel.`);
+
+            await registrarFinanzasEnFacturacion(
+                codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
+                reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
+                montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
+            )
+        }
+    } catch (error: any) {
+        console.error('🔴 Error crítico en el bloque de salida total:', error.message)
+    }
+}
+
+// 🌐 MÉTODO GET: Validador Oficial de Webhooks exigido por Meta
+export async function GET(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url)
+        const mode = searchParams.get('hub.mode')
+        const token = searchParams.get('hub.verify_token')
+        const challenge = searchParams.get('hub.challenge')
+
+        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
+
+        if (mode && token) {
+            if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+                console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.');
+                return new Response(challenge, { status: 200 })
+            } else {
+                return new Response('Forbidden', { status: 403 })
+            }
+        }
+        return new Response('Bad Request', { status: 400 })
+    } catch (error: any) {
+        return new Response('Error', { status: 500 })
+    }
+}
+
+// 📥 MÉTODO POST: Receptor de Mensajes de WhatsApp desde la Nube de Meta
+export async function POST(req: Request) {
+    try {
+        const body = await req.json()
+
+        // 🛡️ Filtro 1: Validamos que el payload provenga del ecosistema comercial de WhatsApp
+        if (body.object !== 'whatsapp_business_account') {
+            return new Response('Ignorado', { status: 200 })
+        }
+
+        const entry = body.entry?.[0]
+        const change = entry?.changes?.[0]
+        const value = change?.value
+
+        // 🛡️ Filtro 2: Ignorar si es una actualización de estatus o está vacío
+        if (!value || !value.messages || value.messages.length === 0) {
+            return new Response('Ignorado Estatus', { status: 200 })
+        }
+
+        const message = value.messages[0]
+
+        // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto
+        if (message.type !== 'text') {
+            return new Response('Ignorado Multimedia', { status: 200 })
+        }
+
+        // 🛡️ NUEVO FILTRO ANTIDUPLICADOS DE META:
+        // Evita que un webhook reintentado por Meta active todo el proceso nuevamente.
+        const messageId = message.id;
+        if (messageId && processedMessagesCache.includes(messageId)) {
+            console.log(`♻️ [WEBHOOK RETRY IGNORADO]: Mensaje ID ${messageId} ya fue procesado anteriormente.`);
+            return new Response('Retry Ignorado', { status: 200 });
+        }
+
+        // Si es un mensaje nuevo, lo agregamos al caché (limitamos el caché a 1000 IDs para no saturar memoria)
+        if (messageId) {
+            processedMessagesCache.push(messageId);
+            if (processedMessagesCache.length > 1000) {
+                processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia y nativa
+            }
+        }
+
+        const mensajeCliente = message.text?.body
+        const numeroCliente = message.from // Cadena limpia (ej: "525546088200")
+
+        // 🛡️ Filtro 4: Evitamos el eco infinito si nos escribe el mismo número del bot
+        if (numeroCliente.includes('5546088200')) {
+            return new Response('Eco Ignorado', { status: 200 })
+        }
+
+        if (mensajeCliente && numeroCliente) {
+            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
+
+            // 🛑 INTERCEPTOR DE HANDOFF
+            const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
+            const telefono10Digitos = telefonoLimpio.slice(-10)
+
+            const clienteExistente = await prisma.cliente.findFirst({
+                where: {
+                    OR: [
+                        { telefono: numeroCliente },
+                        { telefono: telefonoLimpio },
+                        { telefono: telefono10Digitos }
+                    ]
+                }
+            })
+
+            // 🔄 TRUCO DE DESARROLLADOR: Comando secreto
+            if (mensajeCliente.trim().toLowerCase() === 'reset') {
+                await prisma.cliente.updateMany({
+                    where: { telefono: { endsWith: telefono10Digitos } },
+                    data: { atendidoPorBot: true, googleChatThreadId: null }
+                })
+                await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
+                return new Response('Bot reseteado', { status: 200 })
+            }
+
+            // 👤 HUMAN TAKEOVER
+            if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
+                console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
+
+                await dispararAlertaInmediata(
+                    telefono10Digitos,
+                    '📥 ATENCIÓN MANUAL',
+                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele directamente a este hilo para chatear con el cliente.`
+                )
+
+                return new Response('Atendido de forma manual', { status: 200 })
+            }
+
+            // 🤖 LÓGICA DE IA
+            await ejecutarLogicaIA(mensajeCliente, numeroCliente)
+        }
+
+        return new Response('Processed', { status: 200 })
+    } catch (error: any) {
+        console.error('🔴 Error en Receptor Webhook Meta:', error.message)
+        return new Response('Error', { status: 500 })
+    }
+}
