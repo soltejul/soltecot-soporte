@@ -384,10 +384,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         console.error('🔴 Error al validar escudos en el webhook:', dbError.message)
     }
 
-    const MAX_REINTENTOS = 3
-    let respuestaRaw = ''
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
-
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
     const tieneHandoffPrevio = historial.some(h =>
         h.parts?.some((p: any) =>
@@ -399,16 +395,20 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
     if (tieneHandoffPrevio) {
         console.log(`🧼 [SANEAMIENTO MEMORIA]: Detectado handoff previo en el historial. Limpiando fantasmas para el cliente ${telefono10Digitos}.`)
-        historial = [] // Vaciamos el pasado para que la IA responda fresco el mensaje actual
+        historial = []
     }
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
-    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES (Fuera del template string para evitar errores de serialización)
+    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES
     const folioOrden = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE';
     const equipoRegistro = ticketMasReciente?.equipo || 'No especificado';
     const fallaRegistro = ticketMasReciente?.fallaReportada || 'No especificada';
     const costoPactado = ticketMasReciente?.costoReparacion ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
+
+    const MAX_REINTENTOS = 3
+    let respuestaRaw = ''
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
 
     for (let intento = 1; intento <= MAX_REINTENTOS; intento++) {
         try {
@@ -445,14 +445,15 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', o si el historial indica que el ingeniero ya autorizó el servicio, queda TERMINANTEMENTE PROHIBIDO mencionar diagnósticos gratuitos, revisiones de presupuesto o repetir los rangos de precios base ($790-$1400). Asume con total naturalidad que el costo ya está cerrado y avanza directo al agendamiento.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio de forma personalizada con el cliente. Queda TERMINANTEMENTE PROHIBIDO mencionar diagnósticos gratuitos, revisiones de presupuesto o repetir los rangos de precios base ($790-$1400). Asume con total naturalidad que el costo ya está cerrado.
+- ¡PROHIBICIÓN DE CATÁLOGO GENERAL!: Si el costo ya está pactado, tienes estrictamente PROHIBIDO mostrar el menú de las 3 opciones o preguntar qué servicio requiere. Tu único rol es explicar el proceso de la modalidad elegida (Visita o Recolección), proveer dirección u horarios si el cliente los pide de forma explícita, y recolectar los datos CRM faltantes. No divagues con saludos comerciales de bienvenida.
 
 🚨 REGLA DE PROGRESIÓN LINEAL DE AGENDA (EVITAR CAMBIOS DE MODALIDAD):
 - Si el cliente ya decidió una modalidad (ej: "visita mañana") o si ya le pediste sus datos (Nombre, Teléfono, Factura), mantén el flujo hacia adelante. NO intentes ofrecerle cambiar a recolección si ya eligió visita. 
 - No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores. Si el cliente dice "la falla ya la expliqué", avanza directo a confirmar la cita y solicitar los datos faltantes sin insistir.
 
 🚨 REGLA DEL MENÚ INTELIGENTE:
-Si el cliente solo saluda, muestra el menú de 3 opciones. Si describe su problema desde el inicio (ej: "necesito cambiar mi batería" o "mi compu tiene virus"), NO repitas el menú completo; asume la opción correcta de inmediato y ofrécele las modalidades correspondientes.
+Si el cliente solo saluda y el costo es 'Por cotizar', muestra el menú de 3 opciones. Si describe su problema desde el inicio, NO repitas el menú completo; asume la opción correcta de inmediato y ofrécele las modalidades correspondientes.
 
 🚨 REGLA PARA SOPORTE TÉCNICO REMOTO (OPCIÓN 1):
 - Si el cliente elige o requiere la Opción 1, aclara de inmediato el costo fijo ($419 MXN neto) y que se usará Chrome Remote Desktop.
@@ -462,16 +463,14 @@ Si el cliente solo saluda, muestra el menú de 3 opciones. Si describe su proble
   1. Abre tu navegador Chrome en tu computadora e ingresa a: remotedesktop.google.com/support
   2. En la sección 'Recibir asistencia', haz clic en el botón azul que dice '+ Generar código'.
   3. Escribe ese código de 12 dígitos aquí en nuestro chat para que el ingeniero pueda iniciar tu sesión de inmediato."
-- Al enviar este mensaje instructivo final, incluye obligatoriamente la etiqueta __DATOS_CRM__ al final del bloque para que el sistema apague tu switch de asistencia y le ceda el control total al humano.
+- Al enviar este mensaje instructivo final, incluye obligatoriamente la etiqueta __TRANSFERIR_REMOTO__ al final del bloque.
 
-🚨 REGLA DE AMORTIGUACIÓN DE PRECIOS FÍSICOS (EVITAR RECHAZO):
-- Si el cliente exige un precio exacto para reparaciones físicas (Opción 2 u Opción 3) antes de agendar (ej: "cuánto cuesta cambiar la pantalla de una dell"), NUNCA le digas textualmente "no te puedo dar precio".
-- Amortigua el golpe dando un rango aproximado del mercado para PC/Laptop: entre $790 y $1,400 MXN (dependiendo del modelo y disponibilidad). Explica cortésmente que para el costo exacto se requiere un diagnóstico físico sin costo en el laboratorio.
+🚨 REGLA DE AMORTIGUACIÓN DE PRECIOS FÍSIPOS (EVITAR RECHAZO):
+- Si el cliente exige un precio exacto para reparaciones físicas antes de agendar y el costo es 'Por cotizar', NUNCA le digas textualmente "no te puedo dar precio". Amortigua dando un rango de entre $790 y $1,400 MXN.
 
 🚨 REGLA DE PRECIOS ANTE INSISTENCIA (EVITAR BUCLES EN VIVO):
 - La PRIMERA vez que el cliente exija un precio exacto, amortigua dando el rango de mercado ($790 a $1,400 MXN) y ofrece Visita o Recolección.
-- ¡REGLA DE ORO DE INSISTENCIA!: Si notas en el historial de chat que el cliente VUELVE a exigir el precio exacto por segunda vez (ej: "quiero precio exacto primero para saber si me conviene"), TIENES ESTRICTAMENTE PROHIBIDO repetir el rango de precios o volver a insistir con las modalidades físicas.
-- En ese milisegundo debes rendirte y responder textualmente con total empatía: "Entiendo perfectamente tu postura. Para darte el costo exacto y revisar alternativas, en este momento voy a transferir este chat directamente con el Ingeniero Julio para que lo revise personalmente contigo en unos minutos. ¡Un momento por favor!"
+- ¡REGLA DE ORO DE INSISTENCIA!: Si notas en el historial de chat que el cliente VUELVE a exigir el precio exacto por segunda vez, TIENES ESTRICTAMENTE PROHIBIDO repetir el rango de precios o volver a insistir con las modalidades físicas. En ese milisegundo debes rendirte y responder textualmente con total empatía: "Entiendo perfectamente tu postura. Para darte el costo exacto y revisar alternativas, en este momento voy a transferir este chat directamente con el Ingeniero Julio para que lo revise personalmente contigo en unos minutos. ¡Un momento por favor!"
 - Al final de este mensaje de rendición por insistencia, incluye OBLIGATORIAMENTE la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
@@ -509,7 +508,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 )
                 return
             }
-
             await new Promise(resolve => setTimeout(resolve, 2000))
         }
     }
@@ -524,9 +522,13 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         const matchCrm = respuestaRaw.match(/__DATOS_CRM__:(.+)/)
         const matchFiscal = respuestaRaw.match(/__DATOS_FISCALES__:(.+)/)
 
+        // 🛡️ REQUISITO DE AGENTE CONSEGUIDO POR ETIQUETAS EXPLÍCITAS
         const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
             respuestaRaw.toLowerCase().includes('transferir este chat') ||
             respuestaRaw.toLowerCase().includes('ingeniero julio');
+
+        const matchRemoteHandoff = respuestaRaw.match(/__TRANSFERIR_REMOTO__/) ||
+            respuestaRaw.toLowerCase().includes('solicitud de soporte técnico remoto ha sido registrada con éxito');
 
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/, '')
@@ -535,6 +537,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             .replace(/__DATOS_CRM__:.+/, '')
             .replace(/__DATOS_FISCALES__:.+/, '')
             .replace(/__TRANSFERIR_HUMANO__/g, '')
+            .replace(/__TRANSFERIR_REMOTO__/g, '')
             .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
@@ -580,7 +583,8 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        if (matchAgente || (matchCrm && (respuestaRaw.toLowerCase().includes('remoto') || respuestaRaw.toLowerCase().includes('remote')))) {
+        // 🧠 MEJORA INTEGRAL: Intercepción estricta y segura de Handoffs
+        if (matchAgente || matchRemoteHandoff) {
             if (clientePrisma?.id) {
                 await prisma.cliente.update({
                     where: { id: clientePrisma.id },
@@ -604,14 +608,20 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                 await dispararAlertaInmediata(
                     telefonoParaCita,
                     '⚡ EN_REPARACION',
-                    `¡Sesión Remota Solicidada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario. Entra al chat para recibir su código de 12 dígitos e iniciar el soporte.`
+                    `¡Sesión Remota Solicitada!\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Detalles:* El bot ya le dio las instrucciones de Chrome Remote Desktop al usuario.`
                 )
-                console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado automáticamente por registro de Soporte Remoto.`);
             }
         }
 
-        if (matchVisita) {
+        if (matchVisita || ticketMasReciente?.equipo?.toLowerCase().includes('laboratorio')) {
             tipoSoporteCalculado = 'Visita Física'
+        } else if (matchRecoleccion || matchDireccion || ticketMasReciente?.equipo?.toLowerCase().includes('recolección')) {
+            tipoSoporteCalculado = 'Recolección'
+        } else if (ticketMasReciente?.costoReparacion && parseFloat(ticketMasReciente.costoReparacion) !== 419) {
+            tipoSoporteCalculado = 'Reparación Física'
+        }
+
+        if (matchVisita) {
             const fechaExtraida = matchVisita[1].trim()
             const fechaParseada = new Date(fechaExtraida)
 
@@ -634,7 +644,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         }
 
         if (matchRecoleccion) {
-            tipoSoporteCalculado = 'Recolección'
             const fechaExtraida = matchRecoleccion[1].trim()
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
 
@@ -649,13 +658,11 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
         }
 
         if (matchDireccion) {
-            tipoSoporteCalculado = 'Recolección'
             const direccionExtraida = matchDireccion[1].trim()
             const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
 
             if (ultimaCitaPrisma?.tipo === 'ENTREGA') {
                 estatusLead = 'AGENDADO'
-                tipoSoporteCalculado = 'Visita Física'
             } else {
                 const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
 
@@ -674,7 +681,6 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
             }
         }
 
-        historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
         MEMORIA_CHAT.set(numeroCliente, historial)
 
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
@@ -684,9 +690,7 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
 
             let totalCobrado = "", montoNeto = "", ivaCalculado = ""
 
-            if (tipoSoporteCalculado === 'Remoto') {
-                totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
-            } else if (ticketMasReciente?.costoReparacion) {
+            if (ticketMasReciente?.costoReparacion) {
                 const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
                 if (!isNaN(costoTotal)) {
                     totalCobrado = costoTotal.toFixed(2)
@@ -694,6 +698,8 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     montoNeto = neto.toFixed(2)
                     ivaCalculado = (costoTotal - neto).toFixed(2)
                 }
+            } else if (tipoSoporteCalculado === 'Remoto') {
+                totalCobrado = "419.00"; montoNeto = "361.21"; ivaCalculado = "57.79"
             } else {
                 totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
             }
