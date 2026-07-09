@@ -407,6 +407,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
 🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
+📋 [SISTEMA] INFO DEL TICKET ACTUAL EN NEON (Contexto en Tiempo Real):
+- Folio de Orden: ${ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'}
+- Equipo/Falla en registro: ${ticketMasReciente?.equipo || 'No especificado'} - ${ticketMasReciente?.fallaReportada || 'No especificada'}
+- Costo Total pactado por el Ingeniero Julio: ${ticketMasReciente?.costoReparacion ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar'}
+
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
 • OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). 
   - Tarifa: $419 MXN neto.
@@ -420,6 +425,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 3. SOPORTE REMOTO: Conexión inmediata vía internet tras registro.
 
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
+
+🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', o si el historial indica que el ingeniero ya autorizó el servicio, queda TERMINANTEMENTE PROHIBIDO mencionar diagnósticos gratuitos, revisiones de presupuesto o repetir los rangos de precios base ($790-$1400). Asume con total naturalidad que el costo ya está cerrado y avanza directo al agendamiento.
+
+🚨 REGLA DE PROGRESIÓN LINEAL DE AGENDA (EVITAR CAMBIOS DE MODALIDAD):
+- Si el cliente ya decidió una modalidad (ej: "visita mañana") o si ya le pediste sus datos (Nombre, Teléfono, Factura), mantén el flujo hacia adelante. NO intentes ofrecerle cambiar a recolección si ya eligió visita. 
+- No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores. Si el cliente dice "la falla ya la expliqué", avanza directo a confirmar la cita y solicitar los datos faltantes sin insistir.
 
 🚨 REGLA DEL MENÚ INTELIGENTE:
 Si el cliente solo saluda, muestra el menú de 3 opciones. Si describe su problema desde el inicio (ej: "necesito cambiar mi batería" o "mi compu tiene virus"), NO repitas el menú completo; asume la opción correcta de inmediato y ofrécele las modalidades correspondientes.

@@ -51,21 +51,47 @@ export async function POST(req: Request) {
         // Extraemos el token alfanumérico único del final del ID del hilo (ej: b9gP6vFLIoc)
         const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
 
-        // 🔄 [NUEVO] COMANDO DE RETURN-HANDOFF: El ingeniero devuelve el control a la IA
-        if (textoInyectado.toUpperCase().trim() === '__REACTIVAR__') {
+        // 🔄 [NUEVO] COMANDO DE RETURN-HANDOFF Y COTIZACIÓN DINÁMICA
+        const textoUpper = textoInyectado.toUpperCase().trim()
+        const matchCotizacion = textoUpper.match(/__COT_(\d+(\.\d+)?)__/) // Extrae el número, ej: 1300 o 1250.50
+
+        if (textoUpper === '__REACTIVAR__' || matchCotizacion) {
 
             const clienteReactivar = await prisma.cliente.findFirst({
-                where: { googleChatThreadId: { contains: tokenUnicoHilo } }
+                where: { googleChatThreadId: { contains: tokenUnicoHilo } },
+                include: { tickets: { orderBy: { createdAt: 'desc' }, take: 1 } } // Traemos su último ticket
             })
 
             if (clienteReactivar) {
-                // 1. Encendemos al Bot en Neon
+                let nuevoCosto = null
+                let mensajeSistemaWhatsApp = "🤖 _[SISTEMA]: El Ingeniero Julio ha registrado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y guardar tus datos de orden._\n\n¡Hola de nuevo! Ya tengo los detalles listos. Para confirmar tu espacio, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?"
+
+                // 1. Si usaste el comando __COT_PRECIO__, actualizamos el Ticket en Prisma
+                if (matchCotizacion && clienteReactivar.tickets.length > 0) {
+                    nuevoCosto = matchCotizacion[1] // Extraemos el "1300"
+                    const ticketActivo = clienteReactivar.tickets[0]
+
+                    await prisma.ticket.update({
+                        where: { id: ticketActivo.id },
+                        data: { costoReparacion: nuevoCosto }
+                    })
+
+                    // Personalizamos el mensaje al cliente con el precio que le acabas de dar
+                    mensajeSistemaWhatsApp = `🤖 _[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización por un total de *$${nuevoCosto} MXN*. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos._\n\n¡Hola de nuevo! Ya guardé la cotización del ingeniero. Para confirmar tu espacio y proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?`
+                    console.log(`💰 [TICKET UPDATED]: Costo de orden ${ticketActivo.numeroOrden} actualizado a $${nuevoCosto}`)
+                }
+
+                // 2. Encendemos al Bot en Neon
                 await prisma.cliente.update({
                     where: { id: clienteReactivar.id },
                     data: { atendidoPorBot: true }
                 })
 
-                // 2. Avisamos al cliente amigablemente que el Asistente retoma el control
+                // 3. 🧠 Inyectamos el contexto de lo que el humano habló en la memoria del bot (IMPORTANTE)
+                // Usamos fetch a tu propia base de datos si fuera necesario, pero aquí inyectamos la memoria en el caché global si lo tuvieras, 
+                // pero como configuramos el systemInstruction en el webhook de WhatsApp para leer el ticket, ¡Gemini leerá el nuevo costo automáticamente!
+
+                // 4. Avisamos al cliente amigablemente que el Asistente retoma el control
                 const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
                 await fetch(urlMeta, {
                     method: 'POST',
@@ -75,24 +101,22 @@ export async function POST(req: Request) {
                         recipient_type: 'individual',
                         to: clienteReactivar.telefono,
                         type: 'text',
-                        text: { body: "🤖 _[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos._\n\n¡Hola de nuevo! Ya tengo la información del ingeniero. ¿Te gustaría agendar una visita al laboratorio o prefieres la recolección a domicilio?" }
+                        text: { body: mensajeSistemaWhatsApp }
                     })
                 })
 
-                console.log(`🔄 [RETURN-HANDOFF]: Bot reactivado para el cliente ${clienteReactivar.telefono}`)
-
-                // 3. Confirmamos al ingeniero en Google Chat
-                return NextResponse.json({ text: '✅ Asistente Virtual reactivado. La IA se encargará de agendar y pedir los datos.' })
+                console.log(`🔄 [RETURN-HANDOFF]: Bot reactivado con éxito para el cliente ${clienteReactivar.telefono}`)
+                return NextResponse.json({ text: `✅ Asistente Virtual reactivado.${nuevoCosto ? ` Cotización guardada: $${nuevoCosto}` : ''}` })
             }
         }
 
         // 🔍 Buscamos en Neon al cliente usando el token extraído
         const clienteAsociado = await prisma.cliente.findFirst({
-            where: {
+            where: ({
                 googleChatThreadId: {
                     contains: tokenUnicoHilo
                 }
-            }
+            } as any)
         })
 
         if (!clienteAsociado) {
