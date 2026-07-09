@@ -404,6 +404,12 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
+    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES (Fuera del template string para evitar errores de serialización)
+    const folioOrden = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE';
+    const equipoRegistro = ticketMasReciente?.equipo || 'No especificado';
+    const fallaRegistro = ticketMasReciente?.fallaReportada || 'No especificada';
+    const costoPactado = ticketMasReciente?.costoReparacion ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
+
     for (let intento = 1; intento <= MAX_REINTENTOS; intento++) {
         try {
             const ai = new GoogleGenAI({ apiKey })
@@ -420,9 +426,9 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
 📋 [SISTEMA] INFO DEL TICKET ACTUAL EN NEON (Contexto en Tiempo Real):
-- Folio de Orden: ${ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'}
-- Equipo/Falla en registro: ${ticketMasReciente?.equipo || 'No especificado'} - ${ticketMasReciente?.fallaReportada || 'No especificada'}
-- Costo Total pactado por el Ingeniero Julio: ${ticketMasReciente?.costoReparacion ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar'}
+- Folio de Orden: ${folioOrden}
+- Equipo/Falla en registro: ${equipoRegistro} - ${fallaRegistro}
+- Costo Total pactado por el Ingeniero Julio: ${costoPactado}
 
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
 • OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). 
@@ -478,19 +484,17 @@ Si el cliente solo saluda, muestra el menú de 3 opciones. Si describe su proble
 
 AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS BLOQUES DE CONTROL ACTUALIZADOS CON LA INFO QUE TENGAS HASTA EL MOMENTO (SI NO LA TIENES, DÉJALA VACÍA):
 __DATOS_CRM__:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
-__DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`,
+__DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`
                 }
             })
             respuestaRaw = response.text || ''
             break
         } catch (error: any) {
-            // 📢 Imprimimos el error real en Vercel para saber exactamente qué no le gustó a Gemini
             console.error(`🔴 [GEMINI REINTENTO ${intento}/3 FALLÓ]:`, error.message)
 
             if (intento === MAX_REINTENTOS) {
                 console.error("🔴 [GEMINI CRITICAL]: Se agotaron los reintentos de la IA de forma definitiva.");
 
-                // Apagamos el bot en Neon para que tú puedas escribirle sin interferencias
                 if (clientePrisma?.id) {
                     await prisma.cliente.update({
                         where: { id: clientePrisma.id },
@@ -498,16 +502,14 @@ __DATOS_FISCALES__:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Co
                     })
                 }
 
-                // 🚨 RED DE SEGURIDAD: Te avisa en tiempo real en tu búnker que la IA se cayó
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '🚨 FALLA TÉCNICA IA',
                     `El motor de IA sufrió una anomalía y no pudo responderle al cliente de forma automática. El bot ha sido apagado por seguridad. Releva el chat de inmediato.\n\n💬 *Último mensaje cliente:* "${mensajeCliente}"`
                 )
-                return // Salimos de la función de forma controlada
+                return
             }
 
-            // Esperamos 2 segundos antes del siguiente intento
             await new Promise(resolve => setTimeout(resolve, 2000))
         }
     }
