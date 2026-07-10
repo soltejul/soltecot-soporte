@@ -34,19 +34,35 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
     if (!CHAT_WEBHOOK_URL) return;
 
     try {
+        // 1. Buscamos si el cliente ya tiene un hilo activo guardado en Neon
+        const cliente = await prisma.cliente.findFirst({
+            where: { telefono: { endsWith: telefono.slice(-10) } }
+        });
+
         let icono = '🟢';
         if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨';
         if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
         if (estatus === 'EN_REPARACION') icono = '⚡';
 
+        // 2. 🧠 LLAVE DINÁMICA: Si no hay hilo, creamos uno único con un timestamp.
+        // Si ya hay hilo guardado, reutilizamos su ID para que los mensajes se agrupen ahí.
+        const llaveAgrupacion = cliente?.googleChatThreadId
+            ? cliente.googleChatThreadId
+            : `caso_${telefono}_${Date.now()}`;
+
         // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados (La forma estricta de Google)
         const urlConHilos = new URL(CHAT_WEBHOOK_URL);
-        urlConHilos.searchParams.append('threadKey', `whatsapp_${telefono}`);
+        urlConHilos.searchParams.append('threadKey', llaveAgrupacion);
         urlConHilos.searchParams.append('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
 
-        const payloadConHilos = {
+        const payloadConHilos: any = {
             text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`
         };
+
+        // Si el ID que tenemos guardado es el nativo de Google (spaces/.../threads/...), lo inyectamos en el body
+        if (cliente?.googleChatThreadId && cliente.googleChatThreadId.includes('spaces/')) {
+            payloadConHilos.thread = { name: cliente.googleChatThreadId };
+        }
 
         console.log(`📡 [GOOGLE CHAT]: Intentando envío con hilos para el cliente ${telefono}...`);
         let respuestaGoogle = await fetch(urlConHilos.toString(), {
@@ -75,14 +91,15 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             const datosRespuesta = await respuestaGoogle.json();
             const threadNameId = datosRespuesta?.thread?.name;
 
-            if (threadNameId) {
+            // 3. Solo actualizamos la base de datos si el cliente NO tenía un hilo previo
+            if (threadNameId && !cliente?.googleChatThreadId) {
                 await prisma.cliente.updateMany({
-                    where: { telefono: { endsWith: telefono } },
+                    where: { telefono: { endsWith: telefono.slice(-10) } },
                     data: { googleChatThreadId: threadNameId }
                 });
-                console.log(`✅ [GOOGLE CHAT]: Hilo registrado con éxito en Neon: ${threadNameId}`);
+                console.log(`✅ [GOOGLE CHAT]: Hilo NUEVO registrado con éxito en Neon: ${threadNameId}`);
             } else {
-                console.log(`✅ [GOOGLE CHAT]: Mensaje plano entregado.`);
+                console.log(`✅ [GOOGLE CHAT]: Mensaje agregado al hilo existente o entregado plano.`);
             }
         } else {
             const errorTexto = await respuestaGoogle.text();

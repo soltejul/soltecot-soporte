@@ -202,6 +202,17 @@ export async function PATCH(request: Request) {
             let textoMensaje = ""
             const estadoNormalizado = nuevoEstado.replace(/[\s_]+/g, '_').toUpperCase()
 
+            // 🧠 EL CIERRE PERFECTO: Si el servicio terminó (entregado o cancelado), preparamos al cliente para el futuro
+            if (estadoNormalizado === 'ENTREGADO' || estadoNormalizado === 'RECHAZADO') {
+                await prisma.cliente.update({
+                    where: { id: ticketActualizado.clienteId },
+                    data: {
+                        atendidoPorBot: true, // Reactivamos el bot para su próxima visita en el futuro
+                        googleChatThreadId: null // Rompemos el hilo para que su próximo caso genere una tarjeta nueva
+                    }
+                })
+            }
+
             if (estadoNormalizado === "ESPERANDO_APROBACION") {
                 // 💰 MENSAJE DE PRESUPUESTO
                 textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
