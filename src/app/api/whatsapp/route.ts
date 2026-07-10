@@ -764,18 +764,19 @@ export async function POST(req: Request) {
             return new Response('Ignorado Multimedia', { status: 200 })
         }
 
-        // 🛡️ NUEVO FILTRO ANTIDUPLICADOS DE META:
-        const messageId = message.id;
-        if (messageId && processedMessagesCache.includes(messageId)) {
-            console.log(`♻️ [WEBHOOK RETRY IGNORADO]: Mensaje ID ${messageId} ya fue procesado anteriormente.`);
-            return new Response('Retry Ignorado', { status: 200 });
-        }
+        const messageId = message.id; // El identificador único global de Meta (wamid)
 
-        // Registro en caché con límite de 1000 elementos
+        // 🚨 DEDUPLICADOR DISTRIBUIDO ATÓMICO (Escudo Centralizado en Neon para Serverless)
         if (messageId) {
-            processedMessagesCache.push(messageId);
-            if (processedMessagesCache.length > 1000) {
-                processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia
+            try {
+                // Aseguramos de manera asíncrona y ultra rápida que exista una tabla temporal de logs en Postgres
+                await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
+
+                // Intentamos insertar el ID del mensaje. Si otra instancia en paralelo ya lo metió, Postgres rebotará un error de llave duplicada.
+                await prisma.$executeRaw`INSERT INTO "WebhookLog" ("id") VALUES (${messageId});`;
+            } catch (error) {
+                console.log(`♻️ [DEDUPLICADOR CENTRALIZADO]: Clon en paralelo interceptado para el mensaje ID: ${messageId}. Abortando con 200 OK.`);
+                return new Response('Retry Ignorado por Concurrencia', { status: 200 });
             }
         }
 
@@ -806,9 +807,8 @@ export async function POST(req: Request) {
                 }
             })
 
-            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET - OPTIMIZADO)
+            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET)
             if (textoNormalizado === 'reset') {
-                // 🧠 REUTILIZACIÓN: Usamos clienteExistente en lugar de volver a consultar la BD
                 if (clienteExistente) {
                     await prisma.cliente.update({
                         where: { id: clienteExistente.id },
