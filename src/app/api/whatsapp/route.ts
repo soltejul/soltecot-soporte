@@ -784,12 +784,21 @@ export async function POST(req: Request) {
                 }
             })
 
-            // 🔄 TRUCO DE DESARROLLADOR: Comando secreto
+            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET)
             if (mensajeCliente.trim().toLowerCase() === 'reset') {
+                // 1. Limpiamos la base de datos en Neon y borramos el hilo antiguo de Google Chat
                 await prisma.cliente.updateMany({
                     where: { telefono: { endsWith: telefono10Digitos } },
-                    data: { atendidoPorBot: true, googleChatThreadId: null }
+                    data: {
+                        atendidoPorBot: true,
+                        googleChatThreadId: null
+                    }
                 })
+
+                // 2. 🧠 SOLUCIÓN DE MEMORIA: Vaciamos por completo el historial en caché de este cliente
+                MEMORIA_CHAT.delete(numeroCliente)
+
+                // 3. Notificamos al usuario por WhatsApp
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 return new Response('Bot reseteado', { status: 200 })
             }
