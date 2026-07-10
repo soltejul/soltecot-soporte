@@ -378,7 +378,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             if (textoNormalizado === 'rechazar' || textoNormalizado === 'rechazo' || textoNormalizado === 'cancelar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'RECHAZADO' } })
-                const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras instalaciones.\n\n¡Gracias por tu confianza y tiempo! 🔬`
+                const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras installations.\n\n¡Gracias por tu confianza y tiempo! 🔬`
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
                 await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Cancelado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
                 return
@@ -405,7 +405,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
-    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES DE NEON
+    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES DE NEON (Filtradas por estado de preventa activa)
     const esPreventaActiva = ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION';
 
     const folioOrden = esPreventaActiva ? ticketMasReciente.numeroOrden : 'SOL-REM-PENDIENTE';
@@ -442,39 +442,35 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
 • OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
 • OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
-• OPCIÓN 3: Mantenimiento avanzado de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
+• OPCIÓN 3: Mantenimiento advanced de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
 --- 2. MODALIDADES DE ENTREGA ---
 1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) and sábados (10 AM - 2 PM).
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
 
 --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
-🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
-- Si el cliente menciona explícitamente en su mensaje que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON" (ej: el sistema dice Dell pero el usuario escribe "este es otro equipo, es una Lenovo"), debes ignorar por completo el costo total pactado y los datos del ticket actual. Trata el caso inmediatamente como un flujo nuevo desde cero ('Por cotizar'), vuelve a aplicar los rangos de precio base ($790-$2,500 MXN) para el nuevo dispositivo y solicita las modalidades de entrega.
+
+🚨 REGLA DE RENDICIÓN TAJANTE ANTE PRECIOS (CANDADO ANTIBUCLES MANDATORIO):
+- Si el cliente te solicita un costo y el valor de Neon es 'Por cotizar', la PRIMERA VEZ debes otorgarle amablemente nuestro rango de mercado ($790 a $2,500 MXN) y ofrecerle Visita o Recolección.
+- ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", "si te paso el modelo completo", "quiero saber si me conviene antes", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección, horarios, las modalidades físicas o repetir el rango de precios. 
+- En ese milisegundo debes abortar la conversación y responder EXACTAMENTE con esta frase de rendición: "Entiendo perfectamente tu postura. Para darte el costo exacto con tu modelo y revisar alternativas, en este momento voy a transferir este chat directamente con el Ingeniero Julio para que lo revise personalmente contigo en unos minutos. ¡Un momento por favor!"
+- Al final de este mensaje de rendición, incluye de forma obligatoria la etiqueta: __TRANSFERIR_HUMANO__
+
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio de forma personalizada con el cliente. Queda TERMINANTEMENTE PROHIBIDO mencionar diagnósticos gratuitos, revisiones de presupuesto o repetir los rangos de precios base ($790-$2500). Asume con total naturalidad que el costo ya está cerrado.
-- ¡PROHIBICIÓN DE CATÁLOGO GENERAL!: Si el costo ya está pactado, tienes estrictamente PROHIBIDO mostrar el menú de las 3 opciones o preguntar qué servicio requiere. Tu único rol es explicar el proceso de la modalidad elegida (Visita o Recolección), proveer dirección u horarios si el cliente los pide de forma explícita, y recolectar los datos CRM faltantes. No divagues con saludos comerciales de bienvenida.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio. Queda PROHIBIDO dar rangos base ($790-$2500) o diagnósticos gratuitos. Asume el costo y avanza al agendamiento. Tienes prohibido mostrar el catálogo de las 3 opciones.
+
+🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
+- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON" (ej: el sistema dice Dell pero el usuario escribe "este es otro equipo, es una Lenovo"), debes ignorar por completo el costo pactado del ticket actual. Trata el caso de inmediato como un flujo nuevo desde cero ('Por cotizar') y aplica el PASO 1 dando el rango base del mercado.
 
 🚨 REGLA DE PROGRESIÓN LINEAL DE AGENDA (EVITAR CAMBIOS DE MODALIDAD):
-- Si el cliente ya decidió una modalidad (ej: "visita mañana") o si ya le pediste sus datos, mantén el flujo hacia adelante. NO intentes ofrecerle cambiar a recolección si ya eligió visita. 
-- No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores. Si el cliente dice "la falla ya la expliqué", avanza directo a confirmar la cita y solicitar los datos faltantes sin insistir.
-
-🚨 REGLA DEL MENÚ INTELIGENTE:
-Si el cliente solo saluda y el costo es 'Por cotizar', muestra el menú de 3 opciones. Si describe su problema desde el inicio, NO repitas el menú completo; asume la opción correcta de inmediato y ofrécele las modalidades correspondientes.
+- Si el cliente ya decidió una modalidad o si ya le pediste sus datos, mantén el flujo hacia adelante. No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores.
 
 🚨 REGLA PARA SOPORTE TÉCNICO REMOTO (OPCIÓN 1):
-- Si el cliente elige la Opción 1, aclara de inmediato el costo fijo ($419 MXN neto) y que se usará Chrome Remote Desktop. Solicita Nombre completo, teléfono a 10 dígitos y si requerirá factura (SÍ/NO).
-- Al enviar este mensaje instructivo final, incluye obligatoriamente la etiqueta __TRANSFERIR_REMOTO__ al final del bloque.
-
-🚨 REGLA DE MANEJO DE PRECIOS Y OBJECIONES (CANDADO ANTIBUCLES):
-- PASO 1 (PRIMER CONTACTO): Si el cliente pide un costo y en la info del sistema está 'Por cotizar', NUNCA le niegues el precio. Amortigua dándole un rango de mercado ($790 a $2500 MXN), explícale brevemente que requiere revisión y ofrécele elegir Visita o Recolección.
-- PASO 2 (RENDICIÓN OBLIGATORIA): Si DESPUÉS de haberle dado el rango de precios, el cliente responde poniendo pretextos, diciendo "para saber si me conviene", preguntando si te puede dar el "modelo exacto", o preguntando CUALQUIER OTRA COSA para evitar agendar, TIENES ESTRICTAMENTE PROHIBIDO volver a ofrecer las modalidades o repetir los precios.
-- En ese milisegundo debes RENDIRTE DE INMEDIATO y responder EXACTAMENTE con esta frase empática: "Entiendo perfectamente tu postura. Para darte el costo exacto con tu modelo y revisar alternativas, en este momento voy a transferir este chat directamente con el Ingeniero Julio para que lo revise personalmente contigo en unos minutos. ¡Un momento por favor!"
-- Al final de este mensaje de rendición, incluye OBLIGATORIAMENTE la etiqueta: __TRANSFERIR_HUMANO__
+- Si elige la Opción 1, aclara el costo ($419 MXN neto), la herramienta Chrome Remote Desktop y solicita Nombre completo, teléfono a 10 dígitos y si requerirá factura (SÍ/NO). Al enviar las instrucciones finales, incluye la etiqueta __TRANSFERIR_REMOTO__ al final.
 
 🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
 
-🚨 DATOS DE APERTURA CRM: Cuando el cliente acepte cualquier servicio (físico o remoto), pide siempre: Nombre Completo, Teléfono a 10 dígitos y "¿Requerirás factura? (SÍ/NO)".
+🚨 DATOS DE APERTURA CRM: Cuando el cliente acepte cualquier servicio, pide siempre: Nombre Completo, Teléfono a 10 dígitos y "¿Requerirás factura? (SÍ/NO)".
 
 --- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
 - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
@@ -509,7 +505,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
         const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
 
-        // Soportamos extracción tanto del formato nuevo con corchetes como del viejo con guiones bajos
         const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:(.+)/i) || respuestaRaw.match(/__DATOS_CRM__:(.+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:(.+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:(.+)/i)
 
@@ -520,7 +515,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         const matchRemoteHandoff = respuestaRaw.match(/__TRANSFERIR_REMOTO__/) ||
             respuestaRaw.toLowerCase().includes('solicitud de soporte técnico remoto ha sido registrada con éxito');
 
-        // 🛡️ LIMPIADOR MÁXIMO (Regex híbrida que fulmina cualquier rastro de etiquetas viejas o nuevas)
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:.+/i, '')
             .replace(/__AGENDAR_RECOLECCION__:.+/i, '')
@@ -580,7 +574,7 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
 
             if (matchAgente) {
                 estatusLead = 'REVISION_MANUAL'
-                await dispararAlertaInmediata(telefonoParaCita, '🚨 S.O.S. AGENTE', `¡Julio, entra al chat!`)
+                await dispararAlertaInmediata(telefonoParaCita, '🚨 S.O.S. AGENTE', `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`)
             } else {
                 estatusLead = 'EN_REPARACION'
                 await dispararAlertaInmediata(telefonoParaCita, '⚡ EN_REPARACION', `¡Sesión Remota Solicitada!`)
@@ -605,7 +599,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             } else {
                 const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
                 if (resultadoAgenda.exitoso) {
-                    // 🛡️ Solo alteramos el mensaje y guardamos en Neon si la cita es NUEVA en esta ejecución
                     if (!resultadoAgenda.yaExistia) {
                         respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
                         await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
@@ -624,7 +617,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
 
             if (resultadoAgenda.exitoso) {
-                // 🛡️ Solo alteramos el mensaje y guardamos en Neon si la cita es NUEVA en esta ejecución
                 if (!resultadoAgenda.yaExistia) {
                     respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
                     await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
@@ -786,19 +778,29 @@ export async function POST(req: Request) {
 
             // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET)
             if (mensajeCliente.trim().toLowerCase() === 'reset') {
-                // 1. Limpiamos la base de datos en Neon y borramos el hilo antiguo de Google Chat
-                await prisma.cliente.updateMany({
-                    where: { telefono: { endsWith: telefono10Digitos } },
-                    data: {
-                        atendidoPorBot: true,
-                        googleChatThreadId: null
+                // Buscamos al cliente exactamente con la misma lógica omnicanal
+                const clienteAAsignar = await prisma.cliente.findFirst({
+                    where: {
+                        OR: [
+                            { telefono: numeroCliente },
+                            { telefono: telefonoLimpio },
+                            { telefono: telefono10Digitos }
+                        ]
                     }
                 })
 
-                // 2. 🧠 SOLUCIÓN DE MEMORIA: Vaciamos por completo el historial en caché de este cliente
+                if (clienteAAsignar) {
+                    // Ponemos el bot en true y fulminamos el ID del hilo antiguo
+                    await prisma.cliente.update({
+                        where: { id: clienteAAsignar.id },
+                        data: { atendidoPorBot: true, googleChatThreadId: null }
+                    })
+                    console.log(`🧼 [RESET SUCCESS]: Hilo de Google Chat borrado en Neon para ${telefono10Digitos}.`)
+                }
+
+                // Vaciamos por completo el historial en caché
                 MEMORIA_CHAT.delete(numeroCliente)
 
-                // 3. Notificamos al usuario por WhatsApp
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 return new Response('Bot reseteado', { status: 200 })
             }
