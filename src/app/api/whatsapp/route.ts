@@ -14,10 +14,6 @@ const LINK_GOOGLE_MAPS = 'https://maps.google.com/?q=19.68430387588073,-99.15870
 const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
-const MENSAJES_PROCESADOS = new Set<string>();
-
-// 🛡️ CACHÉ ANTIDUPLICADOS DE META (Usando Array para máxima compatibilidad TypeScript)
-const processedMessagesCache: string[] = [];
 
 function obtenerAuthGoogle(scopes: string[]) {
     const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
@@ -35,7 +31,6 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
     if (!CHAT_WEBHOOK_URL) return;
 
     try {
-        // 1. Búsqueda omnicanal exhaustiva del cliente
         const cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -45,20 +40,15 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             }
         });
 
-        if (!cliente) {
-            console.warn(`⚠️ [GOOGLE CHAT]: No se encontró al cliente ${telefono} en Neon para asociarle el hilo.`);
-        }
-
         let icono = '🟢';
         if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨';
         if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
         if (estatus === 'EN_REPARACION') icono = '⚡';
 
-        const textoAlerta = `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`;
+        const textoAlerta = `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde incluyendo el teléfono para asegurar el tiro, ej: @soltemsg __REACTIVAR__ ${telefono.slice(-10)} __COT_950___`;
 
         const payload: any = { text: textoAlerta };
 
-        // Si ya existe un hilo previo en la sesión, agrupamos ahí; si no, Google creará una tarjeta principal nueva
         if (cliente?.googleChatThreadId) {
             payload.thread = { name: `spaces/AAQAIpXMCK0/threads/${cliente.googleChatThreadId}` };
         }
@@ -70,9 +60,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             body: JSON.stringify(payload)
         });
 
-        // Respaldo plano por si el payload agrupado es rechazado
         if (!respuestaGoogle.ok) {
-            console.warn(`⚠️ [GOOGLE CHAT WARN]: Falló intento estructurado. Activando respaldo plano...`);
             respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json; charset=UTF-8' },
@@ -82,40 +70,31 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
 
         if (respuestaGoogle.ok) {
             const datosRespuesta = await respuestaGoogle.json();
-            console.log(`🔍 [GOOGLE RESPONSE PAYLOAD]:`, JSON.stringify(datosRespuesta));
-
-            const threadNameFull = datosRespuesta?.thread?.name; // "spaces/XXXX/threads/YYYY"
+            const threadNameFull = datosRespuesta?.thread?.name;
 
             if (threadNameFull) {
                 const threadIdCorto = threadNameFull.split('/').pop();
-
-                // 🎯 FIJACIÓN INCONDICIONAL: Forzamos la actualización sin importar lo que hubiera antes
                 if (threadIdCorto && cliente) {
                     await prisma.cliente.update({
                         where: { id: cliente.id },
                         data: { googleChatThreadId: threadIdCorto }
                     });
-                    console.log(`🚀 [NEON CRITICAL SUCCESS]: Hilo nativo '${threadIdCorto}' guardado con éxito para ${cliente.telefono}`);
+                    console.log(`🚀 [NEON CRITICAL SUCCESS]: Hilo nativo '${threadIdCorto}' guardado para ${cliente.telefono}`);
                 }
             }
-        } else {
-            const errorTexto = await respuestaGoogle.text();
-            console.error(`🔴 [GOOGLE CHAT CRITICAL]: La API de Google rechazó el mensaje. Error: ${errorTexto}`);
         }
-
     } catch (error: any) {
-        console.error('🔴 Error Crítico en dispararAlertaInmediata:', error.message);
+        console.error('🔴 Error Crítico en dispararAlertaInmediata:', error.message)
     }
 }
 
 async function registrarEnPrismaDB(telefono: string, nombre: string, mensaje: string, respuesta: string) {
     try {
-        const cliente = await prisma.cliente.upsert({
+        return await prisma.cliente.upsert({
             where: { telefono: telefono },
             update: { nombre: nombre !== 'Desconocido' && nombre !== 'Cliente WhatsApp' ? nombre : undefined },
             create: { telefono: telefono, nombre: nombre }
         })
-        return cliente
     } catch (error: any) {
         console.error('🔴 [PRISMA ERROR]:', error.message)
         return null
@@ -173,8 +152,7 @@ async function registrarFinanzasEnFacturacion(
         ]
 
         const respuestaSábana = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: "'Facturación'!A:A"
+            spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:A"
         })
 
         const filasExistentes = respuestaSábana.data.values || []
@@ -189,20 +167,14 @@ async function registrarFinanzasEnFacturacion(
 
         if (numeroDeFilaDestino !== -1) {
             await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_ID,
-                range: `'Facturación'!A${numeroDeFilaDestino}:S${numeroDeFilaDestino}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: { values: [valoresFila] }
+                spreadsheetId: SPREADSHEET_ID, range: `'Facturación'!A${numeroDeFilaDestino}:S${numeroDeFilaDestino}`,
+                valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
             })
-            console.log(`🔄 [CRM GOOGLE SHEETS]: Fila actualizada con éxito para el Folio: ${folio}`)
         } else {
             await sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_ID,
-                range: "'Facturación'!A:S",
-                valueInputOption: 'USER_ENTERED',
-                requestBody: { values: [valoresFila] }
+                spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:S",
+                valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
             })
-            console.log(`📦 [CRM GOOGLE SHEETS]: Nueva entrada creada para el Folio: ${folio}`)
         }
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
@@ -221,10 +193,9 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
         })
 
         if (listaEventos.data.items && listaEventos.data.items.length > 0) {
-            // 🧠 DETECTOR DE AUTO-RESERVA: Si el evento ya tiene el teléfono de este cliente, significa que ya es suyo.
             const yaAgendadoPorMismoCliente = listaEventos.data.items.some(evento => evento.summary?.includes(`[${telefono}]`))
             if (yaAgendadoPorMismoCliente) {
-                return { exitoso: true, eventId: listaEventos.data.items[0].id, yaExistia: true } // Bypass exitoso
+                return { exitoso: true, eventId: listaEventos.data.items[0].id, yaExistia: true }
             }
             return { exitoso: false, motivo: 'ocupado' }
         }
@@ -250,29 +221,22 @@ async function eliminarCitaEnCalendar(telefono: string) {
     try {
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
-
         const tiempoMinimo = new Date().toISOString()
 
         const listaEventos = await calendar.events.list({
-            calendarId: CALENDAR_ID,
-            q: telefono,
-            timeMin: tiempoMinimo,
-            singleEvents: true
+            calendarId: CALENDAR_ID, q: telefono, timeMin: tiempoMinimo, singleEvents: true
         })
 
         if (listaEventos.data.items && listaEventos.data.items.length > 0) {
             for (const evento of listaEventos.data.items) {
                 if (evento.id && evento.summary?.includes('Recolección')) {
-                    await calendar.events.delete({
-                        calendarId: CALENDAR_ID,
-                        eventId: evento.id
-                    })
-                    console.log(`🗑️ [GOOGLE CALENDAR]: Evento cancelado exitosamente para el teléfono: ${telefono}`)
+                    await calendar.events.delete({ calendarId: CALENDAR_ID, eventId: evento.id })
+                    console.log(`🗑️ [GOOGLE CALENDAR]: Evento cancelado para: ${telefono}`)
                 }
             }
         }
     } catch (error: any) {
-        console.error('🔴 Error de comunicación al eliminar en Calendar:', error.message)
+        console.error('🔴 Error en Calendar:', error.message)
     }
 }
 
@@ -321,24 +285,16 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            // 1. Corremos el upsert primero para garantizar que el cliente exista de forma atómica
             const clienteExpress = await prisma.cliente.upsert({
                 where: { telefono: telefono10Digitos },
-                update: {}, // Si ya existe, no le cambies nada
-                create: {
-                    telefono: telefono10Digitos,
-                    nombre: 'Cliente WhatsApp',
-                    atendidoPorBot: true
-                }
+                update: {},
+                create: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: true }
             })
 
-            // 2. Declaramos las variables UNA SOLA VEZ usando la información fresca del upsert
             let clienteIdParaTicket = clienteExpress.id
             let nombreClienteEstetico = clienteExpress.nombre && clienteExpress.nombre !== 'Desconocido' && clienteExpress.nombre !== 'Cliente WhatsApp'
-                ? clienteExpress.nombre
-                : 'Cliente WhatsApp'
+                ? clienteExpress.nombre : 'Cliente WhatsApp'
 
-            // 3. Continuamos con la lógica del ticket activo habitual...
             let ticketActivo = ticketMasReciente
             if (!ticketActivo || ticketActivo.estado === 'ENTREGADO' || ticketActivo.estado === 'RECHAZADO') {
                 const ultimoTicketGlobal = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
@@ -349,12 +305,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                 ticketActivo = await prisma.ticket.create({
                     data: {
-                        numeroOrden: nuevoFolio,
-                        equipo: 'Soporte Técnico Remoto',
-                        fallaReportada: 'Instalación de Software / Optimización Express',
-                        clienteId: clienteIdParaTicket!,
-                        estado: 'EN_REPARACION',
-                        notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`
+                        numeroOrden: nuevoFolio, equipo: 'Soporte Técnico Remoto', fallaReportada: 'Instalación de Software / Optimización Express',
+                        clienteId: clienteIdParaTicket!, estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`
                     }
                 })
             } else {
@@ -381,7 +333,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             )
 
             await registrarHistorialEnHoja1(telefono10Digitos, mensajeCliente, mensajeConexion, 'EN_REPARACION', nombreClienteEstetico, 'Soporte Remoto', 'Código de Acceso')
-
             const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
             await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Folio:* ${ticketActivo.numeroOrden}\n👉 *CÓDIGO:* ${codigoFormateado}\n\nEntra desde tu MacNeo a: https://remotedesktop.google.com/support`)
             return
@@ -413,28 +364,23 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
     const tieneHandoffPrevio = historial.some(h =>
         h.parts?.some((p: any) =>
-            p.text?.includes('transferir este chat') ||
-            p.text?.includes('Ingeniero Julio') ||
-            p.text?.includes('__TRANSFERIR_HUMANO__')
+            p.text?.includes('transferir este chat') || p.text?.includes('Ingeniero Julio') || p.text?.includes('__TRANSFERIR_HUMANO__')
         )
     )
 
     if (tieneHandoffPrevio) {
-        console.log(`🧼 [SANEAMIENTO MEMORIA]: Detectado handoff previo en el historial. Limpiando fantasmas para el cliente ${telefono10Digitos}.`)
+        console.log(`🧼 [SANEAMIENTO MEMORIA]: Detectado handoff previo en el historial. Limpiando fantasmas para ${telefono10Digitos}.`)
         historial = []
     }
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
     if (historial.length > 12) historial = historial.slice(-12)
 
-    // 📋 EXTRACCIÓN LIMPIA DE VARIABLES DE NEON (Filtradas por estado de preventa activa)
     const esPreventaActiva = ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION';
-
     const folioOrden = esPreventaActiva ? ticketMasReciente.numeroOrden : 'SOL-REM-PENDIENTE';
     const equipoRegistro = esPreventaActiva ? ticketMasReciente.equipo : 'No especificado';
-    const fallaRegistro = esPreventaActiva ? ticketMasReciente.fallaReportada : 'No especificada';
+    const fallaRegistro = esPreventaActiva ? ticketMasReciente.fallaReportada : 'No específica';
     const costoPactado = (esPreventaActiva && ticketMasReciente.costoReparacion)
-        ? `$${ticketMasReciente.costoReparacion} MXN`
-        : 'Por cotizar';
+        ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
 
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
@@ -478,7 +424,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - Al final de este mensaje de rendición, incluye de forma obligatoria la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio. Queda PROHIBIDO dar rangos base ($790-$2500) o diagnósticos gratuitos. Asume el costo y avanza al agendamiento. Tienes prohibido mostrar el catálogo de las 3 opciones.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio y el cliente ya conoce el costo. Queda PROHIBIDO dar rangos base ($790-$2500) o diagnósticos gratuitos. Asume el costo, no lo repitas de forma redundante y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio. Tienes prohibido mostrar el catálogo de las 3 opciones.
 
 🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
 - Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON" (ej: el sistema dice Dell pero el usuario escribe "este es otro equipo, es una Lenovo"), debes ignorar por completo el costo pactado del ticket actual. Trata el caso de inmediato como un flujo nuevo desde cero ('Por cotizar') y aplica el PASO 1 dando el rango base del mercado.
@@ -506,7 +452,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             break
         } catch (error: any) {
             console.error(`🔴 [GEMINI REINTENTO ${intento}/3 FALLÓ]:`, error.message)
-
             if (intento === MAX_REINTENTOS) {
                 if (clientePrisma?.id) {
                     await prisma.cliente.update({ where: { id: clientePrisma.id }, data: { atendidoPorBot: false } })
@@ -537,16 +482,9 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             respuestaRaw.toLowerCase().includes('solicitud de soporte técnico remoto ha sido registrada con éxito');
 
         let respuestaWhatsApp = respuestaRaw
-            .replace(/__AGENDAR_VISITA__:.+/i, '')
-            .replace(/__AGENDAR_RECOLECCION__:.+/i, '')
-            .replace(/__DIRECCION_CLIENTE__:.+/i, '')
-            .replace(/\[DATA_CRM\]:.+/i, '')
-            .replace(/__DATOS_CRM__:.+/i, '')
-            .replace(/\[DATA_FISCAL\]:.+/i, '')
-            .replace(/_*DATOS_FISCAL(ES)?_*:.+/i, '')
-            .replace(/__TRANSFERIR_HUMANO__/gi, '')
-            .replace(/__TRANSFERIR_REMOTO__/gi, '')
-            .trim()
+            .replace(/__AGENDAR_VISITA__:.+/i, '').replace(/__AGENDAR_RECOLECCION__:.+/i, '').replace(/__DIRECCION_CLIENTE__:.+/i, '')
+            .replace(/\[DATA_CRM\]:.+/i, '').replace(/__DATOS_CRM__:.+/i, '').replace(/\[DATA_FISCAL\]:.+/i, '').replace(/_*DATOS_FISCAL(ES)?_*:.+/i, '')
+            .replace(/__TRANSFERIR_HUMANO__/gi, '').replace(/__TRANSFERIR_REMOTO__/gi, '').trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
         if (matchCrm) {
@@ -581,7 +519,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
 
         if (dispositivoCrm.toLowerCase() === 'dispositivo' || dispositivoCrm.toLowerCase() === 'no especificado') dispositivoCrm = 'PC/Laptop'
         if (fallaCrm.toLowerCase() === 'falla' || fallaCrm.toLowerCase() === 'no especificada') fallaCrm = 'Soporte General'
-
         if (reqFactura.includes('REQUIEREFACTURA') || reqFactura !== 'SI') reqFactura = 'NO'
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
@@ -589,12 +526,8 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         if (matchAgente || matchRemoteHandoff) {
             await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
-                update: { atendidoPorBot: false }, // Si ya existe, lo silenciamos
-                create: {
-                    telefono: telefonoParaCita,
-                    nombre: nombreCrm,
-                    atendidoPorBot: false
-                }
+                update: { atendidoPorBot: false },
+                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
             })
 
             if (matchAgente) {
@@ -675,6 +608,8 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             }
         }
 
+        historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
+        if (historial.length > 12) historial = historial.slice(-12)
         MEMORIA_CHAT.set(numeroCliente, historial)
 
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
@@ -710,7 +645,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
     }
 }
 
-// 🌐 MÉTODO GET: Validador Oficial de Webhooks exigido por Meta
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
@@ -734,12 +668,10 @@ export async function GET(req: Request) {
     }
 }
 
-// 📥 MÉTODO POST: Receptor de Mensajes de WhatsApp desde la Nube de Meta
 export async function POST(req: Request) {
     try {
         const body = await req.json()
 
-        // 🛡️ Filtro 1: Validamos que el payload provenga del ecosistema comercial de WhatsApp
         if (body.object !== 'whatsapp_business_account') {
             return new Response('Ignorado', { status: 200 })
         }
@@ -748,27 +680,21 @@ export async function POST(req: Request) {
         const change = entry?.changes?.[0]
         const value = change?.value
 
-        // 🛡️ Filtro 2: Ignorar si es una actualización de estatus o está vacío
         if (!value || !value.messages || value.messages.length === 0) {
             return new Response('Ignorado Estatus', { status: 200 })
         }
 
         const message = value.messages[0]
 
-        // 🛡️ Filtro 3: Validamos que sea exclusivamente un mensaje de texto
         if (message.type !== 'text') {
             return new Response('Ignorado Multimedia', { status: 200 })
         }
 
-        const messageId = message.id; // El identificador único global de Meta (wamid)
+        const messageId = message.id;
 
-        // 🚨 DEDUPLICADOR DISTRIBUIDO ATÓMICO (Escudo Centralizado en Neon para Serverless)
         if (messageId) {
             try {
-                // Aseguramos de manera asíncrona y ultra rápida que exista una tabla temporal de logs en Postgres
                 await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
-
-                // Intentamos insertar el ID del mensaje. Si otra instancia en paralelo ya lo metió, Postgres rebotará un error de llave duplicada.
                 await prisma.$executeRaw`INSERT INTO "WebhookLog" ("id") VALUES (${messageId});`;
             } catch (error) {
                 console.log(`♻️ [DEDUPLICADOR CENTRALIZADO]: Clon en paralelo interceptado para el mensaje ID: ${messageId}. Abortando con 200 OK.`);
@@ -777,9 +703,8 @@ export async function POST(req: Request) {
         }
 
         const mensajeCliente = message.text?.body
-        const numeroCliente = message.from // Cadena limpia (ej: "525546088200")
+        const numeroCliente = message.from
 
-        // 🛡️ Filtro 4: Evitamos el eco infinito si nos escribe el mismo número del bot
         if (numeroCliente.includes('5546088200')) {
             return new Response('Eco Ignorado', { status: 200 })
         }
@@ -787,12 +712,10 @@ export async function POST(req: Request) {
         if (mensajeCliente && numeroCliente) {
             console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
 
-            // Sanitización de variables e hilos
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
             const textoNormalizado = mensajeCliente.trim().toLowerCase()
 
-            // 🔍 QUERY ÚNICO A NEON: Traemos al cliente una sola vez para todo el flujo
             const clienteExistente = await prisma.cliente.findFirst({
                 where: {
                     OR: [
@@ -803,7 +726,6 @@ export async function POST(req: Request) {
                 }
             })
 
-            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET)
             if (textoNormalizado === 'reset') {
                 if (clienteExistente) {
                     await prisma.cliente.update({
@@ -812,28 +734,21 @@ export async function POST(req: Request) {
                     })
                     console.log(`🧼 [RESET SUCCESS]: Hilo de Google Chat borrado en Neon para ${telefono10Digitos}.`)
                 }
-
-                // Vaciamos por completo el historial en caché de la IA
                 MEMORIA_CHAT.delete(numeroCliente)
-
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 return new Response('Bot reseteado', { status: 200 })
             }
 
-            // 👤 HUMAN TAKEOVER
             if (clienteExistente && clienteExistente.atendidoPorBot === false) {
                 console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
-
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '📥 ATENCIÓN MANUAL',
-                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"\n\n👉 Respóndele directamente a este hilo para chatear con el cliente.`
+                    `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"`
                 )
-
                 return new Response('Atendido de forma manual', { status: 200 })
             }
 
-            // 🤖 LÓGICA DE IA
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 
