@@ -333,8 +333,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             )
 
             await registrarHistorialEnHoja1(telefono10Digitos, mensajeCliente, mensajeConexion, 'EN_REPARACION', nombreClienteEstetico, 'Soporte Remoto', 'Código de Acceso')
-            const codigoFormateado = `${codigoEncontrado.slice(0, 4)}-${codigoEncontrado.slice(4, 8)}-${codigoEncontrado.slice(8, 12)}`
-            await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `🖥️ *SESIÓN REMOTA EN ESPERA*\n• *Folio:* ${ticketActivo.numeroOrden}\n👉 *CÓDIGO:* ${codigoFormateado}\n\nEntra desde tu MacNeo a: https://remotedesktop.google.com/support`)
             return
         }
 
@@ -363,9 +361,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
     const tieneHandoffPrevio = historial.some(h =>
-        h.parts?.some((p: any) =>
-            p.text?.includes('transferir este chat') || p.text?.includes('Ingeniero Julio') || p.text?.includes('__TRANSFERIR_HUMANO__')
-        )
+        h.parts?.some((p: any) => p.text?.includes('__TRANSFERIR_HUMANO__'))
     )
 
     if (tieneHandoffPrevio) {
@@ -378,7 +374,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const esPreventaActiva = ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION';
     const folioOrden = esPreventaActiva ? ticketMasReciente.numeroOrden : 'SOL-REM-PENDIENTE';
     const equipoRegistro = esPreventaActiva ? ticketMasReciente.equipo : 'No especificado';
-    const fallaRegistro = esPreventaActiva ? ticketMasReciente.fallaReportada : 'No específica';
+    const fallaRegistro = esPreventaActiva ? ticketMasReciente.fallaReportada : 'No especificada';
     const costoPactado = (esPreventaActiva && ticketMasReciente.costoReparacion)
         ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
 
@@ -419,25 +415,20 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
 🚨 REGLA DE RENDICIÓN TAJANTE ANTE PRECIOS (CANDADO ANTIBUCLES MANDATORIO):
 - Si el cliente te solicita un costo y el valor de Neon es 'Por cotizar', la PRIMERA VEZ debes otorgarle amablemente nuestro rango de mercado ($790 a $2,500 MXN) y ofrecerle Visita o Recolección.
-- ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", "si te paso el modelo completo", "quiero saber si me conviene antes", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección, horarios, las modalidades físicas o repetir el rango de precios. 
-- En ese milisegundo debes abortar la conversación y responder EXACTAMENTE con esta frase de rendición: "Entiendo perfectamente tu postura. Para darte el costo exacto con tu modelo y revisar alternativas, en este momento voy a transferir este chat directamente con el Ingeniero Julio para que lo revise personalmente contigo en unos minutos. ¡Un momento por favor!"
-- Al final de este mensaje de rendición, incluye de forma obligatoria la etiqueta: __TRANSFERIR_HUMANO__
+- ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
 - Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio y el cliente ya conoce el costo. Queda PROHIBIDO dar rangos base ($790-$2500) o diagnósticos gratuitos. Asume el costo, no lo repitas de forma redundante y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio. Tienes prohibido mostrar el catálogo de las 3 opciones.
 
+🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
+- Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (si es recolección) y si requerirá factura (SÍ/NO).
+- ¡FASE DE RECOPILACIÓN FISCAL!: Si el usuario responde explícitamente "SÍ" o aporta datos de facturación, TIENES ESTRICTAMENTE PROHIBIDO cerrar la cita o dar el mensaje final de confirmación. En su lugar, debes responder solicitándole de forma cordial y obligatoria los siguientes datos: 1) RFC, 2) Nombre Fiscal o Razón Social, 3) Código Postal Fiscal, 4) Régimen Fiscal, 5) Uso de CFDI y 6) Correo electrónico. 
+- Solo cuando el cliente te proporcione esos 6 datos fiscales, podrás dar por concluida la cita y emitir el mensaje final de éxito. Mientras no los provea, mantén el chat enfocado en obtenerlos.
+
 🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
-- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON" (ej: el sistema dice Dell pero el usuario escribe "este es otro equipo, es una Lenovo"), debes ignorar por completo el costo pactado del ticket actual. Trata el caso de inmediato como un flujo nuevo desde cero ('Por cotizar') y aplica el PASO 1 dando el rango base del mercado.
-
-🚨 REGLA DE PROGRESIÓN LINEAL DE AGENDA (EVITAR CAMBIOS DE MODALIDAD):
-- Si el cliente ya decidió una modalidad o si ya le pediste sus datos, mantén el flujo hacia adelante. No le vuelvas a preguntar la falla si ya la explicó en mensajes anteriores.
-
-🚨 REGLA PARA SOPORTE TÉCNICO REMOTO (OPCIÓN 1):
-- Si elige la Opción 1, aclara el costo ($419 MXN neto), la herramienta Chrome Remote Desktop y solicita Nombre completo, teléfono a 10 dígitos y si requerirá factura (SÍ/NO). Al enviar las instrucciones finales, incluye la etiqueta __TRANSFERIR_REMOTO__ al final.
+- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON", trata el caso de inmediato como un flujo nuevo desde cero ('Por cotizar') y aplica el PASO 1 dando el rango base del mercado.
 
 🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
-
-🚨 DATOS DE APERTURA CRM: Cuando el cliente acepte cualquier servicio, pide siempre: Nombre Completo, Teléfono a 10 dígitos y "¿Requerirás factura? (SÍ/NO)".
 
 --- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
 - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
@@ -467,24 +458,29 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         let estatusLead = 'PROSPECTO'
         let tipoSoporteCalculado = 'Remoto'
 
+        // 🧠 INTERCEPTOR DE HANDOFF ULTRA-ESTRICTO: Solo reacciona si el bot explícitamente imprimió la etiqueta de rendición
+        const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
+        const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
+
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
-        const matchDireccion = respuestaRaw.match(/__DIRECCION_CLIENTE__:(.+)/)
+        const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:(.+)/)
 
         const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:(.+)/i) || respuestaRaw.match(/__DATOS_CRM__:(.+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:(.+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:(.+)/i)
 
-        const matchAgente = respuestaRaw.match(/__TRANSFERIR_HUMANO__/) ||
-            respuestaRaw.toLowerCase().includes('transferir este chat') ||
-            respuestaRaw.toLowerCase().includes('ingeniero julio');
-
-        const matchRemoteHandoff = respuestaRaw.match(/__TRANSFERIR_REMOTO__/) ||
-            respuestaRaw.toLowerCase().includes('solicitud de soporte técnico remoto ha sido registrada con éxito');
-
+        // 🛡️ LIMPIEZA TOTAL DE INFRAESTRUCTURA VISUAL (Evita fugas de tags en WhatsApp)
         let respuestaWhatsApp = respuestaRaw
-            .replace(/__AGENDAR_VISITA__:.+/i, '').replace(/__AGENDAR_RECOLECCION__:.+/i, '').replace(/__DIRECCION_CLIENTE__:.+/i, '')
-            .replace(/\[DATA_CRM\]:.+/i, '').replace(/__DATOS_CRM__:.+/i, '').replace(/\[DATA_FISCAL\]:.+/i, '').replace(/_*DATOS_FISCAL(ES)?_*:.+/i, '')
-            .replace(/__TRANSFERIR_HUMANO__/gi, '').replace(/__TRANSFERIR_REMOTO__/gi, '').trim()
+            .replace(/__AGENDAR_VISITA__:[^\n]*/gi, '')
+            .replace(/__AGENDAR_RECOLECCION__:[^\n]*/gi, '')
+            .replace(/_?_?DIRECCION_CLIENTE_?_?:[^\n]*/gi, '')
+            .replace(/\[DATA_CRM\]:[^\n]*/gi, '')
+            .replace(/__DATOS_CRM__:[^\n]*/gi, '')
+            .replace(/\[DATA_FISCAL\]:[^\n]*/gi, '')
+            .replace(/_*DATOS_FISCAL(ES)?_*:[^\n]*/gi, '')
+            .replace(/__TRANSFERIR_HUMANO__/gi, '')
+            .replace(/__TRANSFERIR_REMOTO__/gi, '')
+            .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
         if (matchCrm) {
@@ -501,7 +497,7 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
             if (camposFiscales[0]) reqFactura = camposFiscales[0].trim().toUpperCase()
             if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
             if (camposFiscales[2]) nombreFiscalCrm = camposFiscales[2].trim().toUpperCase()
-            if (camposFiscales[3]) cpCrm = camposFiscales[3].trim()
+            if (camposFiscales[3]) cpCrm = camposFiscales[cpCrm ? 3 : 3].trim()
             if (camposFiscales[4]) regimenCrm = camposFiscales[4].trim()
             if (camposFiscales[5]) usoCfdiCrm = camposFiscales[5].trim()
             if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
