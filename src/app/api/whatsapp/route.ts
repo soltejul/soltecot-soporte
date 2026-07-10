@@ -14,6 +14,7 @@ const LINK_GOOGLE_MAPS = 'https://maps.google.com/?q=19.68430387588073,-99.15870
 const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
+const MENSAJES_PROCESADOS = new Set<string>();
 
 // 🛡️ CACHÉ ANTIDUPLICADOS DE META (Usando Array para máxima compatibilidad TypeScript)
 const processedMessagesCache: string[] = [];
@@ -764,18 +765,17 @@ export async function POST(req: Request) {
         }
 
         // 🛡️ NUEVO FILTRO ANTIDUPLICADOS DE META:
-        // Evita que un webhook reintentado por Meta active todo el proceso nuevamente.
         const messageId = message.id;
         if (messageId && processedMessagesCache.includes(messageId)) {
             console.log(`♻️ [WEBHOOK RETRY IGNORADO]: Mensaje ID ${messageId} ya fue procesado anteriormente.`);
             return new Response('Retry Ignorado', { status: 200 });
         }
 
-        // Si es un mensaje nuevo, lo agregamos al caché (limitamos el caché a 1000 IDs para no saturar memoria)
+        // Registro en caché con límite de 1000 elementos
         if (messageId) {
             processedMessagesCache.push(messageId);
             if (processedMessagesCache.length > 1000) {
-                processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia y nativa
+                processedMessagesCache.shift(); // 🧠 Remueve el elemento más antiguo de forma limpia
             }
         }
 
@@ -790,10 +790,12 @@ export async function POST(req: Request) {
         if (mensajeCliente && numeroCliente) {
             console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
 
-            // 🛑 INTERCEPTOR DE HANDOFF
+            // Sanitización de variables e hilos
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
+            const textoNormalizado = mensajeCliente.trim().toLowerCase()
 
+            // 🔍 QUERY ÚNICO A NEON: Traemos al cliente una sola vez para todo el flujo
             const clienteExistente = await prisma.cliente.findFirst({
                 where: {
                     OR: [
@@ -804,29 +806,18 @@ export async function POST(req: Request) {
                 }
             })
 
-            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET)
-            if (mensajeCliente.trim().toLowerCase() === 'reset') {
-                // Buscamos al cliente exactamente con la misma lógica omnicanal
-                const clienteAAsignar = await prisma.cliente.findFirst({
-                    where: {
-                        OR: [
-                            { telefono: numeroCliente },
-                            { telefono: telefonoLimpio },
-                            { telefono: telefono10Digitos }
-                        ]
-                    }
-                })
-
-                if (clienteAAsignar) {
-                    // Ponemos el bot en true y fulminamos el ID del hilo antiguo
+            // 🔄 INTERCEPTOR DE RE-ACTIVACIÓN (RESET - OPTIMIZADO)
+            if (textoNormalizado === 'reset') {
+                // 🧠 REUTILIZACIÓN: Usamos clienteExistente en lugar de volver a consultar la BD
+                if (clienteExistente) {
                     await prisma.cliente.update({
-                        where: { id: clienteAAsignar.id },
+                        where: { id: clienteExistente.id },
                         data: { atendidoPorBot: true, googleChatThreadId: null }
                     })
                     console.log(`🧼 [RESET SUCCESS]: Hilo de Google Chat borrado en Neon para ${telefono10Digitos}.`)
                 }
 
-                // Vaciamos por completo el historial en caché
+                // Vaciamos por completo el historial en caché de la IA
                 MEMORIA_CHAT.delete(numeroCliente)
 
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
@@ -834,7 +825,7 @@ export async function POST(req: Request) {
             }
 
             // 👤 HUMAN TAKEOVER
-            if (clienteExistente && (clienteExistente as any).atendidoPorBot === false) {
+            if (clienteExistente && clienteExistente.atendidoPorBot === false) {
                 console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
 
                 await dispararAlertaInmediata(
