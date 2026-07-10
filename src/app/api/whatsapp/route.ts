@@ -484,6 +484,24 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 • OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
 • OPCIÓN 3: Mantenimiento advanced de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
+🚨 PROTOCOLO EXCLUSIVO PARA OPCIÓN 1 (SOPORTE TÉCNICO REMOTO):
+1. Si el cliente elige Soporte Remoto, avísale que el costo es de $419 MXN neto y recopila únicamente su Nombre Completo y si requiere Factura (SÍ/NO). (NUNCA pidas teléfono ni dirección).
+2. En el instante en que el cliente te proporcione su nombre y confirmación de factura, DEBES responderle con las instrucciones exactas de conexión y generar el cierre:
+
+"¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo y solucionar la falla, sigue estos sencillos pasos:
+
+1. Desde la computadora que tiene el problema, ingresa a: **remotedesktop.google.com/support**
+2. En la sección 'Asistencia remota', haz clic en el botón azul de descarga para instalar la herramienta (si es la primera vez).
+3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un código numérico de 12 dígitos.
+4. Escríbeme ese código aquí abajo para que el ingeniero tome el control de tu pantalla de inmediato."
+
+3. Al final de ese mismo mensaje, es ABSOLUTAMENTE OBLIGATORIO incluir la plantilla de anclaje de salida usando la FECHA Y HORA ACTUAL EXACTA del chat (ya que el servicio es inmediato) estructurada de la siguiente manera:
+
+__AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
+_DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
+[DATA_CRM]:Nombre Completo|PC/Laptop|Soporte Remoto Software|TelefonoDe10Digitos
+[DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo
+
 --- 2. MODALIDADES DE ENTREGA ---
 1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) and sábados (10 AM - 2 PM).
 2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
@@ -511,8 +529,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
 - Es MANDATORIO que cuando confirmes la cita final, coloques las etiquetas estructuradas al final del mensaje de texto exacto.
 
---- 5. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
-Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto:
+- 5. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
+Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto.
+
+🚨 REGLA CRUCIAL DE ZONA HORARIA: Usa estrictamente la hora local de México (formato de 24 horas) tanto en la etiqueta ISO como en el boleto visual. NO sumes ni restes horas para intentar convertir a UTC. Si el cliente agenda a las 2:00 PM, la etiqueta DEBE ser T14:00:00 y el boleto visual DEBE decir 02:00 p.m.
+
 __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_VISITA__: según corresponda)
 _DIRECCION_CLIENTE_:Dirección Completa recopilada
 [DATA_CRM]:Nombre Completo|Dispositivo|Falla|TelefonoDe10Digitos
