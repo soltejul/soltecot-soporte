@@ -185,11 +185,20 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
     try {
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
-        const inicioCita = new Date(fechaIso)
+
+        // 🇲🇽 SELLO HORARIO MÉXICO: Si la fecha no trae offset, le inyectamos estrictamente el GMT-6
+        const fechaConOffset = fechaIso.includes('-06:00') || fechaIso.includes('Z')
+            ? fechaIso
+            : `${fechaIso}-06:00`;
+
+        const inicioCita = new Date(fechaConOffset)
         const finCita = new Date(inicioCita.getTime() + (60 * 60 * 1000))
 
         const listaEventos = await calendar.events.list({
-            calendarId: CALENDAR_ID, timeMin: inicioCita.toISOString(), timeMax: finCita.toISOString(), singleEvents: true,
+            calendarId: CALENDAR_ID,
+            timeMin: inicioCita.toISOString(),
+            timeMax: finCita.toISOString(),
+            singleEvents: true,
         })
 
         if (listaEventos.data.items && listaEventos.data.items.length > 0) {
@@ -207,12 +216,13 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
             requestBody: {
                 summary: `${prefijo} Soltecot_ [${telefono}]`,
                 description: `Contacto: ${telefono}\nSolicitud: ${mensajeCliente}`,
-                start: { dateTime: inicioCita.toISOString(), timeZone: 'America/Mexico_City' },
-                end: { dateTime: finCita.toISOString(), timeZone: 'America/Mexico_City' },
+                start: { dateTime: inicioCita.toISOString() }, // Google Calendar lee el string ISO absoluto con Z
+                end: { dateTime: finCita.toISOString() },
             },
         })
         return { exitoso: true, eventId: nuevoEvento.data.id, yaExistia: false }
     } catch (error: any) {
+        console.error('🔴 [CALENDAR CRITICAL ERROR]:', error.message);
         return { exitoso: false, motivo: 'error' }
     }
 }
@@ -360,6 +370,19 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     }
 
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
+
+    // 🧠 RECONSTRUCTOR DE MEMORIA SERVERLESS (Shield Anti-Amnesia)
+    if (historial.length === 0 && clientePrisma) {
+        console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Reconstruyendo contexto para ${telefono10Digitos}`);
+        if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
+            historial.push({ role: 'user', parts: [{ text: 'Continuar con mi orden anterior' }] });
+            historial.push({
+                role: 'model',
+                parts: [{ text: `¡Hola de nuevo! Ya tengo lista la cotización autorizada por el Ingeniero Julio por un total de $${ticketMasReciente.costoReparacion} MXN. Para proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?` }]
+            });
+        }
+    }
+
     const tieneHandoffPrevio = historial.some(h =>
         h.parts?.some((p: any) => p.text?.includes('__TRANSFERIR_HUMANO__'))
     )
@@ -418,7 +441,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es diferente a 'Por cotizar', significa que el humano ya cerró el precio y el cliente ya conoce el costo. Queda PROHIBIDO dar rangos base ($790-$2500) o diagnósticos gratuitos. Asume el costo, no lo repitas de forma redundante y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio. Tienes prohibido mostrar el catálogo de las 3 opciones.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN en cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
 
 🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
 - Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (si es recolección) y si requerirá factura (SÍ/NO).
@@ -426,17 +449,20 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - Solo cuando el cliente te proporcione esos 6 datos fiscales, podrás dar por concluida la cita y emitir el mensaje final de éxito. Mientras no los provea, mantén el chat enfocado en obtenerlos.
 
 🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
-- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON", trata el caso de inmediato como un flujo nuevo desde cero ('Por cotizar') y aplica el PASO 1 dando el rango base del mercado.
+- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON", trata el caso de inmediato como un flujo nuevo desde cero y aplica el rango base del mercado.
 
 🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
 
 --- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
 - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
-- Usa estas etiquetas de agenda una sola vez por flujo según corresponda: __AGENDAR_VISITA__: / __AGENDAR_RECOLECCION__: / __DIRECCION_CLIENTE__:
+- Es MANDATORIO que cuando confirmes la cita final, coloques las etiquetas estructuradas al final del mensaje de texto exacto.
 
-AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS BLOQUES DE CONTROL EXACTAMENTE CON ESTE FORMATO PARA NUESTRO PROCESADOR CRM:
-[DATA_CRM]:Nombre|Dispositivo|Falla|TelefonoDe10Digitos
-[DATA_FISCAL]:RequiereFactura(SI/NO)|RFC|NombreFiscal|CP|Regimen|UsoCFDI|Correo`
+--- 5. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
+Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto:
+__AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_VISITA__: según corresponda)
+_DIRECCION_CLIENTE_:Dirección Completa recopilada
+[DATA_CRM]:Nombre Completo|Dispositivo|Falla|TelefonoDe10Digitos
+[DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo`
                 }
             })
             respuestaRaw = response.text || ''
@@ -458,18 +484,17 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         let estatusLead = 'PROSPECTO'
         let tipoSoporteCalculado = 'Remoto'
 
-        // 🧠 INTERCEPTOR DE HANDOFF ULTRA-ESTRICTO: Solo reacciona si el bot explícitamente imprimió la etiqueta de rendición
         const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
         const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
 
-        const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:(.+)/)
-        const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:(.+)/)
-        const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:(.+)/)
+        // Regex Case Insensitive y tolerantes a espacios para máxima captura de ganchos de control
+        const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:\s*([^\n\r]+)/i)
+        const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:\s*([^\n\r]+)/i)
+        const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:\s*([^\n\r]+)/i)
 
-        const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:(.+)/i) || respuestaRaw.match(/__DATOS_CRM__:(.+)/i)
-        const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:(.+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:(.+)/i)
+        const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/__DATOS_CRM__:\s*([^\n\r]+)/i)
+        const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:\s*([^\n\r]+)/i)
 
-        // 🛡️ LIMPIEZA TOTAL DE INFRAESTRUCTURA VISUAL (Evita fugas de tags en WhatsApp)
         let respuestaWhatsApp = respuestaRaw
             .replace(/__AGENDAR_VISITA__:[^\n]*/gi, '')
             .replace(/__AGENDAR_RECOLECCION__:[^\n]*/gi, '')
@@ -494,10 +519,14 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
         if (matchFiscal) {
             const camposFiscales = matchFiscal[1].split('|')
-            if (camposFiscales[0]) reqFactura = camposFiscales[0].trim().toUpperCase()
+            if (camposFiscales[0]) {
+                const valorRawFactura = camposFiscales[0].trim().toUpperCase()
+                // FLEXIBILIDAD ABSOLUTA: Si el bloque lleva "SI", "SÍ" o "REQ", se marca afirmativo
+                reqFactura = (valorRawFactura.includes('SI') || valorRawFactura.includes('SÍ') || valorRawFactura.includes('REQ')) ? 'SI' : 'NO'
+            }
             if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
             if (camposFiscales[2]) nombreFiscalCrm = camposFiscales[2].trim().toUpperCase()
-            if (camposFiscales[3]) cpCrm = camposFiscales[cpCrm ? 3 : 3].trim()
+            if (camposFiscales[3]) cpCrm = camposFiscales[3].trim()
             if (camposFiscales[4]) regimenCrm = camposFiscales[4].trim()
             if (camposFiscales[5]) usoCfdiCrm = camposFiscales[5].trim()
             if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
@@ -515,7 +544,6 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
 
         if (dispositivoCrm.toLowerCase() === 'dispositivo' || dispositivoCrm.toLowerCase() === 'no especificado') dispositivoCrm = 'PC/Laptop'
         if (fallaCrm.toLowerCase() === 'falla' || fallaCrm.toLowerCase() === 'no especificada') fallaCrm = 'Soporte General'
-        if (reqFactura.includes('REQUIEREFACTURA') || reqFactura !== 'SI') reqFactura = 'NO'
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
@@ -568,21 +596,26 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
 
         if (matchRecoleccion) {
             const fechaExtraida = matchRecoleccion[1].trim()
+            const fechaParseada = new Date(fechaExtraida.includes('-06:00') ? fechaExtraida : `${fechaExtraida}-06:00`)
+
             const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
 
             if (resultadoAgenda.exitoso) {
                 if (!resultadoAgenda.yaExistia) {
-                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n📅 *Confirmación de Ruta:* He apartado tu espacio en nuestro sistema de logística. Por favor proporciónname tu dirección completa para activarla. 🚚`
-                    await registrarCitaEnPrismaDB(telefonoParaCita, 'Pendiente de dirección', fechaExtraida, fechaExtraida, 0, 'RECOLECCION')
+                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Confirmación de Ruta de Recolección*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\nHe apartado tu espacio en nuestro sistema de logística y asignado tu folio fiscal de manera exitosa. 🚚`
+
+                    const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
+                    await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
+                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Recolección a Domicilio`)
                 }
-                estatusLead = 'POR_AGENDAR'
+                estatusLead = 'AGENDADO'
             } else {
                 respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
                 estatusLead = 'POR_AGENDAR'
             }
         }
 
-        if (matchDireccion) {
+        if (matchDireccion && !matchRecoleccion) {
             const direccionExtraida = matchDireccion[1].trim()
             const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
 
