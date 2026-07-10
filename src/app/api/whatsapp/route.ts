@@ -44,25 +44,21 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
         if (estatus === 'EN_REPARACION') icono = '⚡';
 
-        // 2. 🧠 LLAVE DINÁMICA: Si no hay hilo, creamos uno único con un timestamp.
-        // Si ya hay hilo guardado, reutilizamos su ID para que los mensajes se agrupen ahí.
+        // 2. 🧠 LLAVE DE AGRUPACIÓN LIMPIA:
+        // Si ya hay un ID corto guardado, lo usamos como llave. 
+        // Si es null, creamos un identificador único temporal basado en tiempo.
         const llaveAgrupacion = cliente?.googleChatThreadId
             ? cliente.googleChatThreadId
-            : `caso_${telefono}_${Date.now()}`;
+            : `caso_${telefono.slice(-10)}_${Date.now()}`;
 
-        // 🧵 INTENTO 1: Formato avanzado por Hilos Agrupados (La forma estricta de Google)
+        // 🧵 Formato avanzado por Hilos Agrupados (Tratamiento nativo por URL de Google)
         const urlConHilos = new URL(CHAT_WEBHOOK_URL);
         urlConHilos.searchParams.append('threadKey', llaveAgrupacion);
         urlConHilos.searchParams.append('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
 
-        const payloadConHilos: any = {
+        const payloadConHilos = {
             text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`
         };
-
-        // Si el ID que tenemos guardado es el nativo de Google (spaces/.../threads/...), lo inyectamos en el body
-        if (cliente?.googleChatThreadId && cliente.googleChatThreadId.includes('spaces/')) {
-            payloadConHilos.thread = { name: cliente.googleChatThreadId };
-        }
 
         console.log(`📡 [GOOGLE CHAT]: Intentando envío con hilos para el cliente ${telefono}...`);
         let respuestaGoogle = await fetch(urlConHilos.toString(), {
@@ -71,7 +67,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             body: JSON.stringify(payloadConHilos)
         });
 
-        // 🛡️ DEFENSA DE RESPALDO: Si por alguna razón extraña falla
+        // 🛡️ DEFENSA DE RESPALDO: Por si falla el envío estructurado
         if (!respuestaGoogle.ok) {
             console.warn(`⚠️ [GOOGLE CHAT WARN]: Falló el hilo (Status ${respuestaGoogle.status}). Activando respaldo plano...`);
 
@@ -86,20 +82,24 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             });
         }
 
-        // 🧠 Procesar respuesta exitosa
+        // 🧠 Procesar respuesta exitosa de los servidores de Google
         if (respuestaGoogle.ok) {
             const datosRespuesta = await respuestaGoogle.json();
-            const threadNameId = datosRespuesta?.thread?.name;
+            const threadNameFull = datosRespuesta?.thread?.name; // Viene como "spaces/XXXX/threads/YYYY"
 
-            // 3. Solo actualizamos la base de datos si el cliente NO tenía un hilo previo
-            if (threadNameId && !cliente?.googleChatThreadId) {
-                await prisma.cliente.updateMany({
-                    where: { telefono: { endsWith: telefono.slice(-10) } },
-                    data: { googleChatThreadId: threadNameId }
-                });
-                console.log(`✅ [GOOGLE CHAT]: Hilo NUEVO registrado con éxito en Neon: ${threadNameId}`);
+            // 3. 🎯 SOLÚCIÓN: Extraemos y guardamos únicamente el ID corto si es un hilo nuevo
+            if (threadNameFull && !cliente?.googleChatThreadId) {
+                const threadIdCorto = threadNameFull.split('/').pop(); // Aísla "YYYY" (ej: ISXWhV9qL64)
+
+                if (threadIdCorto) {
+                    await prisma.cliente.updateMany({
+                        where: { telefono: { endsWith: telefono.slice(-10) } },
+                        data: { googleChatThreadId: threadIdCorto }
+                    });
+                    console.log(`✅ [GOOGLE CHAT]: Hilo CORTO registrado en Neon con éxito: ${threadIdCorto}`);
+                }
             } else {
-                console.log(`✅ [GOOGLE CHAT]: Mensaje agregado al hilo existente o entregado plano.`);
+                console.log(`✅ [GOOGLE CHAT]: Mensaje integrado al hilo existente.`);
             }
         } else {
             const errorTexto = await respuestaGoogle.text();
