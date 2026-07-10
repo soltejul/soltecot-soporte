@@ -324,17 +324,24 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            let clienteIdParaTicket = clientePrisma?.id
-            let nombreClienteEstetico = clientePrisma?.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp' ? clientePrisma.nombre : 'Cliente WhatsApp'
+            // 1. Corremos el upsert primero para garantizar que el cliente exista de forma atómica
+            const clienteExpress = await prisma.cliente.upsert({
+                where: { telefono: telefono10Digitos },
+                update: {}, // Si ya existe, no le cambies nada
+                create: {
+                    telefono: telefono10Digitos,
+                    nombre: 'Cliente WhatsApp',
+                    atendidoPorBot: true
+                }
+            })
 
-            if (!clientePrisma) {
-                const nuevoClienteExpress = await prisma.cliente.create({
-                    data: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: true }
-                })
-                clienteIdParaTicket = nuevoClienteExpress.id
-                nombreClienteEstetico = 'Cliente WhatsApp'
-            }
+            // 2. Declaramos las variables UNA SOLA VEZ usando la información fresca del upsert
+            let clienteIdParaTicket = clienteExpress.id
+            let nombreClienteEstetico = clienteExpress.nombre && clienteExpress.nombre !== 'Desconocido' && clienteExpress.nombre !== 'Cliente WhatsApp'
+                ? clienteExpress.nombre
+                : 'Cliente WhatsApp'
 
+            // 3. Continuamos con la lógica del ticket activo habitual...
             let ticketActivo = ticketMasReciente
             if (!ticketActivo || ticketActivo.estado === 'ENTREGADO' || ticketActivo.estado === 'RECHAZADO') {
                 const ultimoTicketGlobal = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
@@ -583,11 +590,15 @@ AL FINAL DE CADA MENSAJE QUE ENVÍES (SIN EXCEPCIÓN), INCLUYE SIEMPRE ESTOS DOS
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
         if (matchAgente || matchRemoteHandoff) {
-            if (clientePrisma?.id) {
-                await prisma.cliente.update({ where: { id: clientePrisma.id }, data: { atendidoPorBot: false } })
-            } else {
-                await prisma.cliente.create({ data: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false } })
-            }
+            await prisma.cliente.upsert({
+                where: { telefono: telefonoParaCita },
+                update: { atendidoPorBot: false }, // Si ya existe, lo silenciamos
+                create: {
+                    telefono: telefonoParaCita,
+                    nombre: nombreCrm,
+                    atendidoPorBot: false
+                }
+            })
 
             if (matchAgente) {
                 estatusLead = 'REVISION_MANUAL'
