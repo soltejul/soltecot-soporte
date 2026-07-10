@@ -35,7 +35,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
     if (!CHAT_WEBHOOK_URL) return;
 
     try {
-        // 1. Buscamos al cliente con un OR robusto para asegurar su existencia
+        // 1. Búsqueda omnicanal exhaustiva del cliente
         const cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -45,61 +45,62 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             }
         });
 
+        if (!cliente) {
+            console.warn(`⚠️ [GOOGLE CHAT]: No se encontró al cliente ${telefono} en Neon para asociarle el hilo.`);
+        }
+
         let icono = '🟢';
         if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨';
         if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
         if (estatus === 'EN_REPARACION') icono = '⚡';
 
-        // 2. Si el cliente ya tiene un hilo guardado, lo usamos. Si no, generamos un identificador único temporal
-        const llaveAgrupacion = cliente?.googleChatThreadId
-            ? cliente.googleChatThreadId
-            : `caso_${telefono.slice(-10)}_${Date.now()}`;
+        const textoAlerta = `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`;
 
-        const urlConHilos = new URL(CHAT_WEBHOOK_URL);
-        urlConHilos.searchParams.append('threadKey', llaveAgrupacion);
-        urlConHilos.searchParams.append('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
+        const payload: any = { text: textoAlerta };
 
-        const payloadConHilos: any = {
-            text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde directamente a este hilo para chatear con el cliente._`
-        };
+        // Si ya existe un hilo previo en la sesión, agrupamos ahí; si no, Google creará una tarjeta principal nueva
+        if (cliente?.googleChatThreadId) {
+            payload.thread = { name: `spaces/AAQAIpXMCK0/threads/${cliente.googleChatThreadId}` };
+        }
 
-        console.log(`📡 [GOOGLE CHAT]: Intentando envío con hilos para el cliente ${telefono}...`);
-        let respuestaGoogle = await fetch(urlConHilos.toString(), {
+        console.log(`📡 [GOOGLE CHAT]: Despachando alerta hacia Google...`);
+        let respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadConHilos)
+            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+            body: JSON.stringify(payload)
         });
 
+        // Respaldo plano por si el payload agrupado es rechazado
         if (!respuestaGoogle.ok) {
-            console.warn(`⚠️ [GOOGLE CHAT WARN]: Falló el hilo. Activando respaldo plano...`);
+            console.warn(`⚠️ [GOOGLE CHAT WARN]: Falló intento estructurado. Activando respaldo plano...`);
             respuestaGoogle = await fetch(CHAT_WEBHOOK_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    text: `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}`
-                })
+                headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+                body: JSON.stringify({ text: textoAlerta })
             });
         }
 
         if (respuestaGoogle.ok) {
             const datosRespuesta = await respuestaGoogle.json();
+            console.log(`🔍 [GOOGLE RESPONSE PAYLOAD]:`, JSON.stringify(datosRespuesta));
+
             const threadNameFull = datosRespuesta?.thread?.name; // "spaces/XXXX/threads/YYYY"
 
             if (threadNameFull) {
-                const threadIdCorto = threadNameFull.split('/').pop(); // Aísla "YYYY" (ej: JXXh1IifCkM)
+                const threadIdCorto = threadNameFull.split('/').pop();
 
-                // 3. 🎯 SOLUCIÓN: Eliminamos el candado limitador y actualizamos ATÓMICAMENTE por ID único
+                // 🎯 FIJACIÓN INCONDICIONAL: Forzamos la actualización sin importar lo que hubiera antes
                 if (threadIdCorto && cliente) {
                     await prisma.cliente.update({
                         where: { id: cliente.id },
                         data: { googleChatThreadId: threadIdCorto }
                     });
-                    console.log(`✅ [NEON SUCCESS]: Guardado threadIdCorto '${threadIdCorto}' para el cliente: ${cliente.nombre}`);
+                    console.log(`🚀 [NEON CRITICAL SUCCESS]: Hilo nativo '${threadIdCorto}' guardado con éxito para ${cliente.telefono}`);
                 }
             }
         } else {
             const errorTexto = await respuestaGoogle.text();
-            console.error(`🔴 [GOOGLE CHAT CRITICAL]: Ambos intentos fallaron. Error: ${errorTexto}`);
+            console.error(`🔴 [GOOGLE CHAT CRITICAL]: La API de Google rechazó el mensaje. Error: ${errorTexto}`);
         }
 
     } catch (error: any) {
