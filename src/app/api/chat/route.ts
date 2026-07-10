@@ -1,81 +1,99 @@
-import { GoogleGenAI } from '@google/genai'
+import { NextResponse } from 'next/server'
+import { prisma } from '../../../lib/prisma'
 
-export const dynamic = 'force-dynamic'
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
-export async function POST(req: Request) {
+// 📥 1. TRAER EL HISTORIAL EFÍMERO DE MENSAJES (GET)
+export async function GET(request: Request) {
     try {
-        const { messages } = await req.json()
+        const { searchParams } = new URL(request.url)
+        const clienteId = searchParams.get('clienteId')
 
-        // 🔍 DETECTOR AUTOMÁTICO: Busca la llave bajo el formato nuevo o el anterior
-        const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY
-
-        // Si Next.js de verdad no ve ninguna, te lo avisará limpiamente en la terminal
-        if (!apiKey) {
-            console.error("❌ [ALERTA SOLTECOT]: No se detectó ninguna API Key en tu archivo .env o .env.local")
-            return new Response(
-                JSON.stringify({
-                    error: 'Falta configuración',
-                    details: 'La API Key no está llegando al servidor. Revisa tu archivo .env'
-                }),
-                { status: 500, headers: { 'Content-Type': 'application/json' } }
-            )
+        if (!clienteId) {
+            return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
         }
 
-        // 1. Inicializamos el cliente oficial de Google con la llave detectada
-        const ai = new GoogleGenAI({ apiKey })
-
-        // 2. Traducimos el historial al formato exacto de Google ('user' y 'model')
-        const googleContents = messages.map((m: any) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-        }))
-
-        // 3. Solicitamos el flujo continuo al modelo de última generación
-        const responseStream = await ai.models.generateContentStream({
-            model: 'gemini-2.5-flash',
-            contents: googleContents,
-            config: {
-                systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time).
-                Tu objetivo es ser un recepcionista atento, profesional y técnico para nuestro laboratorio de reparación.
-                REGLAS DE NEGOCIO:
-                1. RECOLECCIONES: Ofrecemos servicio a domicilio ÚNICAMENTE Sábados y Domingos. Cupos limitados. Sujeto a Disponibilidad. Se agenda por WhatsApp. No se hacen recolecciones entre semana ni en días festivos.
-                2. COTIZACIONES: Da rangos estimados (ej: Mantenimiento PS5 $800-$1200, Limpieza Laptop $600-$800). El diagnóstico final es en laboratorio.
-                3. 
-                . TONO: Profesional, tecnológico, limpio y seguro.`,
-            }
+        // Jalamos los mensajes en orden cronológico ascendente para pintarlos tipo WhatsApp
+        const mensajes = await prisma.mensaje.findMany({
+            where: { clienteId },
+            orderBy: { createdAt: 'asc' }
         })
 
-        // 4. Creamos un ReadableStream nativo de la web para enviárselo al frontend
-        const encoder = new TextEncoder()
-        const customWebStream = new ReadableStream({
-            async start(controller) {
-                try {
-                    for await (const chunk of responseStream) {
-                        if (chunk.text) {
-                            controller.enqueue(encoder.encode(chunk.text))
-                        }
-                    }
-                } catch (streamError) {
-                    console.error("❌ Error durante el streaming:", streamError)
-                } finally {
-                    controller.close()
-                }
-            }
+        return NextResponse.json(mensajes, { status: 200 })
+    } catch (error: any) {
+        console.error('🔴 [GET CHAT ERROR]:', error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}
+
+// 🚀 2. ENVIAR MENSAJE MANUAL DESDE EL CRM A META WHATSAPP (POST)
+export async function POST(request: Request) {
+    try {
+        const body = await request.json()
+        const { clienteId, texto } = body
+
+        if (!clienteId || !texto || texto.trim() === '') {
+            return NextResponse.json({ error: 'Cliente ID y texto son obligatorios' }, { status: 400 })
+        }
+
+        // 1. Buscamos al cliente en Neon para obtener su teléfono real
+        const cliente = await prisma.cliente.findUnique({
+            where: { id: clienteId }
         })
 
-        // 5. Retornamos la respuesta de texto plano directa
-        return new Response(customWebStream, {
+        if (!cliente) {
+            return NextResponse.json({ error: 'No se encontró al cliente en la base de datos' }, { status: 404 })
+        }
+
+        if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+            console.error('🔴 [META CONFIG ERROR]: Credenciales de WhatsApp ausentes en Vercel.')
+            return NextResponse.json({ error: 'Configuración de WhatsApp ausente en el servidor' }, { status: 500 })
+        }
+
+        // 2. Despachamos el mensaje manual directo hacia la API Oficial de Meta Cloud
+        const urlMetaOutbound = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+        const respuestaMeta = await fetch(urlMetaOutbound, {
+            method: 'POST',
             headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'Transfer-Encoding': 'chunked',
+                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
             },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cliente.telefono,
+                type: 'text',
+                text: { body: texto.trim() }
+            })
         })
+
+        if (!respuestaMeta.ok) {
+            const errorMetaRaw = await respuestaMeta.text()
+            console.error(`🔴 [META API REJECT]: Meta rechazó el envío manual. Detalles:`, errorMetaRaw)
+            return NextResponse.json({ error: 'Meta rechazó el envío del mensaje' }, { status: 500 })
+        }
+
+        // 3. ¡TIRO EXITOSO!: Registramos el mensaje con el sello HUMANO en tu chat efímero
+        const nuevoMensaje = await prisma.mensaje.create({
+            data: {
+                texto: texto.trim(),
+                origen: 'HUMANO',
+                clienteId: clienteId
+            }
+        })
+
+        // 🛡️ CANDADO HUMANO ADICIONAL: Forzamos que el bot siga silenciado para que no interrumpa tu charla
+        await prisma.cliente.update({
+            where: { id: clienteId },
+            data: { atendidoPorBot: false }
+        })
+
+        console.log(`✅ [CRM OUTBOUND SUCCESS]: Mensaje manual guardado y enviado a: ${cliente.telefono}`)
+        return NextResponse.json({ success: true, mensaje: nuevoMensaje }, { status: 201 })
 
     } catch (error: any) {
-        console.error("🔴 [CRASH EN SDK GOOGLE]:", error)
-        return new Response(
-            JSON.stringify({ error: 'Error interno en el motor de Google', details: error?.message }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
-        )
+        console.error('🔴 [POST CHAT CRITICAL ERROR]:', error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }

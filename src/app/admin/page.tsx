@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import ModalChat from '../../components/ModalChat'
 
 export default function AdminDashboard() {
     const [tickets, setTickets] = useState<any[]>([])
@@ -10,11 +11,15 @@ export default function AdminDashboard() {
     const [cargando, setCargando] = useState(true)
     const router = useRouter()
 
-    // 💰 ESTADOS PARA EL MODAL DE PRESUPUESTOS (PUNTO 3)
+    // 💰 ESTADOS PARA EL MODAL DE PRESUPUESTOS
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
     const [ticketSeleccionado, setTicketSeleccionado] = useState<any>(null)
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
+
+    // 💬 ESTADOS PARA EL MODAL DE CHAT NATIVO
+    const [chatAbierto, setChatAbierto] = useState(false)
+    const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
 
     const cargarTickets = async () => {
         try {
@@ -49,7 +54,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 🤖 INTERRUPTOR MANUAL DEL BOT (PUNTO 2)
+    // 🤖 INTERRUPTOR MANUAL DEL BOT
     const toggleBot = async (ticketId: string, botActivoActual: boolean) => {
         try {
             const res = await fetch('/api/tickets', {
@@ -94,7 +99,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 💾 ENVIAR COTIZACIÓN FORMAL (PUNTO 3)
+    // 💾 ENVIAR COTIZACIÓN FORMAL
     const guardarPresupuestoYEnviar = async () => {
         if (!costoReparacion || isNaN(Number(costoReparacion))) {
             alert("Por favor ingresa un costo numérico válido.")
@@ -208,17 +213,31 @@ export default function AdminDashboard() {
                                         <div className="font-semibold text-zinc-200">{t.cliente?.nombre}</div>
                                         <div className="text-xs text-zinc-500">{t.cliente?.telefono}</div>
                                     </td>
-                                    {/* INTERRUPTOR DEL BOT (PUNTO 2) */}
+                                    {/* 🔘 INTERRUPTOR DEL BOT Y BOTÓN DE CHAT */}
                                     <td className="p-4">
-                                        <button
-                                            onClick={() => toggleBot(t.id, t.botActivo)}
-                                            className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${t.botActivo
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => toggleBot(t.id, t.botActivo)}
+                                                className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${t.botActivo
                                                     ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/40'
                                                     : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:bg-zinc-800'
-                                                }`}
-                                        >
-                                            {t.botActivo ? '🤖 IA ACTIVA' : '👤 MANUAL'}
-                                        </button>
+                                                    }`}
+                                            >
+                                                {t.botActivo ? '🤖 IA ACTIVA' : '👤 MANUAL'}
+                                            </button>
+
+                                            {/* NUEVO BOTÓN PARA ABRIR CHAT NATIVO */}
+                                            <button
+                                                onClick={() => {
+                                                    setClienteSeleccionado(t.cliente)
+                                                    setChatAbierto(true)
+                                                }}
+                                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-1 rounded-full border border-zinc-700 transition-colors shadow-sm flex items-center gap-1"
+                                                title="Abrir Chat"
+                                            >
+                                                💬 Chat
+                                            </button>
+                                        </div>
                                     </td>
                                     <td className="p-4 text-zinc-300 font-medium">
                                         {t.equipo}
@@ -253,7 +272,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* 💰 MODAL FLOTANTE: ENVÍO DE PRESUPUESTO (PUNTO 3) */}
+            {/* 💰 MODAL FLOTANTE: ENVÍO DE PRESUPUESTO */}
             {mostrarModalPresupuesto && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
@@ -300,6 +319,17 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* 💬 MODAL DE CHAT NATIVO (SLIDE-OVER) */}
+            {chatAbierto && clienteSeleccionado && (
+                <ModalChat
+                    isOpen={chatAbierto}
+                    onClose={() => setChatAbierto(false)}
+                    clienteId={clienteSeleccionado.id}
+                    nombreCliente={clienteSeleccionado.nombre}
+                    telefono={clienteSeleccionado.telefono}
+                />
             )}
         </div>
     )

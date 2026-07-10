@@ -12,16 +12,17 @@ datasource db {
 // ==========================================
 
 model Cliente {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   nombre             String
-  email              String?  @unique 
-  telefono           String   @unique 
+  email              String?   @unique 
+  telefono           String    @unique 
   tickets            Ticket[] 
-  createdAt          DateTime @default(now())
+  mensajes           Mensaje[] // 💬 RELACIÓN INVERSA: Historial efímero conectado al cliente
+  createdAt          DateTime  @default(now())
 
   // 🚨 CONTROL HÍBRIDO BOT / HUMANO (NUEVOS SUPERPODERES)
-  atendidoPorBot     Boolean  @default(true)
-  googleChatThreadId String?  @unique 
+  atendidoPorBot     Boolean   @default(true)
+  googleChatThreadId String?   @unique 
 
   @@index([telefono]) 
 }
@@ -64,6 +65,25 @@ model Cita {
   updatedAt     DateTime   @updatedAt
 
   @@index([telefono])
+}
+
+// 💬 HISTORIAL EFÍMERO DE CHAT
+// Se auto-elimina en cascada al cambiar el estatus a ENTREGADO o RECHAZADO
+model Mensaje {
+  id        String        @id @default(uuid())
+  texto     String
+  origen    OrigenMensaje @default(CLIENTE)
+  clienteId String
+  cliente   Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@index([clienteId])
+}
+
+enum OrigenMensaje {
+  CLIENTE
+  BOT
+  HUMANO
 }
 
 enum TipoCita {

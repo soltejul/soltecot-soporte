@@ -41,9 +41,17 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
         });
 
         let icono = '🟢';
-        if (estatus.includes('SOS') || estatus.includes('MANUAL')) icono = '🚨';
-        if (estatus === 'FUERA_DE_COBERTURA') icono = '🟡';
-        if (estatus === 'EN_REPARACION') icono = '⚡';
+        if (estatus.includes('SOS')) {
+            icono = '🚨 Urgente'; // S.O.S. Agente cuando el bot se rinde
+        } else if (estatus.includes('MANUAL') || estatus.includes('ATENCION')) {
+            icono = '💬 Chat Humano'; // Estás chateando en vivo (Modo Humano activo)
+        } else if (estatus === 'AGENDADO') {
+            icono = '📅 ¡CITA AGENDADA!'; // Éxito total de reservación en Calendar/Sheets
+        } else if (estatus === 'FUERA_DE_COBERTURA') {
+            icono = '🟡 Fuera de Radio';
+        } else if (estatus === 'EN_REPARACION') {
+            icono = '⚡ Taller';
+        }
 
         const textoAlerta = `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde incluyendo el teléfono para asegurar el tiro, ej: @soltemsg __REACTIVAR__ ${telefono.slice(-10)} __COT_950___`;
 
@@ -146,35 +154,81 @@ async function registrarFinanzasEnFacturacion(
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
 
-        const valoresFila = [
-            folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
-            reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
-        ]
-
         const respuestaSábana = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:A"
+            spreadsheetId: SPREADSHEET_ID,
+            range: "'Facturación'!A:S"
         })
 
         const filasExistentes = respuestaSábana.data.values || []
         let numeroDeFilaDestino = -1
+        let filaVieja: string[] = []
 
+        // 🧠 BUSCADOR INTELIGENTE ANTI-COLISIONES
         for (let i = 0; i < filasExistentes.length; i++) {
-            if (filasExistentes[i][0] === folio) {
-                numeroDeFilaDestino = i + 1
-                break
+            const rowFolio = filasExistentes[i][0]
+            const rowTelefono = filasExistentes[i][3]
+
+            if (folio === 'SOL-REM-PENDIENTE') {
+                // Si es un lead orgánico, la fila DEBE coincidir en folio Y en el teléfono del cliente
+                if (rowFolio === 'SOL-REM-PENDIENTE' && rowTelefono === telefono) {
+                    numeroDeFilaDestino = i + 1
+                    filaVieja = filasExistentes[i]
+                    break
+                }
+            } else {
+                // Si ya es un ticket real (ej: SOL-1001), buscamos por la llave única del folio
+                if (rowFolio === folio) {
+                    numeroDeFilaDestino = i + 1
+                    filaVieja = filasExistentes[i]
+                    break
+                }
             }
         }
 
-        if (numeroDeFilaDestino !== -1) {
+        // 🛡️ ESTRATEGIA DE FUSIÓN (MERGE): Protegemos la información valiosa de sobreescrituras vacías
+        if (numeroDeFilaDestino !== -1 && filaVieja.length > 0) {
+            const nombreFinal = (nombre === 'Cliente WhatsApp' && filaVieja[2]) ? filaVieja[2] : nombre;
+            const soporteFinal = (tipoSoporte === 'Remoto' && filaVieja[4]) ? filaVieja[4] : tipoSoporte;
+            const fallaFinal = (dispositivoFalla.includes('Soporte General') && filaVieja[5]) ? filaVieja[5] : dispositivoFalla;
+            const statusFinal = (status === 'PROSPECTO' && filaVieja[6]) ? filaVieja[6] : status;
+            const facturaFinal = (reqFactura === 'NO' && filaVieja[7] === 'SI') ? 'SI' : reqFactura;
+
+            const rfcFinal = (!rfc && filaVieja[8]) ? filaVieja[8] : rfc;
+            const nombreFiscalFinal = (!nombreFiscal && filaVieja[9]) ? filaVieja[9] : nombreFiscal;
+            const cpFinal = (!cp && filaVieja[10]) ? filaVieja[10] : cp;
+            const regimenFinal = (!regimen && filaVieja[11]) ? filaVieja[11] : regimen;
+            const usoFinal = (!usoCfdi && filaVieja[12]) ? filaVieja[12] : usoCfdi;
+            const correoFinal = (!correo && filaVieja[13]) ? filaVieja[13] : correo;
+
+            const netoFinal = (montoNeto === 'Pendiente' && filaVieja[14]) ? filaVieja[14] : montoNeto;
+            const ivaFinal = (iva === 'Pendiente' && filaVieja[15]) ? filaVieja[15] : iva;
+            const totalFinal = (totalCobrado === 'Por cotizar' && filaVieja[16]) ? filaVieja[16] : totalCobrado;
+            const satFinal = (estatusSat === 'NO REQUIERE' && filaVieja[17] === 'PENDIENTE TIMBRADO') ? 'PENDIENTE TIMBRADO' : estatusSat;
+
+            const valoresCombinados = [
+                folio, fechaActual, nombreFinal, telefono, soporteFinal, fallaFinal, statusFinal,
+                facturaFinal, rfcFinal, nombreFiscalFinal, cpFinal, regimenFinal, usoFinal, correoFinal,
+                netoFinal, ivaFinal, totalFinal, satFinal, ""
+            ]
+
             await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_ID, range: `'Facturación'!A${numeroDeFilaDestino}:S${numeroDeFilaDestino}`,
-                valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
+                spreadsheetId: SPREADSHEET_ID,
+                range: `'Facturación'!A${numeroDeFilaDestino}:S${numeroDeFilaDestino}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [valoresCombinados] }
             })
+            console.log(`✅ [CRM MERGE SUCCESS]: Fila indexada y protegida para el cliente: ${telefono}`)
         } else {
+            // Si es la primera interacción del día para este lead, creamos su espacio limpio
+            const valoresFila = [
+                folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
+                reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
+            ]
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:S",
                 valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
             })
+            console.log(`📦 [CRM GOOGLE SHEETS]: Fila base inicial creada para el lead: ${telefono}`)
         }
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
@@ -646,6 +700,28 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
+            // 📥 🤖 INYECCIÓN DEL CHAT EFÍMERO: Guardamos el ping-pong de mensajes
+            try {
+                const clienteFresco = await prisma.cliente.findFirst({
+                    where: { telefono: { endsWith: telefono10Digitos } }
+                });
+
+                if (clienteFresco?.id) {
+                    // Guardamos lo que dijo el cliente
+                    await prisma.mensaje.create({
+                        data: { texto: mensajeCliente, origen: 'CLIENTE', clienteId: clienteFresco.id }
+                    });
+
+                    // Guardamos la respuesta autónoma de la IA
+                    await prisma.mensaje.create({
+                        data: { texto: respuestaWhatsApp, origen: 'BOT', clienteId: clienteFresco.id }
+                    });
+                }
+            } catch (errChat) {
+                console.error('🔴 Error guardando chat efímero:', errChat);
+            }
+            // ====================================================================
+
             let totalCobrado = "", montoNeto = "", ivaCalculado = ""
 
             if (ticketMasReciente?.costoReparacion) {
@@ -770,6 +846,14 @@ export async function POST(req: Request) {
 
             if (clienteExistente && clienteExistente.atendidoPorBot === false) {
                 console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
+
+                await prisma.mensaje.create({
+                    data: {
+                        texto: mensajeCliente,
+                        origen: 'CLIENTE',
+                        clienteId: clienteExistente.id
+                    }
+                });
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '📥 ATENCIÓN MANUAL',
