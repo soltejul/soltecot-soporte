@@ -206,33 +206,41 @@ export default function AdminDashboard() {
                         </thead>
                         <tbody className="divide-y divide-zinc-900 text-sm">
                             {ticketsFiltrados.map((t) => (
-                                <tr key={t.id} className="hover:bg-zinc-900/50 transition-colors">
+                                // 🎨 AQUI ESTÁ LA MAGIA VISUAL DE LA FILA:
+                                <tr key={t.id} className={`transition-all duration-300 ${!t.botActivo
+                                    ? 'bg-rose-950/10 border-l-4 border-l-rose-500 hover:bg-rose-950/20'
+                                    : 'border-l-4 border-l-transparent hover:bg-zinc-900/50'
+                                    }`}>
                                     <td className="p-4 font-bold text-emerald-400">{t.numeroOrden}</td>
                                     <td className="p-4 text-zinc-500 text-xs">{new Date(t.createdAt).toLocaleDateString('es-MX')}</td>
                                     <td className="p-4">
                                         <div className="font-semibold text-zinc-200">{t.cliente?.nombre}</div>
                                         <div className="text-xs text-zinc-500">{t.cliente?.telefono}</div>
                                     </td>
+
                                     {/* 🔘 INTERRUPTOR DEL BOT Y BOTÓN DE CHAT */}
                                     <td className="p-4">
                                         <div className="flex items-center gap-2">
+                                            {/* 🚨 BOTÓN CON ANIMACIÓN DE PULSO SI ESTÁ EN MANUAL */}
                                             <button
                                                 onClick={() => toggleBot(t.id, t.botActivo)}
                                                 className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${t.botActivo
                                                     ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/40'
-                                                    : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:bg-zinc-800'
+                                                    : 'bg-rose-950 text-rose-400 border-rose-500 shadow-[0_0_12px_rgba(225,29,72,0.4)] animate-pulse'
                                                     }`}
                                             >
-                                                {t.botActivo ? '🤖 IA ACTIVA' : '👤 MANUAL'}
+                                                {t.botActivo ? '🤖 IA ACTIVA' : '🚨 MODO MANUAL'}
                                             </button>
 
-                                            {/* NUEVO BOTÓN PARA ABRIR CHAT NATIVO */}
                                             <button
                                                 onClick={() => {
                                                     setClienteSeleccionado(t.cliente)
                                                     setChatAbierto(true)
                                                 }}
-                                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 py-1 rounded-full border border-zinc-700 transition-colors shadow-sm flex items-center gap-1"
+                                                className={`text-xs px-3 py-1 rounded-full border transition-colors shadow-sm flex items-center gap-1 ${!t.botActivo
+                                                    ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500'
+                                                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                                                    }`}
                                                 title="Abrir Chat"
                                             >
                                                 💬 Chat
