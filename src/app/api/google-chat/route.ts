@@ -21,7 +21,7 @@ export async function POST(req: Request) {
             return NextResponse.json({})
         }
 
-        const threadNameId = messageObj?.thread?.name
+        const threadNameId = messageObj?.thread?.name // Formato: spaces/XXXX/threads/YYYY
         let textoInyectado = messageObj?.argumentText?.trim() || messageObj?.text || ''
 
         // Limpieza de menciones de usuario (@soltemsg)
@@ -34,27 +34,34 @@ export async function POST(req: Request) {
             return NextResponse.json({})
         }
 
-        const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId;
+        // 🧠 Aislamiento de tokens de hilos
+        const tokenUnicoHilo = threadNameId.split('/').pop() || threadNameId
         const textoUpper = textoInyectado.toUpperCase().trim()
 
-        // Regex flexible para capturar __COT_899__ o __COT_899
+        // Regex flexible y optimizada para capturar montos con o sin guiones bajos finales
         const matchCotizacion = textoUpper.match(/__COT_(\d+(\.\d+)?)__/) || textoUpper.match(/__COT_(\d+(\.\d+)?)/)
 
-        // 🔍 Buscamos al cliente asociado a este hilo en Neon utilizando el singleton unificado
+        // 🔍 ENGINE OPTIMIZATION: Búsqueda indexada con OR omnicanal. 
+        // Elimina el "contains" y el "as any", buscando match exacto tanto del ID corto como del largo.
         const clienteAsociado = await prisma.cliente.findFirst({
-            where: ({
-                googleChatThreadId: { contains: tokenUnicoHilo }
-            } as any),
+            where: {
+                OR: [
+                    { googleChatThreadId: tokenUnicoHilo },
+                    { googleChatThreadId: threadNameId }
+                ]
+            },
             include: { tickets: { orderBy: { createdAt: 'desc' }, take: 1 } }
         })
 
         if (!clienteAsociado) {
             console.error(`❌ [HANDOFF ERROR]: No se encontró ningún cliente en Neon para el hilo: ${tokenUnicoHilo}`)
-            return NextResponse.json({})
+            // Devolvemos un 200 con un JSON limpio para que la interfaz de Google no se quede reintentando el error en bucle
+            return NextResponse.json({ text: `⚠️ Error de enlace: No se encontró ningún cliente en el CRM con el token ${tokenUnicoHilo}.` })
         }
 
         // 🔄 CAMINO A: COMANDOS DE RE-ACTIVACIÓN Y CHATOPS
-        if (textoUpper === '__REACTIVAR__' || matchCotizacion) {
+        // Evaluamos si el texto contiene la instrucción clave para mayor flexibilidad si viene acompañado de texto
+        if (textoUpper.includes('__REACTIVAR__') || matchCotizacion) {
             let nuevoCosto = null
             let mensajeSistemaWhatsApp = "🤖 _[SISTEMA]: El Ingeniero Julio ha registrado tu cotización. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y guardar tus datos de orden._\n\n¡Hola de nuevo! Ya tengo los detalles listos. Para confirmar tu espacio, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?"
 
@@ -63,7 +70,7 @@ export async function POST(req: Request) {
                 const costoNumerico = parseFloat(nuevoCosto)
                 let ticketActivo = clienteAsociado.tickets[0]
 
-                // Si no hay ticket activo o ya están cerrados, creamos uno express en Neon
+                // Si no hay ticket activo o ya están cerrados, creamos uno express en Neon con estatus de preventa
                 if (!ticketActivo || ticketActivo.estado === 'ENTREGADO' || ticketActivo.estado === 'RECHAZADO') {
                     const ultimoTicketGlobal = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
                     let nuevoFolio = 'SOL-1001'
@@ -78,13 +85,19 @@ export async function POST(req: Request) {
                             fallaReportada: 'Cotización física realizada por el Ingeniero',
                             clienteId: clienteAsociado.id,
                             estado: 'ESPERANDO_APROBACION',
+                            costoEstimado: costoNumerico,
                             costoReparacion: costoNumerico
                         }
                     })
                 } else {
+                    // Si el ticket ya existía, actualizamos dinámicamente sus campos de costos y estatus
                     await prisma.ticket.update({
                         where: { id: ticketActivo.id },
-                        data: { costoReparacion: costoNumerico }
+                        data: {
+                            costoEstimado: costoNumerico,
+                            costoReparacion: costoNumerico,
+                            estado: 'ESPERANDO_APROBACION'
+                        }
                     })
                 }
 
@@ -92,13 +105,13 @@ export async function POST(req: Request) {
                 console.log(`💰 [CHATOP SUCCESS]: Ticket ${ticketActivo.numeroOrden} actualizado en Neon a $${nuevoCosto}`)
             }
 
-            // Desbloqueamos el Bot en la base de datos
+            // Desbloqueamos el Bot en la base de datos para que asuma el control del flujo de agenda
             await prisma.cliente.update({
                 where: { id: clienteAsociado.id },
                 data: { atendidoPorBot: true }
             })
 
-            // Disparamos la alerta de reactivación a Meta WhatsApp
+            // Disparamos la plantilla hacia la API Oficial de Meta
             if (WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
                 const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
                 await fetch(urlMeta, {
@@ -114,13 +127,13 @@ export async function POST(req: Request) {
                 })
             }
 
-            return NextResponse.json({ text: `✅ Asistente Virtual reactivado.${nuevoCosto ? ` Cotización guardada en Neon: $${nuevoCosto}` : ''}` })
+            return NextResponse.json({ text: `✅ [CRM DIGITAL]: Asistente Virtual reactivado correctamente.${nuevoCosto ? ` Presupuesto guardado en Neon: $${nuevoCosto}` : ''}` })
         }
 
-        // 💬 CAMINO B: CONVERSACIÓN MANUAL DIRECTA (Julio chateando con el cliente)
+        // 💬 CAMINO B: CONVERSACIÓN MANUAL DIRECTA (Julio chateando en tiempo real)
         if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
             console.error('🔴 [META CONFIG ERROR]: Las credenciales de WhatsApp están vacías en Vercel.')
-            return NextResponse.json({})
+            return NextResponse.json({ text: '❌ Error: Configuración de tokens de WhatsApp ausente en el servidor.' })
         }
 
         console.log(`🚀 [FORWARD MANUAL]: Reenviando mensaje manual de Julio al WhatsApp del cliente: ${clienteAsociado.telefono}`)
