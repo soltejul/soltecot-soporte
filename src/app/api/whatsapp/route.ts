@@ -349,10 +349,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
+            // 🚨 CAMBIO 1: Forzamos atendidoPorBot en false para silenciar la IA a nivel Cliente
             const clienteExpress = await prisma.cliente.upsert({
                 where: { telefono: telefono10Digitos },
-                update: {},
-                create: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: true }
+                update: { atendidoPorBot: false },
+                create: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: false }
             })
 
             let clienteIdParaTicket = clienteExpress.id
@@ -367,22 +368,32 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     nuevoFolio = `SOL-${parseInt(ultimoTicketGlobal.numeroOrden.split('-')[1]) + 1}`
                 }
 
+                // 🚨 CAMBIO 2: Inyectamos botActivo: false al crear para que el Dashboard pinte la fila en ROJO
                 ticketActivo = await prisma.ticket.create({
                     data: {
                         numeroOrden: nuevoFolio, equipo: 'Soporte Técnico Remoto', fallaReportada: 'Instalación de Software / Optimización Express',
-                        clienteId: clienteIdParaTicket!, estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`
+                        clienteId: clienteIdParaTicket!, estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`,
+                        botActivo: false
                     }
                 })
             } else {
+                // 🚨 CAMBIO 3: Inyectamos botActivo: false al actualizar el ticket existente
                 ticketActivo = await prisma.ticket.update({
                     where: { id: ticketActivo.id },
-                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}` }
+                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`, botActivo: false }
                 })
             }
 
             const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador.* Verás la actividad de soporte técnico en tu pantalla en unos segundos.`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
+
+            // 🚨 CAMBIO 4: DISPARAMOS LA ALERTA DE INMEDIATO A GOOGLE CHAT CON EL CÓDIGO
+            await dispararAlertaInmediata(
+                telefono10Digitos,
+                'EN_REPARACION',
+                `🖥️ [SOPORTE REMOTO] ¡Código Recibido de ${nombreClienteEstetico}! 🔑 Código: ${codigoEncontrado}. Orden: ${ticketActivo.numeroOrden}. ¡Entra a conectarte!`
+            )
 
             let historialLocal = MEMORIA_CHAT.get(numeroCliente) || []
             historialLocal.push({ role: 'user', parts: [{ text: mensajeCliente }] })
