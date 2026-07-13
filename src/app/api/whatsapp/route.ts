@@ -650,7 +650,7 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
                             fallaReportada: `${fallaCrm} (Solicitó Humano)`,
                             estado: 'ESPERANDO_APROBACION', // 🚨 CORREGIDO: Usamos un enum válido de tu base de datos
                             clienteId: clienteActualizado.id,
-                            notesInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
+                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
                         }
                     });
                     ticketMasReciente = ticketLead;
