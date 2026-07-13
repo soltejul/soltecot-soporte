@@ -529,7 +529,7 @@ _DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
 - ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN en cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN in cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
 
 🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
 - Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (solo si es recolección) y si requerirá factura (SÍ/NO).
@@ -578,7 +578,6 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
         const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
         const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
 
-        // Regex Case Insensitive y tolerantes a espacios para máxima captura de ganchos de control
         const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:\s*([^\n\r]+)/i)
         const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:\s*([^\n\r]+)/i)
         const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:\s*([^\n\r]+)/i)
@@ -612,7 +611,6 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
             const camposFiscales = matchFiscal[1].split('|')
             if (camposFiscales[0]) {
                 const valorRawFactura = camposFiscales[0].trim().toUpperCase()
-                // FLEXIBILIDAD ABSOLUTA: Si el bloque lleva "SI", "SÍ" o "REQ", se marca afirmativo
                 reqFactura = (valorRawFactura.includes('SI') || valorRawFactura.includes('SÍ') || valorRawFactura.includes('REQ')) ? 'SI' : 'NO'
             }
             if (camposFiscales[1]) rfcCrm = camposFiscales[1].trim().toUpperCase()
@@ -638,8 +636,9 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
+        // 🚨 INYECCIÓN ARQUITECTÓNICA: Manejo robusto de Handoff Humano en Neon (Paso 1)
         if (matchAgente || matchRemoteHandoff) {
-            await prisma.cliente.upsert({
+            const clienteActualizado = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
                 update: { atendidoPorBot: false },
                 create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
@@ -647,7 +646,37 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
 
             if (matchAgente) {
                 estatusLead = 'REVISION_MANUAL'
-                await dispararAlertaInmediata(telefonoParaCita, '🚨 S.O.S. AGENTE', `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Último mensaje:* "${mensajeCliente}"`)
+
+                // Revisamos si el prospecto cuenta con un ticket activo en Neon
+                let ticketLead = ticketMasReciente;
+                if (!ticketLead || ticketLead.estado === 'ENTREGADO' || ticketLead.estado === 'RECHAZADO') {
+                    ticketLead = await prisma.ticket.create({
+                        data: {
+                            numeroOrden: `LEAD-${telefonoParaCita}`,
+                            equipo: dispositivoCrm,
+                            fallaReportada: `${fallaCrm} (Solicitó Humano)`,
+                            estado: 'REVISION_MANUAL',
+                            botActivo: false,
+                            clienteId: clienteActualizado.id,
+                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
+                        }
+                    });
+                    // Reasignamos la variable local para sincronizar los folios en Sheets y chats efímeros
+                    ticketMasReciente = ticketLead;
+                } else {
+                    // Si ya existía una orden a medias, la mandamos al limbo manual apagando el bot
+                    ticketLead = await prisma.ticket.update({
+                        where: { id: ticketLead.id },
+                        data: { estado: 'REVISION_MANUAL', botActivo: false }
+                    });
+                    ticketMasReciente = ticketLead;
+                }
+
+                await dispararAlertaInmediata(
+                    telefonoParaCita,
+                    '🚨 S.O.S. AGENTE',
+                    `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Folio Lead:* ${ticketLead.numeroOrden}\n*Último mensaje:* "${mensajeCliente}"\n¡Disponible en tu Bandeja de Leads!`
+                )
             } else {
                 estatusLead = 'EN_REPARACION'
                 await dispararAlertaInmediata(telefonoParaCita, '⚡ EN_REPARACION', `¡Sesión Remota Solicitada!`)
@@ -737,19 +766,16 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
             const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
-            // 📥 🤖 INYECCIÓN DEL CHAT EFÍMERO: Guardamos el ping-pong de mensajes
             try {
                 const clienteFresco = await prisma.cliente.findFirst({
                     where: { telefono: { endsWith: telefono10Digitos } }
                 });
 
                 if (clienteFresco?.id) {
-                    // Guardamos lo que dijo el cliente
                     await prisma.mensaje.create({
                         data: { texto: mensajeCliente, origen: 'CLIENTE', clienteId: clienteFresco.id }
                     });
 
-                    // Guardamos la respuesta autónoma de la IA
                     await prisma.mensaje.create({
                         data: { texto: respuestaWhatsApp, origen: 'BOT', clienteId: clienteFresco.id }
                     });
@@ -757,7 +783,6 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
             } catch (errChat) {
                 console.error('🔴 Error guardando chat efímero:', errChat);
             }
-            // ====================================================================
 
             let totalCobrado = "", montoNeto = "", ivaCalculado = ""
 
