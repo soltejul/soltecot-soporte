@@ -51,14 +51,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Teléfono, equipo y falla son obligatorios' }, { status: 400 })
         }
 
-        // 🔗 URL de escape local o producción
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
-
-        // Sanitizamos variantes comunes de teléfono
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
 
-        // 1. Buscamos si el cliente ya existe en Neon por cualquiera de sus formatos
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -70,7 +66,6 @@ export async function POST(request: Request) {
         })
 
         if (!cliente) {
-            // Si es un cliente completamente nuevo de recepción, lo creamos y apagamos el bot
             cliente = await prisma.cliente.create({
                 data: {
                     telefono: phone10,
@@ -79,8 +74,6 @@ export async function POST(request: Request) {
                 }
             })
         } else {
-            // Si ya existía, actualizamos su nombre si se introduce uno real y APAGAMOS EL BOT
-            // Esto garantiza que la IA se quede silenciada mientras el hardware está en revisión
             await prisma.cliente.update({
                 where: { id: cliente.id },
                 data: {
@@ -90,7 +83,6 @@ export async function POST(request: Request) {
             })
         }
 
-        // 2. 🔍 LÓGICA DE UNIFICACIÓN: Buscamos si tiene un ticket de preventa abierto por WhatsApp
         let ticketExistente = await prisma.ticket.findFirst({
             where: {
                 clienteId: cliente.id,
@@ -104,7 +96,6 @@ export async function POST(request: Request) {
         const costoNumerico = costoEstimado ? parseFloat(costoEstimado) : null
 
         if (ticketExistente) {
-            // ¡Bingo! El cliente ya tenía una cotización por WhatsApp. Enriquecemos ese mismo folio para evitar retrabajo
             ticketFinal = await prisma.ticket.update({
                 where: { id: ticketExistente.id },
                 data: {
@@ -113,12 +104,12 @@ export async function POST(request: Request) {
                     costoEstimado: costoNumerico || ticketExistente.costoEstimado,
                     costoReparacion: costoNumerico || ticketExistente.costoReparacion,
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
-                    estado: 'RECIBIDO' // Pasa formalmente a ingresado al laboratorio
+                    estado: 'RECIBIDO',
+                    botActivo: false // Al ingresar físicamente garantizamos desactivar el bot en el ticket
                 }
             })
             esUnificacion = true
         } else {
-            // No hay ticket de preventa previo, generamos un folio nuevo secuencial
             const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
             let nuevoFolio = 'SOL-1001'
             if (ultimoTicket?.numeroOrden) {
@@ -134,12 +125,12 @@ export async function POST(request: Request) {
                     costoReparacion: costoNumerico,
                     notasInternas: notasInternas ? notasInternas.trim() : null,
                     clienteId: cliente.id,
-                    estado: 'RECIBIDO'
+                    estado: 'RECIBIDO',
+                    botActivo: false
                 }
             })
         }
 
-        // 3. Disparar confirmación de recepción estética hacia la API de Meta
         const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso formal de tu equipo a nuestro laboratorio de ingeniería.\n\n🎫 *Folio de Seguimiento:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla Reportada:* ${ticketFinal.fallaReportada}\n📍 *Estatus Actual:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:* Puedes consultar la evolución de tu orden en tiempo real dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
 
         await enviarMensajeMeta(cliente.telefono, textoMensaje)
@@ -179,7 +170,6 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'El parámetro ticketId es obligatorio' }, { status: 400 })
         }
 
-        // Construir el objeto de actualización del ticket de forma dinámica
         const datosAActualizar: any = {}
 
         if (nuevoEstado !== undefined) datosAActualizar.estado = nuevoEstado
@@ -187,15 +177,12 @@ export async function PATCH(request: Request) {
         if (costoReparacion !== undefined) datosAActualizar.costoReparacion = parseFloat(costoReparacion)
         if (notasDiagnostico !== undefined) datosAActualizar.notasDiagnostico = notasDiagnostico
 
-        // Ejecutar actualización en la base de datos Neon
         const ticketActualizado = await prisma.ticket.update({
             where: { id: ticketId },
             data: datosAActualizar,
             include: { cliente: true }
         })
 
-        // 🎯 ALINEACIÓN DEL SWITCH DE IA: Si desde el Dashboard activas/desactivas el Botón de Bot, 
-        // impactamos directamente al Cliente para que el webhook de WhatsApp lo respete en el acto.
         if (botActivo !== undefined) {
             await prisma.cliente.update({
                 where: { id: ticketActualizado.clienteId },
@@ -204,45 +191,46 @@ export async function PATCH(request: Request) {
             console.log(`🤖 [CRM INTERN]: Estado del Bot alterado desde el Dashboard a: ${botActivo} para el cliente ${ticketActualizado.cliente.telefono}`)
         }
 
-        // 🔗 URL de seguimiento local/remota
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
 
-        // 🚀 CONTROL DE MENSAJES SALIENTES SEGÚN CAMBIO DE SELECTOR
         if (nuevoEstado) {
             let textoMensaje = ""
             const estadoNormalizado = nuevoEstado.replace(/[\s_]+/g, '_').toUpperCase()
 
-            // Si el servicio concluye de forma definitiva, liberamos al cliente para futuros soportes
             if (estadoNormalizado === 'ENTREGADO' || estadoNormalizado === 'RECHAZADO') {
                 await prisma.cliente.update({
                     where: { id: ticketActualizado.clienteId },
                     data: {
-                        atendidoPorBot: true, // El bot volverá a atenderlo en su próxima visita meses después
-                        googleChatThreadId: null // Rompemos el hilo para que su próximo caso genere una tarjeta nueva
+                        atendidoPorBot: true,
+                        googleChatThreadId: null
                     }
                 });
                 await prisma.mensaje.deleteMany({
                     where: { clienteId: ticketActualizado.clienteId }
                 });
-
                 console.log(`🧹 [DB CLEANUP]: Historial de chat efímero destruido con éxito para el cliente: ${ticketActualizado.cliente.telefono}`);
             }
 
             if (estadoNormalizado === "ESPERANDO_APROBACION") {
-                // 💰 MENSAJE DE PRESUPUESTO AUTOMATIZADO
-                textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
-                    `Hola, *${ticketActualizado.cliente.nombre}*. Hemos concluido el diagnóstico completo de tu equipo:\n\n` +
-                    `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
-                    `🎫 *Orden de Servicio:* ${ticketActualizado.numeroOrden}\n\n` +
-                    `🔬 *Diagnóstico Técnico:* ${notasDiagnostico || 'Revisión general y corrección de líneas principales en placa base.'}\n\n` +
-                    `💵 *Costo Total Autorizado:* *$${costoReparacion || ticketActualizado.costoReparacion} MXN* (Neto)\n\n` +
-                    `📌 *¿Cómo deseas proceder?* Por favor, responde a este chat con una sola palabra:\n\n` +
-                    `👉 Escribe *Aceptar* (Para autorizar el inicio de la reparación y recibir datos de anticipo).\n` +
-                    `👉 Escribe *Rechazar* (Para cancelar y preparar la devolución de tu equipo).\n\n` +
-                    `🌐 *Rastreo en Vivo:* Consulta tu nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                // Si el ingeniero reactiva un lead inyectando costo, personalizamos el mensaje para que el bot retome
+                const esLead = ticketActualizado.numeroOrden.startsWith('LEAD-');
+
+                if (esLead && botActivo === true) {
+                    textoMensaje = `[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización por un total de $${costoReparacion || ticketActualizado.costoReparacion} MXN. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos.\n\n¡Hola de nuevo! Ya guardé la cotización del ingeniero. Para confirmar tu espacio y proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?`
+                } else {
+                    textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
+                        `Hola, *${ticketActualizado.cliente.nombre}*. Hemos concluido el diagnóstico completo de tu equipo:\n\n` +
+                        `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
+                        `🎫 *Orden de Servicio:* ${ticketActualizado.numeroOrden}\n\n` +
+                        `🔬 *Diagnóstico Técnico:* ${notasDiagnostico || 'Revisión general y corrección de líneas principales en placa base.'}\n\n` +
+                        `💵 *Costo Total Autorizado:* *$${costoReparacion || ticketActualizado.costoReparacion} MXN* (Neto)\n\n` +
+                        `📌 *¿Cómo deseas proceder?* Por favor, responde a este chat con una sola palabra:\n\n` +
+                        `👉 Escribe *Aceptar* (Para autorizar el inicio de la reparación y recibir datos de anticipo).\n` +
+                        `👉 Escribe *Rechazar* (Para cancelar y preparar la devolución de tu equipo).\n\n` +
+                        `🌐 *Rastreo en Vivo:* Consulta tu nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                }
 
             } else if (estadoNormalizado === "LISTO_PARA_ENTREGA" || estadoNormalizado === "ENTREGADO") {
-                // 🚀 INTERCEPTOR DE FIN DE SERVICIO
                 const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' && ticketActualizado.cliente.nombre !== 'Cliente WhatsApp' ? ticketActualizado.cliente.nombre : 'amigo'
 
                 textoMensaje = `🔬 *¡SOPORTE TÉCNICO CONCLUIDO CON ÉXITO!* ⚡\n\n` +
@@ -254,22 +242,43 @@ export async function PATCH(request: Request) {
                     `🙏 ¡Muchas gracias por confiar en el laboratorio de Soltecot_! Puedes consultar tu comprobante de cierre dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
 
             } else if (estadoNormalizado === "EN_DIAGNOSTICO") {
-                // 🔍 MENSAJE DE DIAGNÓSTICO ACTIVO
                 textoMensaje = `🔬 *SOLTECOT_ WORKSHOP* 🔬\n\nTu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha avanzado al banco de pruebas.\n\n📍 *Estatus:* 🔍 EN DIAGNÓSTICO\n\nNuestros ingenieros están realizando las mediciones de voltajes y consumos en placa base para localizar el origen exacto de la falla. Te notificaremos los resultados a la brevedad.`
 
             } else {
-                // 🛠️ MENSAJE ESTÁNDAR PARA OTROS CAMBIOS DE ESTATUS
                 const estadoFormateado = typeof nuevoEstado === 'string' ? nuevoEstado.replace(/_/g, ' ') : 'ACTUALIZADO'
                 textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEl estatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha cambiado a:\n👉 *${estadoFormateado}*\n\n🌐 *Rastreo en Vivo:* Consulta el avance actualizado dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
             }
 
-            // Disparar el mensaje final hacia Meta API
             await enviarMensajeMeta(ticketActualizado.cliente.telefono, textoMensaje)
         }
 
         return NextResponse.json({ success: true, ticket: ticketActualizado }, { status: 200 })
     } catch (error: any) {
         console.error("🔴 [PATCH TICKETS ERROR]:", error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}
+
+// 🗑️ 4. BANDEJA DE LEADS GARBAGE COLLECTOR (DELETE)
+// Borra al cliente en cascada (Remueve cliente, mensajes efímeros y tickets de lead pendientes)
+export async function DELETE(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url)
+        const clienteId = searchParams.get('clienteId')
+
+        if (!clienteId) {
+            return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
+        }
+
+        // Ejecutamos la eliminación en Neon. Al tener Cascade Delete configurado, limpiará todo el historial asociado
+        const clienteEliminado = await prisma.cliente.delete({
+            where: { id: clienteId }
+        })
+
+        console.log(`🧼 [API GARBAGE COLLECTOR]: Lead purgado por completo de Neon. Teléfono: ${clienteEliminado.telefono}`)
+        return NextResponse.json({ success: true, message: 'Prospecto y todo su historial efímero eliminados correctamente.' }, { status: 200 })
+    } catch (error: any) {
+        console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
