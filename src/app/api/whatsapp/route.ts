@@ -349,7 +349,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            // 🚨 CAMBIO 1: Forzamos atendidoPorBot en false para silenciar la IA a nivel Cliente
+            // 🚨 Aquí silenciamos al bot correctamente a nivel CLIENTE
             const clienteExpress = await prisma.cliente.upsert({
                 where: { telefono: telefono10Digitos },
                 update: { atendidoPorBot: false },
@@ -368,19 +368,16 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     nuevoFolio = `SOL-${parseInt(ultimoTicketGlobal.numeroOrden.split('-')[1]) + 1}`
                 }
 
-                // 🚨 CAMBIO 2: Inyectamos botActivo: false al crear para que el Dashboard pinte la fila en ROJO
                 ticketActivo = await prisma.ticket.create({
                     data: {
                         numeroOrden: nuevoFolio, equipo: 'Soporte Técnico Remoto', fallaReportada: 'Instalación de Software / Optimización Express',
-                        clienteId: clienteIdParaTicket!, estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`,
-                        botActivo: false
+                        clienteId: clienteIdParaTicket!, estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`
                     }
                 })
             } else {
-                // 🚨 CAMBIO 3: Inyectamos botActivo: false al actualizar el ticket existente
                 ticketActivo = await prisma.ticket.update({
                     where: { id: ticketActivo.id },
-                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}`, botActivo: false }
+                    data: { estado: 'EN_REPARACION', notasInternas: `[SESIÓN REMOTA ACTIVA] Código: ${codigoEncontrado}` }
                 })
             }
 
@@ -388,7 +385,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
-            // 🚨 CAMBIO 4: DISPARAMOS LA ALERTA DE INMEDIATO A GOOGLE CHAT CON EL CÓDIGO
             await dispararAlertaInmediata(
                 telefono10Digitos,
                 'EN_REPARACION',
@@ -436,7 +432,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
 
-    // 🧠 RECONSTRUCTOR DE MEMORIA SERVERLESS (Shield Anti-Amnesia)
     if (historial.length === 0 && clientePrisma) {
         console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Reconstruyendo contexto para ${telefono10Digitos}`);
         if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
@@ -529,7 +524,7 @@ _DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
 - ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
 
 🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN in cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
+- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN en cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
 
 🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
 - Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (solo si es recolección) y si requerirá factura (SÍ/NO).
@@ -636,7 +631,6 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        // 🚨 INYECCIÓN ARQUITECTÓNICA: Manejo robusto de Handoff Humano en Neon (Paso 1)
         if (matchAgente || matchRemoteHandoff) {
             const clienteActualizado = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
@@ -647,7 +641,6 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
             if (matchAgente) {
                 estatusLead = 'REVISION_MANUAL'
 
-                // Revisamos si el prospecto cuenta con un ticket activo en Neon
                 let ticketLead = ticketMasReciente;
                 if (!ticketLead || ticketLead.estado === 'ENTREGADO' || ticketLead.estado === 'RECHAZADO') {
                     ticketLead = await prisma.ticket.create({
@@ -655,19 +648,16 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
                             numeroOrden: `LEAD-${telefonoParaCita}`,
                             equipo: dispositivoCrm,
                             fallaReportada: `${fallaCrm} (Solicitó Humano)`,
-                            estado: 'REVISION_MANUAL',
-                            botActivo: false,
+                            estado: 'ESPERANDO_APROBACION', // 🚨 CORREGIDO: Usamos un enum válido de tu base de datos
                             clienteId: clienteActualizado.id,
-                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
+                            notesInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
                         }
                     });
-                    // Reasignamos la variable local para sincronizar los folios en Sheets y chats efímeros
                     ticketMasReciente = ticketLead;
                 } else {
-                    // Si ya existía una orden a medias, la mandamos al limbo manual apagando el bot
                     ticketLead = await prisma.ticket.update({
                         where: { id: ticketLead.id },
-                        data: { estado: 'REVISION_MANUAL', botActivo: false }
+                        data: { estado: 'ESPERANDO_APROBACION' } // 🚨 CORREGIDO: Sincronizado con enum válido
                     });
                     ticketMasReciente = ticketLead;
                 }
