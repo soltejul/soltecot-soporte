@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 interface Mensaje {
     id: string
@@ -45,7 +45,6 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
         setCargando(true)
         cargarMensajes()
 
-        // 🔄 Polling: Refrescar el chat cada 4 segundos por si el cliente responde
         const intervalo = setInterval(cargarMensajes, 4000)
         return () => clearInterval(intervalo)
     }, [isOpen, clienteId])
@@ -70,7 +69,7 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
 
             if (res.ok) {
                 const { mensaje } = await res.json()
-                setMensajes(prev => [...prev, mensaje]) // Añade la burbuja al instante
+                setMensajes(prev => [...prev, mensaje])
                 setNuevoMensaje('')
             }
         } catch (error) {
@@ -83,9 +82,17 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
+        /* 🚨 CAMBIO 1: El Backdrop oscuro ahora detecta clics externos para cerrar el modal */
+        <div
+            onClick={onClose}
+            className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm cursor-pointer"
+        >
             {/* Contenedor del Panel Lateral */}
-            <div className="w-full max-w-md h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transform transition-transform duration-300">
+            {/* 🚨 CAMBIO 2: Frenamos la propagación del clic (stopPropagation) y restauramos el cursor */}
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transform transition-transform duration-300 cursor-default"
+            >
 
                 {/* 🏷️ HEADER DEL CHAT */}
                 <div className="p-4 border-b border-zinc-800 bg-zinc-900 flex justify-between items-center">
@@ -115,8 +122,8 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                                         {msg.origen === 'BOT' ? '🤖 IA Soltecot' : msg.origen === 'HUMANO' ? '👨‍💻 Tú (Taller)' : '📱 Cliente'}
                                     </span>
                                     <div className={`max-w-[85%] rounded-lg px-4 py-2 text-sm shadow-md whitespace-pre-wrap ${msg.origen === 'HUMANO' ? 'bg-emerald-600 text-white rounded-br-none' :
-                                            msg.origen === 'BOT' ? 'bg-zinc-800 text-emerald-300 border border-emerald-900 rounded-br-none' :
-                                                'bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-bl-none'
+                                        msg.origen === 'BOT' ? 'bg-zinc-800 text-emerald-300 border border-emerald-900 rounded-br-none' :
+                                            'bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-bl-none'
                                         }`}>
                                         {msg.texto}
                                     </div>
@@ -127,7 +134,7 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                             )
                         })
                     )}
-                    <div ref={mensajesFinRef} /> {/* Ancla para el auto-scroll */}
+                    <div ref={mensajesFinRef} />
                 </div>
 
                 {/* ✍️ ÁREA DE TEXTO (INPUT) */}
