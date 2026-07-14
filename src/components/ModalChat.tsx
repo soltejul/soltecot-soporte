@@ -145,7 +145,7 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                     <div className="flex gap-2 mb-3 px-1 overflow-x-auto pb-1 scrollbar-hide">
                         <button
                             type="button"
-                            onClick={() => setNuevoMensaje("Hola, te comparto nuestros datos bancarios oficiales para realizar tu depósito/transferencia:\n\n🏦 *Banco:* BBVA\n💳 *Cuenta CLABE:* 0121 8001 2345 6789 01\n👤 *Beneficiario:* Solutions & Technology On Time\n\n🙏 Por favor, envíame el comprobante o captura por este medio una vez realizado para validarlo y anexarlo a tu orden. ¡Gracias! 🔬")}
+                            onClick={() => setNuevoMensaje("Hola, te comparto nuestros datos bancarios oficiales para realizar tu depósito/transferencia:\n\n🏦 *Banco:* BBVA\n💳 *Cuenta CLABE:* 012 180 015425417770 2\n👤 *Beneficiario:* Julio Cesar López Castro\n\n🙏 Por favor, envíame el comprobante o captura por este medio una vez realizado para validarlo y anexarlo a tu orden. ¡Gracias! 🔬")}
                             className="whitespace-nowrap text-[10px] font-bold bg-zinc-800 hover:bg-emerald-900/60 text-emerald-400 px-3 py-1.5 rounded-full border border-zinc-700 hover:border-emerald-700 transition-colors shadow-sm"
                         >
                             🏦 Datos Bancarios
