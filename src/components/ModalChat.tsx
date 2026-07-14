@@ -138,26 +138,52 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                 </div>
 
                 {/* ✍️ ÁREA DE TEXTO (INPUT) */}
+                {/* ✍️ ÁREA DE TEXTO (INPUT) CON RESPUESTAS RÁPIDAS */}
                 <div className="p-4 border-t border-zinc-800 bg-zinc-900">
+
+                    {/* ⚡ BOTONES DE RESPUESTAS RÁPIDAS */}
+                    <div className="flex gap-2 mb-3 px-1 overflow-x-auto pb-1 scrollbar-hide">
+                        <button
+                            type="button"
+                            onClick={() => setNuevoMensaje("Hola, te comparto nuestros datos bancarios oficiales para realizar tu depósito/transferencia:\n\n🏦 *Banco:* BBVA\n💳 *Cuenta CLABE:* 0121 8001 2345 6789 01\n👤 *Beneficiario:* Solutions & Technology On Time\n\n🙏 Por favor, envíame el comprobante o captura por este medio una vez realizado para validarlo y anexarlo a tu orden. ¡Gracias! 🔬")}
+                            className="whitespace-nowrap text-[10px] font-bold bg-zinc-800 hover:bg-emerald-900/60 text-emerald-400 px-3 py-1.5 rounded-full border border-zinc-700 hover:border-emerald-700 transition-colors shadow-sm"
+                        >
+                            🏦 Datos Bancarios
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setNuevoMensaje("📍 *Ubicación del Laboratorio:*\n\nHacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México, C.P. 54850. (Recepción en entrada principal).\n\n🗺️ *Google Maps:* https://maps.google.com/?q=19.68430387588073,-99.15870193124036")}
+                            className="whitespace-nowrap text-[10px] font-bold bg-zinc-800 hover:bg-amber-900/60 text-amber-400 px-3 py-1.5 rounded-full border border-zinc-700 hover:border-amber-700 transition-colors shadow-sm"
+                        >
+                            📍 Ubicación Maps
+                        </button>
+                    </div>
+
                     <form onSubmit={manejarEnvio} className="flex gap-2">
-                        <input
-                            type="text"
+                        <textarea
                             value={nuevoMensaje}
                             onChange={(e) => setNuevoMensaje(e.target.value)}
-                            placeholder="Escribe tu mensaje..."
-                            className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                            placeholder="Escribe tu mensaje manual aquí..."
+                            className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 resize-none overflow-hidden"
                             disabled={enviando}
+                            rows={nuevoMensaje.split('\n').length > 1 ? Math.min(nuevoMensaje.split('\n').length, 5) : 1}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    manejarEnvio(e);
+                                }
+                            }}
                         />
                         <button
                             type="submit"
                             disabled={enviando || !nuevoMensaje.trim()}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center self-end h-[38px]"
                         >
                             {enviando ? '...' : 'Enviar 🚀'}
                         </button>
                     </form>
                     <p className="text-[10px] text-zinc-500 text-center mt-2">
-                        Al enviar un mensaje manual, el Bot de IA se silenciará automáticamente.
+                        💡 Tip: Presiona Enter para enviar, Shift+Enter para salto de línea. El bot se silenciará al enviar.
                     </p>
                 </div>
             </div>

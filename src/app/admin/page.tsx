@@ -184,6 +184,7 @@ export default function AdminDashboard() {
     }
 
     // 🔍 APLICAR MOTOR DE BÚSQUEDA GENERAL
+    // 🔍 APLICAR MOTOR DE BÚSQUEDA GENERAL
     const ticketsFiltrados = tickets.filter((t) => {
         const termino = busqueda.toLowerCase().trim()
         const fechaLegible = new Date(t.createdAt).toLocaleDateString('es-MX')
@@ -196,12 +197,16 @@ export default function AdminDashboard() {
         )
     })
 
-    // 📂 SEGREGACIÓN GLOBAL DE CATEGORÍAS (Para badges y renderizado de tablas)
-    const listaWorkshop = ticketsFiltrados.filter(t => !t.numeroOrden.startsWith('LEAD-'))
-    const listaLeads = ticketsFiltrados.filter(t => t.numeroOrden.startsWith('LEAD-'))
+    // 🧠 📂 FILTRO INTELIGENTE DE CATEGORÍAS
+    // Un Lead solo se queda en la Bandeja si tiene el prefijo LEAD- Y sigue esperando aprobación.
+    // Si avanza a EN_REPARACION (ej. Soporte Remoto), se va directo al Banco de Trabajo.
+    const esLeadPuro = (t: any) => t.numeroOrden.startsWith('LEAD-') && t.estado === 'ESPERANDO_APROBACION'
 
-    const totalWorkshopGlobal = tickets.filter(t => !t.numeroOrden.startsWith('LEAD-')).length
-    const totalLeadsGlobal = tickets.filter(t => t.numeroOrden.startsWith('LEAD-')).length
+    const listaWorkshop = ticketsFiltrados.filter(t => !esLeadPuro(t))
+    const listaLeads = ticketsFiltrados.filter(t => esLeadPuro(t))
+
+    const totalWorkshopGlobal = tickets.filter(t => !esLeadPuro(t)).length
+    const totalLeadsGlobal = tickets.filter(t => esLeadPuro(t)).length
 
     if (cargando) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Iniciando el Centro de Control de Soltecot_...</div>
 
