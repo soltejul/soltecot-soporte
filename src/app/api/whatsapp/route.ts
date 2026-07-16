@@ -736,7 +736,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                             fallaReportada: `${fallaCrm} (Solicitó Humano)`,
                             estado: 'ESPERANDO_APROBACION',
                             clienteId: clienteActualizado.id,
-                            notesInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
+                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
                         }
                     });
                     ticketMasReciente = ticketLead;
