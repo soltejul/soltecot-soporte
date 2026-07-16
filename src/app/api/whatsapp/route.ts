@@ -883,7 +883,7 @@ export async function POST(req: Request) {
                 }
             })
 
-            if (textoNormalizado === 'reset') {
+            if (textoNormalizado === 'kanzer1986') {
                 if (clienteExistente) {
                     await prisma.cliente.update({
                         where: { id: clienteExistente.id },
