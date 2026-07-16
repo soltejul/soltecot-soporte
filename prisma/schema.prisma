@@ -4,81 +4,109 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL") // 👈 El motor clásico que lee tu .env automáticamente
 }
 
 // ==========================================
-// MODELOS OPTIMIZADOS PARA EL CRM SOLTECOT_
+// 🏢 INFRAESTRUCTURA B2B (Páginas y Leads PYME)
+// ==========================================
+
+model LeadB2B {
+  id        String        @id @default(cuid()) // O Int @default(autoincrement()) según lo tengas
+  nombre    String
+  email     String        @unique // El correo virtual que usamos de ancla
+  empresa   String?       // Opcional por si no lo dan
+  mensaje   String?       @db.Text
+  estado    EstadoLeadB2B @default(NUEVO) // 🚨 Aplicamos el Enum aquí
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+enum EstadoLeadB2B {
+  NUEVO
+  CONTACTADO
+  REUNION_AGENDADA
+  PROPUESTA_ENVIADA
+  CERRADO_GANADO
+  CERRADO_PERDIDO
+}
+
+// ==========================================
+// 🤖 INFRAESTRUCTURA B2C (Chatbot & Soporte Actual)
 // ==========================================
 
 model Cliente {
   id                 String    @id @default(uuid())
   nombre             String
-  email              String?   @unique 
-  telefono           String    @unique 
-  tickets            Ticket[] 
-  mensajes           Mensaje[] // 💬 RELACIÓN INVERSA: Historial efímero conectado al cliente
+  email              String?   @unique
+  telefono           String    @unique
   createdAt          DateTime  @default(now())
-
-  // 🚨 CONTROL HÍBRIDO BOT / HUMANO (NUEVOS SUPERPODERES)
   atendidoPorBot     Boolean   @default(true)
-  googleChatThreadId String?   @unique 
-
-  @@index([telefono]) 
-}
-
-model Ticket {
-  id               String       @id @default(uuid()) 
-  numeroOrden      String       @unique 
-  equipo           String       
-  fallaReportada   String       
-  estado           EstadoTicket @default(RECIBIDO)
-  costoEstimado    Float?
-  notasInternas    String?      
-  clienteId        String
-  cliente          Cliente      @relation(fields: [clienteId], references: [id])
-  citas            Cita[]       
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  
-  botActivo        Boolean      @default(true)
-  costoReparacion  Float?
-  notasDiagnostico String?
-
-  @@index([numeroOrden]) 
-}
-
-model Cita {
-  id            String     @id @default(uuid())
-  nombreCliente String     
-  telefono      String     
-  direccion     String     
-  distanciaKm   Float?     
-  coordenadas   String?    
-  fechaCita     DateTime   
-  tipo          TipoCita   
-  estado        EstadoCita @default(PENDIENTE)
-  notas         String?    
-  ticketId      String?  
-  ticket        Ticket?    @relation(fields: [ticketId], references: [id])
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  googleChatThreadId String?   @unique
+  mensajes           Mensaje[]
+  tickets            Ticket[]
 
   @@index([telefono])
 }
 
-// 💬 HISTORIAL EFÍMERO DE CHAT
-// Se auto-elimina en cascada al cambiar el estatus a ENTREGADO o RECHAZADO
+model Ticket {
+  id               String       @id @default(uuid())
+  numeroOrden      String       @unique
+  equipo           String
+  fallaReportada   String
+  estado           EstadoTicket @default(RECIBIDO)
+  costoEstimado    Float?
+  notasInternas    String?
+  clienteId        String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  botActivo        Boolean      @default(true)
+  costoReparacion  Float?
+  notasDiagnostico String?
+  citas            Cita[]
+  cliente          Cliente      @relation(fields: [clienteId], references: [id])
+
+  @@index([numeroOrden])
+}
+
+model Cita {
+  id            String     @id @default(uuid())
+  nombreCliente String
+  telefono      String
+  direccion     String
+  distanciaKm   Float?
+  coordenadas   String?
+  fechaCita     DateTime
+  tipo          TipoCita
+  estado        EstadoCita @default(PENDIENTE)
+  notas         String?
+  ticketId      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  ticket        Ticket?    @relation(fields: [ticketId], references: [id])
+
+  @@index([telefono])
+}
+
 model Mensaje {
   id        String        @id @default(uuid())
   texto     String
   origen    OrigenMensaje @default(CLIENTE)
   clienteId String
-  cliente   Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   createdAt DateTime      @default(now())
+  cliente   Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
 }
+
+model WebhookLog {
+  id        String    @id
+  createdAt DateTime? @default(now()) @db.Timestamp(6)
+}
+
+// ==========================================
+// ⚙️ ENUMS REQUERIDOS
+// ==========================================
 
 enum OrigenMensaje {
   CLIENTE
@@ -92,11 +120,11 @@ enum TipoCita {
 }
 
 enum EstadoCita {
-  PENDIENTE     
-  CONFIRMADA    
-  EN_RUTA       
-  COMPLETADA    
-  CANCELADA     
+  PENDIENTE
+  CONFIRMADA
+  EN_RUTA
+  COMPLETADA
+  CANCELADA
 }
 
 enum EstadoTicket {
@@ -106,5 +134,5 @@ enum EstadoTicket {
   EN_REPARACION
   LISTO_PARA_ENTREGA
   ENTREGADO
-  RECHAZADO 
+  RECHAZADO
 }

@@ -15,6 +15,9 @@ const RADIO_MAXIMO_KM = 10
 
 const MEMORIA_CHAT = new Map<string, any[]>()
 
+// =========================================================================
+// 🔐 FUNCIONES DE UTILERÍA Y AUTENTICACIÓN GOOGLE
+// =========================================================================
 function obtenerAuthGoogle(scopes: string[]) {
     const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
     if (!credencialesRaw) {
@@ -42,11 +45,11 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
 
         let icono = '🟢';
         if (estatus.includes('SOS')) {
-            icono = '🚨 Urgente'; // S.O.S. Agente cuando el bot se rinde
+            icono = '🚨 Urgente';
         } else if (estatus.includes('MANUAL') || estatus.includes('ATENCION')) {
-            icono = '💬 Chat Humano'; // Estás chateando en vivo (Modo Humano activo)
+            icono = '💬 Chat Humano';
         } else if (estatus === 'AGENDADO') {
-            icono = '📅 ¡CITA AGENDADA!'; // Éxito total de reservación en Calendar/Sheets
+            icono = '📅 ¡CITA AGENDADA!';
         } else if (estatus === 'FUERA_DE_COBERTURA') {
             icono = '🟡 Fuera de Radio';
         } else if (estatus === 'EN_REPARACION') {
@@ -163,20 +166,17 @@ async function registrarFinanzasEnFacturacion(
         let numeroDeFilaDestino = -1
         let filaVieja: string[] = []
 
-        // 🧠 BUSCADOR INTELIGENTE ANTI-COLISIONES
         for (let i = 0; i < filasExistentes.length; i++) {
             const rowFolio = filasExistentes[i][0]
             const rowTelefono = filasExistentes[i][3]
 
             if (folio === 'SOL-REM-PENDIENTE') {
-                // Si es un lead orgánico, la fila DEBE coincidir en folio Y en el teléfono del cliente
                 if (rowFolio === 'SOL-REM-PENDIENTE' && rowTelefono === telefono) {
                     numeroDeFilaDestino = i + 1
                     filaVieja = filasExistentes[i]
                     break
                 }
             } else {
-                // Si ya es un ticket real (ej: SOL-1001), buscamos por la llave única del folio
                 if (rowFolio === folio) {
                     numeroDeFilaDestino = i + 1
                     filaVieja = filasExistentes[i]
@@ -185,7 +185,6 @@ async function registrarFinanzasEnFacturacion(
             }
         }
 
-        // 🛡️ ESTRATEGIA DE FUSIÓN (MERGE): Protegemos la información valiosa de sobreescrituras vacías
         if (numeroDeFilaDestino !== -1 && filaVieja.length > 0) {
             const nombreFinal = (nombre === 'Cliente WhatsApp' && filaVieja[2]) ? filaVieja[2] : nombre;
             const soporteFinal = (tipoSoporte === 'Remoto' && filaVieja[4]) ? filaVieja[4] : tipoSoporte;
@@ -219,7 +218,6 @@ async function registrarFinanzasEnFacturacion(
             })
             console.log(`✅ [CRM MERGE SUCCESS]: Fila indexada y protegida para el cliente: ${telefono}`)
         } else {
-            // Si es la primera interacción del día para este lead, creamos su espacio limpio
             const valoresFila = [
                 folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
                 reqFactura, rfc, nombreFiscal, cp, regimen, usoCfdi, correo, montoNeto, iva, totalCobrado, estatusSat, ""
@@ -240,7 +238,6 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
 
-        // 🇲🇽 SELLO HORARIO MÉXICO: Si la fecha no trae offset, le inyectamos estrictamente el GMT-6
         const fechaConOffset = fechaIso.includes('-06:00') || fechaIso.includes('Z')
             ? fechaIso
             : `${fechaIso}-06:00`;
@@ -270,7 +267,7 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
             requestBody: {
                 summary: `${prefijo} Soltecot_ [${telefono}]`,
                 description: `Contacto: ${telefono}\nSolicitud: ${mensajeCliente}`,
-                start: { dateTime: inicioCita.toISOString() }, // Google Calendar lee el string ISO absoluto con Z
+                start: { dateTime: inicioCita.toISOString() },
                 end: { dateTime: finCita.toISOString() },
             },
         })
@@ -319,10 +316,101 @@ async function calcularDistanciaKm(direccionDestino: string, apiKey: string): Pr
     }
 }
 
+// =========================================================================
+// 🧠 MOTOR DE INTELIGENCIA ARTIFICIAL HÍBRIDO (B2B / B2C)
+// =========================================================================
 async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const textoNormalizado = mensajeCliente.trim().toLowerCase()
+
+    // 🔍 COMPRENSIÓN DIACRÍTICA AVANZADA (Limpia acentos invisibles de WhatsApp)
+    const textoSinAcentos = textoNormalizado.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+
     const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
     const telefono10Digitos = telefonoLimpio.slice(-10)
+
+    // -------------------------------------------------------------------------
+    // 🏢 MÓDULO VIP B2B: CORTAFUEGOS Y CAPTURA DE LEADS EMPRESARIALES
+    // -------------------------------------------------------------------------
+    let memoriaB2B = MEMORIA_CHAT.get(`B2B_${numeroCliente}`) || [];
+    const esPrimerMensajeB2B = textoSinAcentos.includes('poliza corporativa') || textoSinAcentos.includes('poliza') || textoSinAcentos.includes('pyme');
+    const yaEstaEnConversacionB2B = memoriaB2B.length > 0;
+
+    if (esPrimerMensajeB2B || yaEstaEnConversacionB2B) {
+        if (esPrimerMensajeB2B) memoriaB2B = [];
+
+        memoriaB2B.push({ role: 'user', parts: [{ text: mensajeCliente }] });
+        if (memoriaB2B.length > 8) memoriaB2B = memoriaB2B.slice(-8);
+
+        try {
+            const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
+            const aiB2B = new GoogleGenAI({ apiKey });
+            const fechaHoyB2B = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            const responseB2B = await aiB2B.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: memoriaB2B,
+                config: {
+                    systemInstruction: `Eres el Asistente Comercial de IA de Soltecot_ B2B en WhatsApp. Tu único objetivo es calificar de manera ejecutiva a encargados de PYMEs para agendar una sesión de consultoría técnica en Google Meet con el Ingeniero Julio. 
+                    📅 HOY ES: ${fechaHoyB2B}.
+                    Recopila con mucha amabilidad pero de forma directa: Nombre Completo del contacto, Nombre de la Empresa y la Cantidad aproximada de equipos informáticos a cubrir.
+                    Enlace oficial de la agenda corporativa: https://calendar.google.com/calendar/appointments/schedules/AcZssJ3N2Vn... (Proporciona el enlace de citas del Ingeniero Julio).
+                    ⚠️ OBLIGATORIO: En el preciso instante en que le proporciones el link de la agenda, DEBES concatenar al final del mensaje de forma estricta y literal la siguiente etiqueta estructurada de datos en una sola línea sin espacios extras: [DATA_LEAD_B2B]:Nombre Completo|Nombre Empresa|CantidadEquipos`
+                }
+            });
+
+            const respuestaRawB2B = responseB2B.text || '';
+            const matchDataB2B = respuestaRawB2B.match(/\[DATA_LEAD_B2B\]:\s*([^\n\r]+)/i);
+            let respuestaWhatsAppB2B = respuestaRawB2B.replace(/\[DATA_LEAD_B2B\]:[^\n]*/gi, '').trim();
+
+            if (matchDataB2B) {
+                const camposB2B = matchDataB2B[1].split('|');
+                const nombreB2B = camposB2B[0]?.trim() || 'Contacto PYME';
+                const empresaB2B = camposB2B[1]?.trim() || 'Empresa';
+                const equiposB2B = camposB2B[2]?.trim() || 'No especificado';
+
+                const servicioDetectado = calcularServicioDeMensaje(textoSinAcentos);
+
+                // 📊 Registro analítico histórico en Google Sheets (Pestaña: AnaliticaLeads)
+                await registrarAnaliticaB2BEnSheets(telefono10Digitos, nombreB2B, empresaB2B, equiposB2B, servicioDetectado, 'NUEVO');
+
+                // 💾 Registro operativo en Neon con Estatus Pipeline
+                const emailVirtualB2B = `${telefono10Digitos}@soltecot-whatsapp.local`;
+                const leadExistente = await prisma.leadB2B.findFirst({ where: { email: emailVirtualB2B } });
+
+                if (leadExistente) {
+                    await prisma.leadB2B.update({
+                        where: { id: leadExistente.id },
+                        data: { nombre: nombreB2B, empresa: empresaB2B, mensaje: `Equipos: ${equiposB2B}. Canalizado a Google Meet.`, estado: 'NUEVO' }
+                    });
+                } else {
+                    await prisma.leadB2B.create({
+                        data: { nombre: nombreB2B, email: emailVirtualB2B, empresa: empresaB2B, mensaje: `Equipos: ${equiposB2B}. Canalizado a Google Meet.`, estado: 'NUEVO' }
+                    });
+                }
+
+                // Alerta al centro de mando en Google Chat e Handoff al canal Humano
+                await dispararAlertaInmediata(telefono10Digitos, '💼 NUEVO LEAD B2B', `Prospecto corporativo calificado: *${nombreB2B}* de la empresa *"${empresaB2B}"* (${equiposB2B} equipos). Servicio interesado: ${servicioDetectado}.`);
+
+                await prisma.cliente.upsert({
+                    where: { telefono: telefono10Digitos },
+                    update: { atendidoPorBot: false },
+                    create: { telefono: telefono10Digitos, nombre: nombreB2B, atendidoPorBot: false }
+                });
+            }
+
+            memoriaB2B.push({ role: 'model', parts: [{ text: respuestaWhatsAppB2B }] });
+            MEMORIA_CHAT.set(`B2B_${numeroCliente}`, memoriaB2B);
+            await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsAppB2B);
+            return; // 🛑 CORTE DE FLUJO: Evita que el cliente corporativo toque el taller B2C
+        } catch (errorB2B) {
+            console.error('🔴 Error crítico en módulo B2B:', errorB2B);
+            return;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🎮 MÓDULO B2C PARTICULARES (SISTEMA DE TALLER OPERATIVO INTACTO)
+    // -------------------------------------------------------------------------
     let ticketMasReciente: any = null
     let clientePrisma: any = null
 
@@ -349,7 +437,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (regexCodigoRemoto.test(textoNormalizado)) {
             const codigoEncontrado = mensajeCliente.match(regexCodigoRemoto)![0].replace(/\s/g, '')
 
-            // 🚨 Aquí silenciamos al bot correctamente a nivel CLIENTE
             const clienteExpress = await prisma.cliente.upsert({
                 where: { telefono: telefono10Digitos },
                 update: { atendidoPorBot: false },
@@ -476,79 +563,78 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 config: {
                     systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita o registrar un soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático, seguro y muy directo.
 
-📅 HOY ES: ${fechaHoyString}.
-📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
-🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
+                    📅 HOY ES: ${fechaHoyString}.
+                    📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
+                    🗺️ GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
-📋 [SISTEMA] INFO DEL TICKET ACTUAL EN NEON (Contexto en Tiempo Real):
-- Folio de Orden: ${folioOrden}
-- Equipo/Falla en registro: ${equipoRegistro} - ${fallaRegistro}
-- Costo Total pactado por el Ingeniero Julio: ${costoPactado}
+                    📋 [SISTEMA] INFO DEL TICKET ACTUAL EN NEON (Contexto en Tiempo Real):
+                    - Folio de Orden: ${folioOrden}
+                    - Equipo/Falla en registro: ${equipoRegistro} - ${fallaRegistro}
+                    - Costo Total pactado por el Ingeniero Julio: ${costoPactado}
 
---- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
-• OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
-• OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
-• OPCIÓN 3: Mantenimiento advanced de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
+                    --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
+                    • OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
+                    • OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
+                    • OPCIÓN 3: Mantenimiento advanced de Consolas de videojuegos (Xbox, PlayStation, Nintendo).
 
-🚨 PROTOCOLO EXCLUSIVO PARA OPCIÓN 1 (SOPORTE TÉCNICO REMOTO):
-1. Si el cliente elige Soporte Remoto, avísale que el costo es de $419 MXN neto y recopila únicamente su Nombre Completo y si requiere Factura (SÍ/NO). 
-2. En el instante en que el cliente te proporcione su nombre y confirmación de factura, DEBES responderle con las instrucciones exactas de conexión y generar el cierre inmediato:
+                    🚨 PROTOCOLO EXCLUSIVO PARA OPCIÓN 1 (SOPORTE TÉCNICO REMOTO):
+                    1. Si el cliente elige Soporte Remoto, avísale que el costo es de $419 MXN neto y recopila únicamente su Nombre Completo y si requiere Factura (SÍ/NO). 
+                    2. En el instante en que el cliente te proporcione su nombre y confirmación de factura, DEBES responderle con las instrucciones exactas de conexión y generar el cierre inmediato:
 
-"¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo y solucionar la falla, sigue estos sencillos pasos:
+                    "¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo y solucionar la falla, sigue estos sencillos pasos:
 
-1. Desde la computadora que tiene el problema, ingresa a: **remotedesktop.google.com/support**
-2. En la sección 'Asistencia remota', haz clic en el botón azul de descarga para instalar la herramienta (si es la primera vez).
-3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un código numérico de 12 dígitos.
-4. Escríbeme ese código aquí abajo para que el ingeniero tome el control de tu pantalla de inmediato."
+                    1. Desde la computadora que tiene el problema, ingresa a: **remotedesktop.google.com/support**
+                    2. En la sección 'Asistencia remota', haz clic en el botón azul de descarga para instalar la herramienta (si es la primera vez).
+                    3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un código numérico de 12 dígitos.
+                    4. Escríbeme ese código aquí abajo para que el ingeniero tome el control de tu pantalla de inmediato."
 
-3. ⚠️ OBLIGATORIO E INNEGOCIABLE ⚠️: Al final de ese mismísimo mensaje de instrucciones, DEBES concatenar en texto plano y de forma LITERAL las etiquetas de anclaje de salida (calculando la fecha y hora actual en la que estás chateando). Si no las imprimes textualmente, el backend no creará el folio:
+                    3. ⚠️ OBLIGATORIO E INNEGOCIABLE ⚠️: Al final de ese mismísimo mensaje de instrucciones, DEBES concatenar en texto plano y de forma LITERAL las etiquetas de anclaje de salida (calculando la fecha y hora actual en la que estás chateando). Si no las imprimes textualmente, el backend no creará el folio:
 
-__AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
-_DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
-[DATA_CRM]:Nombre Completo|PC/Laptop|Soporte Remoto Software|TelefonoDe10Digitos
-[DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo
+                    __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00
+                    _DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
+                    [DATA_CRM]:Nombre Completo|PC/Laptop|Soporte Remoto Software|TelefonoDe10Digitos
+                    [DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo
 
---- 2. MODALIDADES DE ENTREGA ---
-1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM).
-2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
+                    --- 2. MODALIDADES DE ENTREGA ---
+                    1. VISITA AL LABORATORIO: Lunes a viernes (10 AM - 6 PM) y sábados (10 AM - 2 PM).
+                    2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10km desde el laboratorio).
 
---- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
+                    --- 3. REGLAS ESTRICTAS DE ATENCIÓN Y FLUJOS ---
+                    🚨 REGLAS ESTRICTAS DE RECOPILACIÓN DE DATOS (¡CANDADOS DE INFORMACIÓN!):
+                    - NUNCA pidas el número de teléfono del cliente bajo ninguna circunstancia. El sistema de WhatsApp ya detecta su número y lo procesa internamente.
+                    - Si el cliente elige VISITA AL LABORATORIO: Queda ESTRICTAMENTE PROHIBIDO pedirle su dirección física. Solo necesitas su Nombre Completo, Fecha/Hora deseada y si requiere Factura. Al final, en la etiqueta _DIRECCION_CLIENTE_, escribirás exactamente: "Visita en Laboratorio".
+                    - Si el cliente elige RECOLECCIÓN A DOMICILIO: SÍ es obligatorio que solicites su dirección completa para validar la cobertura de logística del taller.
 
-🚨 REGLAS ESTRICTAS DE RECOPILACIÓN DE DATOS (¡CANDADOS DE INFORMACIÓN!):
-- NUNCA pidas el número de teléfono del cliente bajo ninguna circunstancia. El sistema de WhatsApp ya detecta su número y lo procesa internamente.
-- Si el cliente elige VISITA AL LABORATORIO: Queda ESTRICTAMENTE PROHIBIDO pedirle su dirección física. Solo necesitas su Nombre Completo, Fecha/Hora deseada y si requiere Factura. Al final, en la etiqueta _DIRECCION_CLIENTE_, escribirás exactamente: "Visita en Laboratorio".
-- Si el cliente elige RECOLECCIÓN A DOMICILIO: SÍ es obligatorio que solicites su dirección completa para validar la cobertura de logística del taller.
+                    🚨 REGLA DE RENDICIÓN TAJANTE ANTE PRECIOS (CANDADO ANTIBUCLES MANDATORIO):
+                    - Si el cliente te solicita un costo y el valor de Neon es 'Por cotizar', la PRIMERA VEZ debes otorgarle amablemente nuestro rango de mercado ($790 a $2,500 MXN) y ofrecerle Visita o Recolección.
+                    - ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
 
-🚨 REGLA DE RENDICIÓN TAJANTE ANTE PRECIOS (CANDADO ANTIBUCLES MANDATORIO):
-- Si el cliente te solicita un costo y el valor de Neon es 'Por cotizar', la PRIMERA VEZ debes otorgarle amablemente nuestro rango de mercado ($790 a $2,500 MXN) y ofrecerle Visita o Recolección.
-- ¡CANDADO ABSOLUTO!: Si notas en el historial que YA MENCIONASTE el rango de precios, o si el cliente vuelve a insistir, objetar, o preguntar cosas como: "¿No me puedes dar costo exacto?", o "quiero hablar con un agente", TIENES ESTRICTAMENTE PROHIBIDO volver a mandarle la dirección o modalidades. Aborta inmediatamente e incluye la etiqueta: __TRANSFERIR_HUMANO__
+                    🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
+                    - Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN en cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
 
-🚨 REGLA DE RESPETO AL HISTORIAL HUMANO (POST-REACTIVACIÓN):
-- Si el "Costo Total pactado por el Ingeniero Julio" detallado arriba es DIFERENTE a 'Por cotizar', ese es el COSTO REAL Y ÚNICO DEL SERVICIO (ej: ${costoPactado}). Queda ESTRICTAMENTE PROHIBIDO volver a mencionar el rango base de $790 a $2,500 MXN en cualquier parte del chat, incluido el mensaje final de confirmación. Confirma siempre usando el valor exacto de ${costoPactado}. Asume el costo y avanza directo al agendamiento preguntando si prefiere Visita al laboratorio o Recolección a domicilio.
+                    🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
+                    - Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (solo si es recolección) y si requerirá factura (SÍ/NO).
+                    - ¡FASE DE RECOPILACIÓN FISCAL!: Si el usuario responde explícitamente "SÍ" o aporta datos de facturación, TIENES ESTRICTAMENTE PROHIBIDO cerrar la cita o dar el mensaje final de confirmación. En su lugar, debes responder solicitándole los siguientes datos: 1) RFC, 2) Nombre Fiscal o Razón Social, 3) Código Postal Fiscal, 4) Régimen Fiscal, 5) Uso de CFDI y 6) Correo electrónico. 
+                    - Solo cuando el cliente te proporcione esos 6 datos fiscales, podrás dar por concluida la cita y emitir el mensaje final de éxito. Mientras no los provea, mantén el chat enfocado en obtenerlos.
 
-🚨 FLUJO CONDICIONAL OBLIGATORIO DE FACTURACIÓN (DOS FASES):
-- Cuando un cliente acepte el servicio, solicita inicialmente: Nombre Completo, Dirección (solo si es recolección) y si requerirá factura (SÍ/NO).
-- ¡FASE DE RECOPILACIÓN FISCAL!: Si el usuario responde explícitamente "SÍ" o aporta datos de facturación, TIENES ESTRICTAMENTE PROHIBIDO cerrar la cita o dar el mensaje final de confirmación. En su lugar, debes responder solicitándole los siguientes datos: 1) RFC, 2) Nombre Fiscal o Razón Social, 3) Código Postal Fiscal, 4) Régimen Fiscal, 5) Uso de CFDI y 6) Correo electrónico. 
-- Solo cuando el cliente te proporcione esos 6 datos fiscales, podrás dar por concluida la cita y emitir el mensaje final de éxito. Mientras no los provea, mantén el chat enfocado en obtenerlos.
+                    🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
+                    - Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON", trata el caso de inmediato como un flujo nuevo desde cero y aplica el rango base del mercado.
 
-🚨 REGLA DE MULTI-EQUIPOS (OTRO DISPOSITIVO DIFERENTE):
-- Si el cliente menciona explícitamente que la consulta corresponde a un equipo DIFERENTE al detallado en la "INFO DEL TICKET ACTUAL EN NEON", trata el caso de inmediato como un flujo nuevo desde cero y aplica el rango base del mercado.
+                    🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
 
-🚨 REGLA DE AGENDAMIENTO FÍSICO: NUNCA digas "venga cuando guste". Obliga cordialmente al cliente a fijar un DÍA y HORA exacta dentro de nuestros horarios oficiales antes de cerrar.
+                    --- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
+                    - Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
+                    - Es MANDATORIO que cuando confirmes la cita final, coloques las etiquetas estructuradas al final del mensaje de texto exacto de manera literal y en texto plano.
 
---- 4. FORMATO OBLIGATORIO DE SALIDA (BLOQUES DE CONTROL) ---
-- Usa fechas ISO (AAAA-MM-DDTHH:MM:00) únicamente cuando agenden Visita o Recolección.
-- Es MANDATORIO que cuando confirmes la cita final, coloques las etiquetas estructuradas al final del mensaje de texto exacto de manera literal y en texto plano.
+                    --- 5. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
+                    Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto.
 
---- 5. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
-Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto.
+                    🚨 REGLA CRUCIAL DE ZONA HORARIA: Usa estrictamente la hora local de México (formato de 24 horas) tanto en la etiqueta ISO como en el boleto visual. NO sumes ni restes horas para intentar convertir a UTC. Si el cliente agenda a las 2:00 PM, la etiqueta DEBE ser T14:00:00 y el boleto visual DEBE decir 02:00 p.m.
 
-🚨 REGLA CRUCIAL DE ZONA HORARIA: Usa estrictamente la hora local de México (formato de 24 horas) tanto en la etiqueta ISO como en el boleto visual. NO sumes ni restes horas para intentar convertir a UTC. Si el cliente agenda a las 2:00 PM, la etiqueta DEBE ser T14:00:00 y el boleto visual DEBE decir 02:00 p.m.
-
-__AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00 según corresponda)
-_DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laboratorio, escribe exactamente: "Visita en Laboratorio")
-[DATA_CRM]:Nombre Completo|Dispositivo o Consola|Falla Reportada|TelefonoDe10Digitos
-[DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo`
+                    __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00 según corresponda)
+                    _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laboratorio, escribe exactamente: "Visita en Laboratorio")
+                    [DATA_CRM]:Nombre Completo|Dispositivo o Consola|Falla Reportada|TelefonoDe10Digitos
+                    [DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo`
                 }
             })
             respuestaRaw = response.text || ''
@@ -648,16 +734,16 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
                             numeroOrden: `LEAD-${telefonoParaCita}`,
                             equipo: dispositivoCrm,
                             fallaReportada: `${fallaCrm} (Solicitó Humano)`,
-                            estado: 'ESPERANDO_APROBACION', // 🚨 CORREGIDO: Usamos un enum válido de tu base de datos
+                            estado: 'ESPERANDO_APROBACION',
                             clienteId: clienteActualizado.id,
-                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
+                            notesInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
                         }
                     });
                     ticketMasReciente = ticketLead;
                 } else {
                     ticketLead = await prisma.ticket.update({
                         where: { id: ticketLead.id },
-                        data: { estado: 'ESPERANDO_APROBACION' } // 🚨 CORREGIDO: Sincronizado con enum válido
+                        data: { estado: 'ESPERANDO_APROBACION' }
                     });
                     ticketMasReciente = ticketLead;
                 }
@@ -802,6 +888,9 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
     }
 }
 
+// =========================================================================
+// 🛡️ RECEPTORES Y VERIFICACIONES DE CAPA DE RED (GET / POST)
+// =========================================================================
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
@@ -849,6 +938,7 @@ export async function POST(req: Request) {
 
         const messageId = message.id;
 
+        // 🛡️ DEDUPLICADOR CENTRALIZADO ANTI-RETRYS DE META
         if (messageId) {
             try {
                 await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
@@ -883,6 +973,7 @@ export async function POST(req: Request) {
                 }
             })
 
+            // Clave maestra de reseteo del bot
             if (textoNormalizado === 'kanzer1986') {
                 if (clienteExistente) {
                     await prisma.cliente.update({
@@ -892,10 +983,12 @@ export async function POST(req: Request) {
                     console.log(`🧼 [RESET SUCCESS]: Hilo de Google Chat borrado en Neon para ${telefono10Digitos}.`)
                 }
                 MEMORIA_CHAT.delete(numeroCliente)
+                MEMORIA_CHAT.delete(`B2B_${numeroCliente}`) // Resetea también la cola de PYMEs
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 return new Response('Bot reseteado', { status: 200 })
             }
 
+            // Captura en vivo cuando el chat está en "Modo Humano"
             if (clienteExistente && clienteExistente.atendidoPorBot === false) {
                 console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
 
@@ -914,6 +1007,7 @@ export async function POST(req: Request) {
                 return new Response('Atendido de forma manual', { status: 200 })
             }
 
+            // Despacho al cerebro de la Inteligencia Artificial Híbrida
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 
@@ -921,5 +1015,41 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error('🔴 Error en Receptor Webhook Meta:', error.message)
         return new Response('Error', { status: 500 })
+    }
+}
+
+// =========================================================================
+// 📊 FUNCIONES DE EXTRACCIÓN Y ANALÍTICA B2B
+// =========================================================================
+function calcularServicioDeMensaje(textoSinAcentos: string): string {
+    if (textoSinAcentos.includes("soporte tecnico") || textoSinAcentos.includes("soporte")) return "Pólizas de Soporte";
+    if (textoSinAcentos.includes("infraestructura") || textoSinAcentos.includes("redes")) return "Infraestructura y Redes";
+    if (textoSinAcentos.includes("cloud") || textoSinAcentos.includes("respaldo")) return "Soluciones Cloud y Respaldos";
+    if (textoSinAcentos.includes("desarrollo") || textoSinAcentos.includes("software")) return "Desarrollo de Software a la Medida";
+    return "General / No especificado";
+}
+
+async function registrarAnaliticaB2BEnSheets(telefono: string, nombre: string, empresa: string, equipos: string, servicio: string, estadoFinal: string) {
+    try {
+        // Enlaza inteligentemente con tu SPREADSHEET_ID global
+        const sheetId = process.env.GOOGLE_B2B_SHEETS_ID || SPREADSHEET_ID;
+        if (!sheetId) return;
+
+        // Reutilizamos tu propia lógica nativa de tokens
+        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets']);
+        const sheets = google.sheets({ version: 'v4', auth });
+
+        const fechaHoy = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const filaDatos = [fechaHoy, telefono, nombre, empresa, equipos, servicio, "SÍ", estadoFinal];
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: sheetId,
+            range: 'AnaliticaLeads!A:H',
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [filaDatos] }
+        });
+        console.log(`📊 [ANALYTICS B2B]: Fila indexada con éxito para la empresa: ${empresa}`);
+    } catch (e: any) {
+        console.error("🔴 Error al escribir analítica B2B en Sheets:", e.message);
     }
 }
