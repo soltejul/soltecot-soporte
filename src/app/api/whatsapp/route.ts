@@ -469,7 +469,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 })
             }
 
-            const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se está enlazando a tu equipo vía *Google Remote Desktop*.\n\n💻 *Por favor, mantén abierta tu ventana del navegador.* Verás la actividad de soporte técnico en tu pantalla en unos segundos.`
+            const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se conectará a tu equipo en un lapso de *15 a 30 minutos* vía *Google Remote Desktop*.\n\n💻 *Por favor, deja tu computadora encendida y no cierres la ventana del navegador.*\n\n⚠️ *Nota de Seguridad:* Si durante la sesión tu pantalla se oscurece y Windows/Mac te pide permiso para hacer cambios (ventana de administrador), yo no podré hacer clic remotamente. Te pediré que tú mismo presiones "Sí" o "Permitir" cuando aparezca.`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
@@ -580,14 +580,18 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                     🚨 PROTOCOLO EXCLUSIVO PARA OPCIÓN 1 (SOPORTE TÉCNICO REMOTO):
                     1. Si el cliente elige Soporte Remoto, avísale que el costo es de $419 MXN neto y recopila únicamente su Nombre Completo y si requiere Factura (SÍ/NO). 
-                    2. En el instante en que el cliente te proporcione su nombre y confirmación de factura, DEBES responderle con las instrucciones exactas de conexión y generar el cierre inmediato:
+                    2. En el instante en que el cliente te proporcione su nombre y confirmación de factura, DEBES responderle con las siguientes instrucciones de conexión, verificando que tenga los permisos necesarios:
 
-                    "¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo y solucionar la falla, sigue estos sencillos pasos:
+                    "¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo, usaremos la plataforma oficial de Google. 
 
-                    1. Desde la computadora que tiene el problema, ingresa a: **remotedesktop.google.com/support**
-                    2. En la sección 'Asistencia remota', haz clic en el botón azul de descarga para instalar la herramienta (si es la primera vez).
-                    3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un código numérico de 12 dígitos.
-                    4. Escríbeme ese código aquí abajo para que el ingeniero tome el control de tu pantalla de inmediato."
+                    ⚠️ **IMPORTANTE:** Si usas Windows, asegúrate de ser el administrador del equipo (o tener la contraseña), ya que el sistema te pedirá permiso para instalar la extensión. Si usas Mac, te pedirá activar permisos de grabación de pantalla.
+
+                    Sigue estos 3 rápidos pasos:
+                    1. Desde la computadora con el problema, abre Chrome e ingresa a: **remotedesktop.google.com/support**
+                    2. En la sección 'Recibir asistencia', haz clic en el botón azul para descargar y acepta los permisos de instalación.
+                    3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un número de 12 dígitos.
+
+                    Escríbeme o pega ese código aquí abajo para iniciar la sesión de inmediato."
 
                     3. ⚠️ OBLIGATORIO E INNEGOCIABLE ⚠️: Al final de ese mismísimo mensaje de instrucciones, DEBES concatenar en texto plano y de forma LITERAL las etiquetas de anclaje de salida (calculando la fecha y hora actual en la que estás chateando). Si no las imprimes textualmente, el backend no creará el folio:
 
