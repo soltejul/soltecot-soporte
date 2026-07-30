@@ -312,6 +312,7 @@ export default function AdminDashboard() {
                                                 <button
                                                     onClick={() => {
                                                         setClienteSeleccionado(t.cliente)
+                                                        setTicketSeleccionado(t)
                                                         setChatAbierto(true)
                                                     }}
                                                     className={`text-[10px] md:text-xs px-3 py-1 rounded-full border transition-colors shadow-sm flex items-center gap-1 ${!t.botActivo ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'}`}
@@ -403,6 +404,7 @@ export default function AdminDashboard() {
                                                 <button
                                                     onClick={() => {
                                                         setClienteSeleccionado(t.cliente)
+                                                        setTicketSeleccionado(t)
                                                         setChatAbierto(true)
                                                     }}
                                                     className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-3 py-1.5 rounded text-xs text-zinc-300 font-medium transition-colors w-full sm:w-auto"
