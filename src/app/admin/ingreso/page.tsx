@@ -13,15 +13,56 @@ export default function RegistroOrdenAdmin() {
         costoEstimado: '',
         notasInternas: ''
     })
-    const [fotos, setFotos] = useState<File[]>([]) // 📸 Nuevo estado para las fotos
+    const [fotos, setFotos] = useState<File[]>([])
     const [cargando, setCargando] = useState(false)
     const [mensajeExito, setMensajeExito] = useState('')
     const [error, setError] = useState('')
 
-    // Referencia oculta para abrir la cámara nativa
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Maneja la selección de archivos o captura de cámara
+    // 🗜️ Helper: Comprime imágenes en el navegador antes de subir
+    const comprimirImagen = (archivo: File): Promise<File> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(archivo)
+            reader.onload = (event) => {
+                const img = new window.Image()
+                img.src = event.target?.result as string
+                img.onload = () => {
+                    const canvas = document.createElement('canvas')
+                    const MAX_ANCHO = 1280
+                    const escala = MAX_ANCHO / img.width
+                    const ancho = img.width > MAX_ANCHO ? MAX_ANCHO : img.width
+                    const alto = img.width > MAX_ANCHO ? img.height * escala : img.height
+
+                    canvas.width = ancho
+                    canvas.height = alto
+
+                    const ctx = canvas.getContext('2d')
+                    ctx?.drawImage(img, 0, 0, ancho, alto)
+
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                const fotoComprimida = new File([blob], archivo.name, {
+                                    type: 'image/jpeg',
+                                    lastModified: Date.now(),
+                                })
+                                resolve(fotoComprimida)
+                            } else {
+                                resolve(archivo)
+                            }
+                        },
+                        'image/jpeg',
+                        0.75
+                    )
+                }
+                img.onerror = () => resolve(archivo)
+            }
+            reader.onerror = () => resolve(archivo)
+        })
+    }
+
     const manejarSeleccionFotos = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const archivosArray = Array.from(e.target.files)
@@ -29,7 +70,6 @@ export default function RegistroOrdenAdmin() {
         }
     }
 
-    // Remueve una foto si no te gustó cómo salió
     const eliminarFoto = (index: number) => {
         setFotos((prev) => prev.filter((_, i) => i !== index))
     }
@@ -43,44 +83,54 @@ export default function RegistroOrdenAdmin() {
         try {
             let fileIds: string[] = []
 
-            // PASO 1: Si hay fotos, las subimos primero a Google Drive
             if (fotos.length > 0) {
+                // 1️⃣ Comprimir todas las fotos en paralelo antes de subir
+                const fotosComprimidas = await Promise.all(
+                    fotos.map((f) => comprimirImagen(f))
+                )
+
                 const formData = new FormData()
-                fotos.forEach(f => formData.append('files', f))
-                formData.append('folio', `TEL_${form.telefono}`) // Referencia temporal para nombrar la foto
+                fotosComprimidas.forEach((f) => formData.append('files', f))
+                formData.append('folio', `TEL_${form.telefono}`)
 
                 const resFotos = await fetch('/api/upload-evidencia', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
                 })
                 const dataFotos = await resFotos.json()
 
-                if (!resFotos.ok) throw new Error(dataFotos.error || 'Error al subir las fotos a Drive')
+                if (!resFotos.ok) {
+                    throw new Error(dataFotos.error || 'Error al subir las fotos a Drive')
+                }
 
-                // Extraemos los IDs que nos devolvió Google Drive
                 fileIds = dataFotos.fileIds
             }
 
-            // PASO 2: Crear el ticket adjuntando los IDs de las fotos
+            // 2️⃣ Crear la orden
             const payload = {
                 ...form,
-                fotosIngreso: fileIds // 👈 Inyectamos los IDs aquí
+                fotosIngreso: fileIds,
             }
 
             const res = await fetch('/api/tickets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
             })
             const data = await res.json()
 
             if (!res.ok) throw new Error(data.error || 'Error al procesar el ingreso')
 
             setMensajeExito(`¡Orden generada con éxito! Folio asignado: ${data.ticket.numeroOrden}`)
-            // Limpiamos el formulario y las fotos
-            setForm({ telefono: '', nombre: '', equipo: '', fallaReportada: '', costoEstimado: '', notasInternas: '' })
+            setForm({
+                telefono: '',
+                nombre: '',
+                equipo: '',
+                fallaReportada: '',
+                costoEstimado: '',
+                notasInternas: '',
+            })
             setFotos([])
-
         } catch (err: any) {
             setError(err.message)
         } finally {
@@ -91,7 +141,6 @@ export default function RegistroOrdenAdmin() {
     return (
         <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
             <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-xl p-8 shadow-2xl">
-
                 {/* ENCABEZADO */}
                 <div className="flex justify-between items-start border-b border-zinc-900 pb-4 mb-6">
                     <div>
@@ -107,7 +156,6 @@ export default function RegistroOrdenAdmin() {
                 </div>
 
                 <form onSubmit={manejarEnvio} className="space-y-4">
-                    {/* ... (Tus inputs anteriores de Teléfono, Nombre, Equipo, Falla, Costos y Notas quedan exactamente igual) ... */}
                     <div>
                         <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Teléfono del Cliente (Obligatorio)</label>
                         <input
@@ -189,18 +237,16 @@ export default function RegistroOrdenAdmin() {
                     <div className="pt-2 border-t border-zinc-900">
                         <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase">Evidencia Fotográfica de Ingreso</label>
 
-                        {/* Input oculto que abre la cámara nativa en móviles */}
                         <input
                             type="file"
                             accept="image/*"
                             multiple
-                            capture="environment" // Esto fuerza a abrir la cámara trasera en celular
+                            capture="environment"
                             ref={fileInputRef}
                             onChange={manejarSeleccionFotos}
                             className="hidden"
                         />
 
-                        {/* Botón para disparar el input oculto */}
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
@@ -209,7 +255,6 @@ export default function RegistroOrdenAdmin() {
                             📷 Tomar / Subir Foto
                         </button>
 
-                        {/* Galería de miniaturas */}
                         {fotos.length > 0 && (
                             <div className="flex gap-3 mt-3 overflow-x-auto pb-2">
                                 {fotos.map((foto, index) => (
