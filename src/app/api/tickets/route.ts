@@ -45,7 +45,9 @@ async function enviarMensajeMeta(to: string, texto: string) {
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { telefono, nombre, equipo, fallaReportada, costoEstimado, notasInternas } = body
+
+        // 1️⃣ EXTRAEMOS fotosIngreso DEL BODY
+        const { telefono, nombre, equipo, fallaReportada, costoEstimado, notasInternas, fotosIngreso } = body
 
         if (!telefono || !equipo || !fallaReportada) {
             return NextResponse.json({ error: 'Teléfono, equipo y falla son obligatorios' }, { status: 400 })
@@ -105,7 +107,9 @@ export async function POST(request: Request) {
                     costoReparacion: costoNumerico || ticketExistente.costoReparacion,
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
                     estado: 'RECIBIDO',
-                    botActivo: false // Al ingresar físicamente garantizamos desactivar el bot en el ticket
+                    botActivo: false,
+                    // 2️⃣ GUARDAMOS LAS FOTOS EN EL TICKET EXISTENTE
+                    fotosIngreso: fotosIngreso || []
                 }
             })
             esUnificacion = true
@@ -126,7 +130,9 @@ export async function POST(request: Request) {
                     notasInternas: notasInternas ? notasInternas.trim() : null,
                     clienteId: cliente.id,
                     estado: 'RECIBIDO',
-                    botActivo: false
+                    botActivo: false,
+                    // 3️⃣ GUARDAMOS LAS FOTOS EN EL TICKET NUEVO
+                    fotosIngreso: fotosIngreso || []
                 }
             })
         }
