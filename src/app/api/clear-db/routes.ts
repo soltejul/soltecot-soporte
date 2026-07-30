@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '../../../lib/prisma' // 🔌 Ajusta los '../' según dónde se ubique tu instancia de Prisma
+import { prisma } from '../../../lib/prisma'
 
 export async function GET() {
     try {
