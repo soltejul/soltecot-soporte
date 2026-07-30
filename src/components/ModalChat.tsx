@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 interface Mensaje {
     id: string
@@ -15,46 +15,88 @@ interface ModalChatProps {
     clienteId: string
     nombreCliente: string
     telefono: string
+    ticketId?: string // 👈 Agregado opcional para relacionar la foto al folio en Drive
 }
 
-export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, telefono }: ModalChatProps) {
+export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, telefono, ticketId }: ModalChatProps) {
     const [mensajes, setMensajes] = useState<Mensaje[]>([])
     const [nuevoMensaje, setNuevoMensaje] = useState('')
     const [cargando, setCargando] = useState(false)
     const [enviando, setEnviando] = useState(false)
-    const mensajesFinRef = useRef<HTMLDivElement>(null)
+    const [subiendoFoto, setSubiendoFoto] = useState(false)
 
-    // 📥 Cargar historial y hacer Auto-Refresh (Polling)
+    const mensajesFinRef = useRef<HTMLDivElement>(null)
+    const cameraInputRef = useRef<HTMLInputElement>(null)
+
+    // 📥 Cargar historial (Memoizado para poder invocarlo tras subir fotos)
+    const cargarMensajes = useCallback(async () => {
+        if (!clienteId) return
+        try {
+            const res = await fetch(`/api/chat?clienteId=${clienteId}`)
+            if (res.ok) {
+                const data = await res.json()
+                setMensajes(data)
+            }
+        } catch (error) {
+            console.error("Error al cargar chat:", error)
+        } finally {
+            setCargando(false)
+        }
+    }, [clienteId])
+
+    // 🔄 Auto-Refresh (Polling cada 4s)
     useEffect(() => {
         if (!isOpen || !clienteId) return
-
-        const cargarMensajes = async () => {
-            try {
-                const res = await fetch(`/api/chat?clienteId=${clienteId}`)
-                if (res.ok) {
-                    const data = await res.json()
-                    setMensajes(data)
-                }
-            } catch (error) {
-                console.error("Error al cargar chat:", error)
-            } finally {
-                setCargando(false)
-            }
-        }
 
         setCargando(true)
         cargarMensajes()
 
         const intervalo = setInterval(cargarMensajes, 4000)
         return () => clearInterval(intervalo)
-    }, [isOpen, clienteId])
+    }, [isOpen, clienteId, cargarMensajes])
 
     // 👇 Auto-Scroll hacia el último mensaje
     useEffect(() => {
         mensajesFinRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [mensajes])
 
-    // 🚀 Enviar Mensaje
+    // 📷 Enviar foto de avance a Google Drive y WhatsApp
+    const enviarFotoAvance = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (!ticketId) {
+            alert('⚠️ No se encontró una orden activa asociada para guardar la foto en Drive.')
+            return
+        }
+
+        setSubiendoFoto(true)
+        try {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('ticketId', ticketId)
+            formData.append('notaAvance', nuevoMensaje.trim() || 'Avance técnico de tu servicio:')
+
+            const res = await fetch('/api/tickets/enviar-avance', {
+                method: 'POST',
+                body: formData,
+            })
+
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Error al enviar la imagen')
+
+            alert('📷 ¡Foto de avance guardada en Drive y enviada por WhatsApp!')
+            setNuevoMensaje('') // Limpiamos la nota
+            cargarMensajes()   // Recargamos la conversación
+        } catch (err: any) {
+            alert(`⚠️ ${err.message}`)
+        } finally {
+            setSubiendoFoto(false)
+            if (e.target) e.target.value = '' // Limpiar selector de archivo
+        }
+    }
+
+    // 🚀 Enviar Mensaje de Texto Manual
     const manejarEnvio = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!nuevoMensaje.trim()) return
@@ -82,13 +124,10 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
     if (!isOpen) return null
 
     return (
-        /* 🚨 CAMBIO 1: El Backdrop oscuro ahora detecta clics externos para cerrar el modal */
         <div
             onClick={onClose}
             className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm cursor-pointer"
         >
-            {/* Contenedor del Panel Lateral */}
-            {/* 🚨 CAMBIO 2: Frenamos la propagación del clic (stopPropagation) y restauramos el cursor */}
             <div
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-md h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transform transition-transform duration-300 cursor-default"
@@ -112,7 +151,7 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                     {cargando && mensajes.length === 0 ? (
                         <p className="text-center text-zinc-500 text-sm mt-10">Cargando conexión segura...</p>
                     ) : mensajes.length === 0 ? (
-                        <p className="text-center text-zinc-600 text-sm mt-10">No hay historial de chat efímero activo.</p>
+                        <p className="text-center text-zinc-600 text-sm mt-10">No hay historial de chat activo.</p>
                     ) : (
                         mensajes.map((msg) => {
                             const esMio = msg.origen === 'HUMANO' || msg.origen === 'BOT'
@@ -137,12 +176,11 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                     <div ref={mensajesFinRef} />
                 </div>
 
-                {/* ✍️ ÁREA DE TEXTO (INPUT) */}
-                {/* ✍️ ÁREA DE TEXTO (INPUT) CON RESPUESTAS RÁPIDAS */}
-                <div className="p-4 border-t border-zinc-800 bg-zinc-900">
+                {/* ✍️ ÁREA DE TEXTO INTEGRADA CON CÁMARA Y RESPUESTAS RÁPIDAS */}
+                <div className="p-3 border-t border-zinc-800 bg-zinc-900">
 
-                    {/* ⚡ BOTONES DE RESPUESTAS RÁPIDAS */}
-                    <div className="flex gap-2 mb-3 px-1 overflow-x-auto pb-1 scrollbar-hide">
+                    {/* ⚡ RESPUESTAS RÁPIDAS */}
+                    <div className="flex gap-2 mb-2 px-1 overflow-x-auto pb-1 scrollbar-hide">
                         <button
                             type="button"
                             onClick={() => setNuevoMensaje("Hola, te comparto nuestros datos bancarios oficiales para realizar tu depósito/transferencia:\n\n🏦 *Banco:* BBVA\n💳 *Cuenta CLABE:* 012 180 015425417770 2\n👤 *Beneficiario:* Julio Cesar López Castro\n\n🙏 Por favor, envíame el comprobante o captura por este medio una vez realizado para validarlo y anexarlo a tu orden. ¡Gracias! 🔬")}
@@ -159,14 +197,36 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                         </button>
                     </div>
 
-                    <form onSubmit={manejarEnvio} className="flex gap-2">
+                    {/* FORMULARIO DE MENSAJE Y CÁMARA */}
+                    <form onSubmit={manejarEnvio} className="flex items-end gap-2">
+                        {/* Input Oculto de la Cámara */}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            ref={cameraInputRef}
+                            onChange={enviarFotoAvance}
+                            className="hidden"
+                        />
+
+                        {/* Botón Disparador de Cámara */}
+                        <button
+                            type="button"
+                            disabled={subiendoFoto}
+                            onClick={() => cameraInputRef.current?.click()}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-amber-400 p-2.5 rounded-lg border border-zinc-700 transition-colors flex justify-center items-center h-[38px]"
+                            title="Tomar y subir foto de avance a Google Drive"
+                        >
+                            {subiendoFoto ? '⏳' : '📷'}
+                        </button>
+
                         <textarea
                             value={nuevoMensaje}
                             onChange={(e) => setNuevoMensaje(e.target.value)}
-                            placeholder="Escribe tu mensaje manual aquí..."
-                            className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 resize-none overflow-hidden"
-                            disabled={enviando}
-                            rows={nuevoMensaje.split('\n').length > 1 ? Math.min(nuevoMensaje.split('\n').length, 5) : 1}
+                            placeholder="Escribe un mensaje o nota para la foto..."
+                            className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 resize-none overflow-hidden min-h-[38px]"
+                            disabled={enviando || subiendoFoto}
+                            rows={nuevoMensaje.split('\n').length > 1 ? Math.min(nuevoMensaje.split('\n').length, 4) : 1}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
@@ -174,17 +234,15 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                                 }
                             }}
                         />
+
                         <button
                             type="submit"
-                            disabled={enviando || !nuevoMensaje.trim()}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center self-end h-[38px]"
+                            disabled={enviando || subiendoFoto || !nuevoMensaje.trim()}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center h-[38px]"
                         >
                             {enviando ? '...' : 'Enviar 🚀'}
                         </button>
                     </form>
-                    <p className="text-[10px] text-zinc-500 text-center mt-2">
-                        💡 Tip: Presiona Enter para enviar, Shift+Enter para salto de línea. El bot se silenciará al enviar.
-                    </p>
                 </div>
             </div>
         </div>

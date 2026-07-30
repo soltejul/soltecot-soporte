@@ -491,6 +491,7 @@ export default function AdminDashboard() {
                         clienteId={clienteSeleccionado.id}
                         nombreCliente={clienteSeleccionado.nombre}
                         telefono={clienteSeleccionado.telefono}
+                        ticketId={ticketSeleccionado?.id}
                     />
                 )
             }
