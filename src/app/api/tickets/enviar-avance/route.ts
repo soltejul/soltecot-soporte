@@ -33,8 +33,16 @@ export async function POST(request: Request) {
         await subirFotoEvidencia(buffer, nombreArchivo, file.type, folderId);
 
         // 3. Subimos la imagen temporalmente a Meta Cloud API para enviarla por WhatsApp
-        const META_TOKEN = process.env.WHATSAPP_TOKEN;
-        const PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID;
+        const META_TOKEN = (
+            process.env.NEXT_PUBLIC_WHATSAPP_TOKEN ||
+            process.env.WHATSAPP_TOKEN ||
+            process.env.META_TOKEN
+        )?.trim();
+        const PHONE_NUMBER_ID = (
+            process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID ||
+            process.env.META_PHONE_NUMBER_ID ||
+            process.env.WHATSAPP_PHONE_NUMBER_ID
+        )?.trim();
 
         // A) Subir Media a Meta
         const metaFormData = new FormData();
