@@ -44,10 +44,16 @@ async function enviarMensajeMeta(to: string, texto: string) {
 // 💾 1. CREAR O UNIFICAR TICKET DESDE PORTAL DE INGRESO (POST)
 export async function POST(request: Request) {
     try {
-        const body = await request.json()
+        // 1️⃣ Leemos la petición como FormData (texto + fotos comprimidas)
+        const formData = await request.formData()
 
-        // 1️⃣ EXTRAEMOS fotosIngreso DEL BODY
-        const { telefono, nombre, equipo, fallaReportada, costoEstimado, notasInternas, fotosIngreso } = body
+        const telefono = formData.get('telefono') as string
+        const nombre = formData.get('nombre') as string
+        const equipo = formData.get('equipo') as string
+        const fallaReportada = formData.get('fallaReportada') as string
+        const costoEstimado = formData.get('costoEstimado') as string
+        const notasInternas = formData.get('notasInternas') as string
+        const files = formData.getAll('files') as File[]
 
         if (!telefono || !equipo || !fallaReportada) {
             return NextResponse.json({ error: 'Teléfono, equipo y falla son obligatorios' }, { status: 400 })
@@ -57,6 +63,7 @@ export async function POST(request: Request) {
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
 
+        // 2️⃣ Buscamos o creamos el cliente
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -85,6 +92,7 @@ export async function POST(request: Request) {
             })
         }
 
+        // 3️⃣ Determinamos el Folio EXACTO antes de tocar Google Drive
         let ticketExistente = await prisma.ticket.findFirst({
             where: {
                 clienteId: cliente.id,
@@ -93,8 +101,39 @@ export async function POST(request: Request) {
             orderBy: { createdAt: 'desc' }
         })
 
-        let ticketFinal
+        let folioAsignado = 'SOL-1001'
         let esUnificacion = false
+
+        if (ticketExistente) {
+            folioAsignado = ticketExistente.numeroOrden
+            esUnificacion = true
+        } else {
+            const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
+            if (ultimoTicket?.numeroOrden) {
+                folioAsignado = `SOL-${parseInt(ultimoTicket.numeroOrden.split('-')[1]) + 1}`
+            }
+        }
+
+        // 4️⃣ Subimos las fotos a Google Drive dentro de la carpeta con el FOLIO
+        let fileIds: string[] = []
+        if (files && files.length > 0) {
+            console.log(`📸 [DRIVE]: Creando/buscando carpeta para Folio ${folioAsignado}...`);
+            const targetFolderId = await obtenerOCrearCarpetaFolio(folioAsignado)
+
+            const subidasPromises = files.map(async (file, index) => {
+                const arrayBuffer = await file.arrayBuffer()
+                const buffer = Buffer.from(arrayBuffer)
+                const extension = file.name.split('.').pop() || 'jpg'
+                const nombreArchivo = `${folioAsignado}_evidencia_${index + 1}_${Date.now()}.${extension}`
+
+                return await subirFotoEvidencia(buffer, nombreArchivo, file.type, targetFolderId)
+            })
+
+            fileIds = await Promise.all(subidasPromises)
+        }
+
+        // 5️⃣ Guardamos o actualizamos en la base de datos Neon
+        let ticketFinal
         const costoNumerico = costoEstimado ? parseFloat(costoEstimado) : null
 
         if (ticketExistente) {
@@ -108,21 +147,13 @@ export async function POST(request: Request) {
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
                     estado: 'RECIBIDO',
                     botActivo: false,
-                    // 2️⃣ GUARDAMOS LAS FOTOS EN EL TICKET EXISTENTE
-                    fotosIngreso: fotosIngreso || []
+                    fotosIngreso: fileIds.length > 0 ? fileIds : ticketExistente.fotosIngreso
                 }
             })
-            esUnificacion = true
         } else {
-            const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
-            let nuevoFolio = 'SOL-1001'
-            if (ultimoTicket?.numeroOrden) {
-                nuevoFolio = `SOL-${parseInt(ultimoTicket.numeroOrden.split('-')[1]) + 1}`
-            }
-
             ticketFinal = await prisma.ticket.create({
                 data: {
-                    numeroOrden: nuevoFolio,
+                    numeroOrden: folioAsignado,
                     equipo: equipo.trim(),
                     fallaReportada: fallaReportada.trim(),
                     costoEstimado: costoNumerico,
@@ -131,12 +162,12 @@ export async function POST(request: Request) {
                     clienteId: cliente.id,
                     estado: 'RECIBIDO',
                     botActivo: false,
-                    // 3️⃣ GUARDAMOS LAS FOTOS EN EL TICKET NUEVO
-                    fotosIngreso: fotosIngreso || []
+                    fotosIngreso: fileIds
                 }
             })
         }
 
+        // 6️⃣ Notificamos al cliente por WhatsApp
         const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso formal de tu equipo a nuestro laboratorio de ingeniería.\n\n🎫 *Folio de Seguimiento:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla Reportada:* ${ticketFinal.fallaReportada}\n📍 *Estatus Actual:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:* Puedes consultar la evolución de tu orden en tiempo real dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
 
         await enviarMensajeMeta(cliente.telefono, textoMensaje)

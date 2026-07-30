@@ -81,42 +81,30 @@ export default function RegistroOrdenAdmin() {
         setMensajeExito('')
 
         try {
-            let fileIds: string[] = []
+            // 1️⃣ Comprimir todas las fotos seleccionadas en el navegador
+            const fotosComprimidas = await Promise.all(
+                fotos.map((f) => comprimirImagen(f))
+            )
 
-            if (fotos.length > 0) {
-                // 1️⃣ Comprimir todas las fotos en paralelo antes de subir
-                const fotosComprimidas = await Promise.all(
-                    fotos.map((f) => comprimirImagen(f))
-                )
+            // 2️⃣ Construir un solo paquete FormData con los datos y las imágenes
+            const formData = new FormData()
+            formData.append('telefono', form.telefono)
+            formData.append('nombre', form.nombre)
+            formData.append('equipo', form.equipo)
+            formData.append('fallaReportada', form.fallaReportada)
+            formData.append('costoEstimado', form.costoEstimado)
+            formData.append('notasInternas', form.notasInternas)
 
-                const formData = new FormData()
-                fotosComprimidas.forEach((f) => formData.append('files', f))
-                formData.append('folio', `TEL_${form.telefono}`)
+            fotosComprimidas.forEach((f) => {
+                formData.append('files', f)
+            })
 
-                const resFotos = await fetch('/api/upload-evidencia', {
-                    method: 'POST',
-                    body: formData,
-                })
-                const dataFotos = await resFotos.json()
-
-                if (!resFotos.ok) {
-                    throw new Error(dataFotos.error || 'Error al subir las fotos a Drive')
-                }
-
-                fileIds = dataFotos.fileIds
-            }
-
-            // 2️⃣ Crear la orden
-            const payload = {
-                ...form,
-                fotosIngreso: fileIds,
-            }
-
+            // 3️⃣ Enviar todo en una sola petición atómica
             const res = await fetch('/api/tickets', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: formData, // El navegador asignará automáticamente el boundary multipart
             })
+
             const data = await res.json()
 
             if (!res.ok) throw new Error(data.error || 'Error al procesar el ingreso')
@@ -131,6 +119,7 @@ export default function RegistroOrdenAdmin() {
                 notasInternas: '',
             })
             setFotos([])
+
         } catch (err: any) {
             setError(err.message)
         } finally {

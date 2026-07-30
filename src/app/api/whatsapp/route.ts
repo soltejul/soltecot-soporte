@@ -56,7 +56,7 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             icono = '⚡ Taller';
         }
 
-        const textoAlerta = `${icono} *¡ALERTA SOLTECOT_!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde incluyendo el teléfono para asegurar el tiro, ej: @soltemsg __REACTIVAR__ ${telefono.slice(-10)} __COT_950___`;
+        const textoAlerta = `${icono} *¡ALERTA SOLTECOT!*\n*Estatus:* ${estatus}\n*Cliente:* ${telefono}\n*Detalles:* ${detalles}\n\n👉 _Responde incluyendo el teléfono para asegurar el tiro, ej: @soltemsg __REACTIVAR__ ${telefono.slice(-10)} __COT_950___`;
 
         const payload: any = { text: textoAlerta };
 
@@ -265,7 +265,7 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
         const nuevoEvento = await calendar.events.insert({
             calendarId: CALENDAR_ID,
             requestBody: {
-                summary: `${prefijo} Soltecot_ [${telefono}]`,
+                summary: `${prefijo} Soltecot [${telefono}]`,
                 description: `Contacto: ${telefono}\nSolicitud: ${mensajeCliente}`,
                 start: { dateTime: inicioCita.toISOString() },
                 end: { dateTime: finCita.toISOString() },
@@ -350,7 +350,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: memoriaB2B,
                 config: {
-                    systemInstruction: `Eres el Asistente Comercial de IA de Soltecot_ B2B en WhatsApp. Tu único objetivo es calificar de manera ejecutiva a encargados de PYMEs para agendar una sesión de consultoría técnica en Google Meet con el Ingeniero Julio. 
+                    systemInstruction: `Eres el Asistente Comercial de IA de Soltec B2B en WhatsApp. Tu único objetivo es calificar de manera ejecutiva a encargados de PYMEs para agendar una sesión de consultoría técnica en Google Meet con el Ingeniero Julio. 
                     📅 HOY ES: ${fechaHoyB2B}.
                     Recopila con mucha amabilidad pero de forma directa: Nombre Completo del contacto, Nombre de la Empresa y la Cantidad aproximada de equipos informáticos a cubrir.
                     Enlace oficial de la agenda corporativa: https://calendar.app.google/fWjMnrSUUC5cB3BJA
@@ -469,7 +469,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 })
             }
 
-            const mensajeConexion = `⚡ *SISTEMA SOLTECOT_ REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se conectará a tu equipo en un lapso de *15 a 30 minutos* vía *Google Remote Desktop*.\n\n💻 *Por favor, deja tu computadora encendida y no cierres la ventana del navegador.*\n\n⚠️ *Nota de Seguridad:* Si durante la sesión tu pantalla se oscurece y Windows/Mac te pide permiso para hacer cambios (ventana de administrador), yo no podré hacer clic remotamente. Te pediré que tú mismo presiones "Sí" o "Permitir" cuando aparezca.`
+            const mensajeConexion = `⚡ *SISTEMA SOLTECOT REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se conectará a tu equipo en un lapso de *15 a 30 minutos* vía *Google Remote Desktop*.\n\n💻 *Por favor, deja tu computadora encendida y no cierres la ventana del navegador.*\n\n⚠️ *Nota de Seguridad:* Si durante la sesión tu pantalla se oscurece y Windows/Mac te pide permiso para hacer cambios (ventana de administrador), yo no podré hacer clic remotamente. Te pediré que tú mismo presiones "Sí" o "Permitir" cuando aparezca.`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
@@ -507,7 +507,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             if (textoNormalizado === 'rechazar' || textoNormalizado === 'rechazo' || textoNormalizado === 'cancelar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'RECHAZADO' } })
-                const mensajeRechazo = `⚙️ *SOLTECOT_ INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras installations.\n\n¡Gracias por tu confianza y tiempo! 🔬`
+                const mensajeRechazo = `⚙️ *SOLTECOT INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras installations.\n\n¡Gracias por tu confianza y tiempo! 🔬`
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
                 await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Cancelado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
                 return
@@ -588,7 +588,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 model: 'gemini-2.5-flash',
                 contents: historial,
                 config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot_ (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita o registrar un soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático, seguro y muy directo.
+                    systemInstruction: `Eres el Agente de IA oficial de Soltecot (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de reparación de tecnología. Tu objetivo es guiar al cliente para elegir un servicio, agendar su cita o registrar un soporte remoto, extrayendo la información limpia para el CRM. Tono: Cordial, profesional, empático, seguro y muy directo.
 
 📅 HOY ES: ${fechaHoyString}.
 📍 DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
