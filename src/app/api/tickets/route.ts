@@ -130,7 +130,8 @@ export async function POST(request: Request) {
                 return await subirFotoEvidencia(buffer, nombreArchivo, file.type, targetFolderId)
             })
 
-            fileIds = await Promise.all(subidasPromises)
+            const uploadedFileIds = await Promise.all(subidasPromises)
+            fileIds = uploadedFileIds.filter((id): id is string => Boolean(id))
         }
 
         // 5️⃣ Guardamos o actualizamos en la base de datos Neon
