@@ -58,6 +58,7 @@ model Ticket {
   costoEstimado    Float?
   notasInternas    String?
   clienteId        String
+  fotosIngreso    String[] // Array de IDs de Google Drive (Ej: ["1A2b3C...", "4D5e6F..."])
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   botActivo        Boolean      @default(true)
