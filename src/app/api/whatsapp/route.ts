@@ -521,8 +521,34 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
 
     if (historial.length === 0 && clientePrisma) {
-        console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Reconstruyendo contexto para ${telefono10Digitos}`);
-        if (ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
+        console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Buscando memoria en Neon DB para ${telefono10Digitos}`);
+
+        try {
+            // 1. Extraemos los últimos 10 mensajes del cliente desde la base de datos
+            const mensajesAnteriores = await prisma.mensaje.findMany({
+                where: { clienteId: clientePrisma.id },
+                orderBy: { createdAt: 'desc' }, // Traemos los más recientes primero
+                take: 10
+            });
+
+            if (mensajesAnteriores.length > 0) {
+                // 2. Los invertimos para que queden en orden cronológico (del más viejo al más nuevo)
+                const mensajesCronologicos = mensajesAnteriores.reverse();
+
+                // 3. Reconstruimos el historial para que Gemini lo entienda
+                historial = mensajesCronologicos.map((msg: any) => ({
+                    role: msg.origen === 'BOT' ? 'model' : 'user',
+                    parts: [{ text: msg.texto }]
+                }));
+
+                console.log(`✅ [CONTEXT RECOVERY]: ${mensajesAnteriores.length} mensajes recuperados de la DB. ¡Memoria restaurada!`);
+            }
+        } catch (errorDb) {
+            console.error('🔴 Error recuperando historial de Neon:', errorDb);
+        }
+
+        // 4. Fallback de emergencia por si el historial de DB falla y hay un ticket pendiente
+        if (historial.length === 0 && ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             historial.push({ role: 'user', parts: [{ text: 'Continuar con mi orden anterior' }] });
             historial.push({
                 role: 'model',

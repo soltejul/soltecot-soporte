@@ -260,7 +260,7 @@ export async function PATCH(request: Request) {
 }
 
 // 🗑️ 4. BANDEJA DE LEADS GARBAGE COLLECTOR (DELETE)
-// Borra al cliente en cascada (Remueve cliente, mensajes efímeros y tickets de lead pendientes)
+// Borra al cliente en cascada programática (Remueve mensajes efímeros, tickets de lead y al cliente)
 export async function DELETE(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
@@ -270,13 +270,17 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
         }
 
-        // Ejecutamos la eliminación en Neon. Al tener Cascade Delete configurado, limpiará todo el historial asociado
-        const clienteEliminado = await prisma.cliente.delete({
-            where: { id: clienteId }
-        })
+        // Ejecutamos la eliminación en transacción (programática) para evitar el error 500 por llaves foráneas.
+        // Prisma ejecutará esto en orden: primero borra dependencias, al final al cliente.
+        const [mensajesEliminados, ticketsEliminados, clienteEliminado] = await prisma.$transaction([
+            prisma.mensaje.deleteMany({ where: { clienteId: clienteId } }),
+            prisma.ticket.deleteMany({ where: { clienteId: clienteId } }),
+            prisma.cliente.delete({ where: { id: clienteId } })
+        ])
 
         console.log(`🧼 [API GARBAGE COLLECTOR]: Lead purgado por completo de Neon. Teléfono: ${clienteEliminado.telefono}`)
         return NextResponse.json({ success: true, message: 'Prospecto y todo su historial efímero eliminados correctamente.' }, { status: 200 })
+
     } catch (error: any) {
         console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
