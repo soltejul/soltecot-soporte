@@ -148,12 +148,13 @@ export default function RegistroOrdenAdmin() {
                     <div>
                         <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Teléfono del Cliente (Obligatorio)</label>
                         <input
-                            type="text"
+                            type="tel"
+                            inputMode="tel"
                             required
                             placeholder="Ej: 5510203040"
                             value={form.telefono}
                             onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors"
                         />
                     </div>
 
@@ -197,10 +198,11 @@ export default function RegistroOrdenAdmin() {
                             <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Costo Estimado ($)</label>
                             <input
                                 type="number"
+                                inputMode="decimal" // O "numeric" para sin decimales
                                 placeholder="Ej: 1200"
                                 value={form.costoEstimado}
                                 onChange={(e) => setForm({ ...form, costoEstimado: e.target.value })}
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors"
                             />
                         </div>
                         <div>
