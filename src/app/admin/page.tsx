@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ModalChat from '../../components/ModalChat'
+import ModalBloqueos from '../../components/ModalBloqueos'
 
 export default function AdminDashboard() {
     const [tickets, setTickets] = useState<any[]>([])
@@ -13,6 +14,9 @@ export default function AdminDashboard() {
 
     // 📂 ESTADO PARA CONTROL DE PESTAÑAS (TABS)
     const [pestanaActiva, setPestanaActiva] = useState<'taller' | 'leads'>('taller')
+
+    // 🌴 ESTADO PARA EL MODAL DE INACTIVIDAD / VACACIONES (OUT OF OFFICE)
+    const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
     // 💰 PRECIOS DINÁMICOS ASOCIADOS A CADA ROW DE LEAD
     const [preciosLeads, setPreciosLeads] = useState<{ [key: string]: string }>({})
@@ -214,6 +218,14 @@ export default function AdminDashboard() {
                     {/* Botones Flexibles */}
                     <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                         <button
+                            onClick={() => setModalInactividadAbierto(true)}
+                            className="flex-1 md:flex-none bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-amber-900/40 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            title="Programar periodo de inactividad / vacaciones"
+                        >
+                            🌴 Inactividad
+                        </button>
+
+                        <button
                             onClick={dispararRecordatoriosManual}
                             className="flex-1 md:flex-none bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-amber-900/40 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
@@ -385,11 +397,11 @@ export default function AdminDashboard() {
                                                 <span className="text-zinc-600 text-sm">$</span>
                                                 <input
                                                     type="number"
-                                                    inputMode="decimal" // 📱 Teclado Numérico en iOS/Android
+                                                    inputMode="decimal"
                                                     placeholder="Ej: 1250"
                                                     value={preciosLeads[t.id] || ''}
                                                     onChange={(e) => setPreciosLeads({ ...preciosLeads, [t.id]: e.target.value })}
-                                                    className="w-20 md:w-24 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-base text-center focus:border-amber-500 focus:outline-none text-amber-400 font-bold" // 📱 text-base evita el zoom de Safari
+                                                    className="w-20 md:w-24 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-base text-center focus:border-amber-500 focus:outline-none text-amber-400 font-bold"
                                                 />
                                                 <button
                                                     onClick={() => handleReactivarLead(t.id, preciosLeads[t.id])}
@@ -436,7 +448,7 @@ export default function AdminDashboard() {
             {
                 mostrarModalPresupuesto && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-                        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl mt-[-10vh]"> {/* mt-[-10vh] lo sube un poco en el celular para que el teclado no lo tape */}
+                        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl mt-[-10vh]">
                             <h3 className="text-lg font-bold text-amber-400 mb-1">💰 Enviar Presupuesto</h3>
                             <p className="text-xs text-zinc-400 mb-4">Orden: <span className="text-emerald-400 font-mono font-bold">{ticketSeleccionado?.numeroOrden}</span></p>
 
@@ -445,11 +457,11 @@ export default function AdminDashboard() {
                                     <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Costo Total ($ MXN)</label>
                                     <input
                                         type="number"
-                                        inputMode="decimal" // 📱 Teclado numérico nativo
+                                        inputMode="decimal"
                                         placeholder="Ej: 2450"
                                         value={costoReparacion}
                                         onChange={(e) => setCostoReparacion(e.target.value)}
-                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors" // 📱 text-base evita el zoom de Safari
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors"
                                     />
                                 </div>
 
@@ -497,6 +509,12 @@ export default function AdminDashboard() {
                     />
                 )
             }
-        </div >
+
+            {/* 🌴 MODAL DE CONTROL DE INACTIVIDAD / VACACIONES */}
+            <ModalBloqueos
+                isOpen={modalInactividadAbierto}
+                onClose={() => setModalInactividadAbierto(false)}
+            />
+        </div>
     )
 }

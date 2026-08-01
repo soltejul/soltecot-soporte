@@ -137,3 +137,13 @@ enum EstadoTicket {
   ENTREGADO
   RECHAZADO
 }
+// ==========================================
+// 📅 BLOQUEOS Y PERIODOS DE INACTIVIDAD
+// ==========================================
+model BloqueoAgenda {
+  id          String   @id @default(uuid())
+  fechaInicio DateTime
+  fechaFin    DateTime
+  motivo      String?  @default("Inactividad programada")
+  createdAt   DateTime @default(now())
+}

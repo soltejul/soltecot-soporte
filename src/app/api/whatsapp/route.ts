@@ -371,10 +371,10 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                 const servicioDetectado = calcularServicioDeMensaje(textoSinAcentos);
 
-                // 📊 Registro analítico histórico en Google Sheets (Pestaña: AnaliticaLeads)
+                // 📊 Registro analítico histórico en Google Sheets
                 await registrarAnaliticaB2BEnSheets(telefono10Digitos, nombreB2B, empresaB2B, equiposB2B, servicioDetectado, 'NUEVO');
 
-                // 💾 Registro operativo en Neon con Estatus Pipeline
+                // 💾 Registro operativo en Neon
                 const emailVirtualB2B = `${telefono10Digitos}@soltecot-whatsapp.local`;
                 const leadExistente = await prisma.leadB2B.findFirst({ where: { email: emailVirtualB2B } });
 
@@ -389,7 +389,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     });
                 }
 
-                // Alerta al centro de mando en Google Chat e Handoff al canal Humano
                 await dispararAlertaInmediata(telefono10Digitos, '💼 NUEVO LEAD B2B', `Prospecto corporativo calificado: *${nombreB2B}* de la empresa *"${empresaB2B}"* (${equiposB2B} equipos). Servicio interesado: ${servicioDetectado}.`);
 
                 await prisma.cliente.upsert({
@@ -402,7 +401,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             memoriaB2B.push({ role: 'model', parts: [{ text: respuestaWhatsAppB2B }] });
             MEMORIA_CHAT.set(`B2B_${numeroCliente}`, memoriaB2B);
             await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsAppB2B);
-            return; // 🛑 CORTE DE FLUJO: Evita que el cliente corporativo toque el taller B2C
+            return;
         } catch (errorB2B) {
             console.error('🔴 Error crítico en módulo B2B:', errorB2B);
             return;
@@ -410,7 +409,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     }
 
     // -------------------------------------------------------------------------
-    // 🎮 MÓDULO B2C PARTICULARES (SISTEMA DE TALLER OPERATIVO INTACTO)
+    // 🎮 MÓDULO B2C PARTICULARES (SISTEMA DE TALLER OPERATIVO)
     // -------------------------------------------------------------------------
     let ticketMasReciente: any = null
     let clientePrisma: any = null
@@ -507,7 +506,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             if (textoNormalizado === 'rechazar' || textoNormalizado === 'rechazo' || textoNormalizado === 'cancelar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'RECHAZADO' } })
-                const mensajeRechazo = `⚙️ *SOLTECOT INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras installations.\n\n¡Gracias por tu confianza y tiempo! 🔬`
+                const mensajeRechazo = `⚙️ *SOLTECOT INFORMA* ⚙️\n\nHemos registrado el rechazo del presupuesto para la orden *${ticketMasReciente.numeroOrden}*.\n\n📦 *Próximos Pasos:*\nLa reparación no procederá. Nuestro equipo técnico reensamblará tu *${ticketMasReciente.equipo}* para dejarlo en las mismas condiciones mecánicas en que ingresó. Te notificaremos en cuanto esté listo para que pases a recogerlo a nuestras instalaciones.\n\n¡Gracias por tu confianza y tiempo! 🔬`
                 await enviarMensajeWhatsApp(numeroCliente, mensajeRechazo)
                 await dispararAlertaInmediata(telefono10Digitos, 'RECHAZADO', `❌ Presupuesto Cancelado. La orden ${ticketMasReciente.numeroOrden} regresa a ensamblaje de devolución.`)
                 return
@@ -524,30 +523,26 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Buscando memoria en Neon DB para ${telefono10Digitos}`);
 
         try {
-            // 1. Extraemos los últimos 10 mensajes del cliente desde la base de datos
             const mensajesAnteriores = await prisma.mensaje.findMany({
                 where: { clienteId: clientePrisma.id },
-                orderBy: { createdAt: 'desc' }, // Traemos los más recientes primero
+                orderBy: { createdAt: 'desc' },
                 take: 10
             });
 
             if (mensajesAnteriores.length > 0) {
-                // 2. Los invertimos para que queden en orden cronológico (del más viejo al más nuevo)
                 const mensajesCronologicos = mensajesAnteriores.reverse();
 
-                // 3. Reconstruimos el historial para que Gemini lo entienda
                 historial = mensajesCronologicos.map((msg: any) => ({
                     role: msg.origen === 'BOT' ? 'model' : 'user',
                     parts: [{ text: msg.texto }]
                 }));
 
-                console.log(`✅ [CONTEXT RECOVERY]: ${mensajesAnteriores.length} mensajes recuperados de la DB. ¡Memoria restaurada!`);
+                console.log(`✅ [CONTEXT RECOVERY]: ${mensajesAnteriores.length} mensajes recuperados de la DB.`);
             }
         } catch (errorDb) {
             console.error('🔴 Error recuperando historial de Neon:', errorDb);
         }
 
-        // 4. Fallback de emergencia por si el historial de DB falla y hay un ticket pendiente
         if (historial.length === 0 && ticketMasReciente && ticketMasReciente.estado === 'ESPERANDO_APROBACION') {
             historial.push({ role: 'user', parts: [{ text: 'Continuar con mi orden anterior' }] });
             historial.push({
@@ -575,6 +570,42 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const costoPactado = (esPreventaActiva && ticketMasReciente.costoReparacion)
         ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
 
+    // -------------------------------------------------------------------------
+    // 📅 CONSULTA EN TIEMPO REAL: BLOQUEOS Y DÍAS INACTIVOS (OUT OF OFFICE)
+    // -------------------------------------------------------------------------
+    let instruccionesCalendario = "";
+    try {
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        const bloqueos = await prisma.bloqueoAgenda.findMany({
+            where: { fechaFin: { gte: hoy } },
+            orderBy: { fechaInicio: 'asc' }
+        });
+
+        if (bloqueos.length > 0) {
+            const listaFechas = bloqueos.map(b => {
+                const inicio = new Date(b.fechaInicio).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                const fin = new Date(b.fechaFin).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                return `• Del ${inicio} al ${fin} (Motivo: ${b.motivo || 'Fuera de laboratorio / Actividades externas'})`;
+            }).join('\n');
+
+            instruccionesCalendario = `
+🚨 INSTRUCCIÓN ESTRICTA DE DÍAS INACTIVOS Y VACACIONES (OUT OF OFFICE):
+El laboratorio físico NO estará recibiendo equipos NI realizando recolecciones a domicilio en las siguientes fechas:
+${listaFechas}
+
+REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
+1. Si el cliente solicita o pregunta por agendar una Visita o Recolección dentro de alguno de esos rangos de fechas, discúlpate de forma MUY AMABLE Y CORTÉS, explicando el motivo de inactividad.
+2. NUNCA emitas etiquetas de confirmación para esas fechas inactivas. Invita calurosamente al cliente a agendar para el primer día hábil posterior al regreso del equipo.
+3. Si el cliente está de acuerdo o quiere apartar su lugar, SOLICITA SU NOMBRE COMPLETO, MODELO DE EQUIPO Y FALLA REPORTADA para registrar su solicitud como "LEAD / CITA PENDIENTE".
+4. Explícale que su lugar ha quedado apartado con prioridad y que el equipo técnico se pondrá en contacto con él inmediatamente al reabrir el taller.
+`;
+        }
+    } catch (errBloqueos) {
+        console.error('🔴 Error consultando bloqueos de agenda en Neon:', errBloqueos);
+    }
+
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
@@ -598,6 +629,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 - Folio de Orden: ${folioOrden}
 - Equipo/Falla en registro: ${equipoRegistro} - ${fallaRegistro}
 - Costo Total pactado por el Ingeniero Julio: ${costoPactado}
+
+${instruccionesCalendario}
 
 --- 1. CATÁLOGO DE SERVICIOS OFICIALES ---
 • OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
@@ -683,7 +716,7 @@ _DIRECCION_CLIENTE_:Soporte Técnico Remoto (Conexión a distancia)
 --- 6. PLANTILLA DE ANCLAJE VISUAL DE SALIDA (OBLIGATORIA EN CITA FINAL) ---
 Si estás emitiendo el mensaje de confirmación exitosa de la cita, debes incluir las etiquetas al final de tu respuesta con este orden y formato exacto.
 
-🚨 REGLA CRUCIAL DE ZONA HORARIA: Usa estrictamente la hora local de México (formato de 24 horas) tanto en la etiqueta ISO como en el boleto visual. NO sumes ni restes horas para intentar convertir a UTC. Si el cliente agenda a las 2:00 PM, la etiqueta DEBE ser T14:00:00 y el boleto visual DEBE decir 02:00 p.m.
+🚨 REGLA CRUCIAL DE ZONA HORARIA: Usa strictly la hora local de México (formato de 24 horas) tanto en la etiqueta ISO como en el boleto visual. NO sumes ni restes horas para intentar convertir a UTC. Si el cliente agenda a las 2:00 PM, la etiqueta DEBE ser T14:00:00 y el boleto visual DEBE decir 02:00 p.m.
 
 __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00 según corresponda)
 _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laboratorio, escribe exactamente: "Visita en Laboratorio")
