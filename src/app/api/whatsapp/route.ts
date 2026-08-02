@@ -866,7 +866,32 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
                 if (resultadoAgenda.exitoso) {
                     if (!resultadoAgenda.yaExistia) {
                         respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
+
                         await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
+
+                        // 🚀 CREAR / ACTUALIZAR TICKET LEAD EN NEON DB PARA EL DASHBOARD
+                        const clienteDb = await prisma.cliente.upsert({
+                            where: { telefono: telefonoParaCita },
+                            update: { nombre: nombreCrm },
+                            create: { telefono: telefonoParaCita, nombre: nombreCrm }
+                        });
+
+                        await prisma.ticket.upsert({
+                            where: { numeroOrden: `LEAD-${telefonoParaCita}` },
+                            update: {
+                                equipo: dispositivoCrm,
+                                fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
+                                estado: 'ESPERANDO_APROBACION'
+                            },
+                            create: {
+                                numeroOrden: `LEAD-${telefonoParaCita}`,
+                                equipo: dispositivoCrm,
+                                fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
+                                estado: 'ESPERANDO_APROBACION',
+                                clienteId: clienteDb.id
+                            }
+                        });
+
                         await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
                     }
                     estatusLead = 'AGENDADO'
@@ -889,6 +914,30 @@ _DIRECCION_CLIENTE_:Dirección Completa recopilada (🚨 Si es Visita al Laborat
 
                     const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
                     await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
+
+                    // 🚀 CREAR / ACTUALIZAR TICKET LEAD EN NEON DB PARA EL DASHBOARD
+                    const clienteDb = await prisma.cliente.upsert({
+                        where: { telefono: telefonoParaCita },
+                        update: { nombre: nombreCrm },
+                        create: { telefono: telefonoParaCita, nombre: nombreCrm }
+                    });
+
+                    await prisma.ticket.upsert({
+                        where: { numeroOrden: `LEAD-${telefonoParaCita}` },
+                        update: {
+                            equipo: dispositivoCrm,
+                            fallaReportada: `${fallaCrm} (Recolección Agendada)`,
+                            estado: 'ESPERANDO_APROBACION'
+                        },
+                        create: {
+                            numeroOrden: `LEAD-${telefonoParaCita}`,
+                            equipo: dispositivoCrm,
+                            fallaReportada: `${fallaCrm} (Recolección Agendada)`,
+                            estado: 'ESPERANDO_APROBACION',
+                            clienteId: clienteDb.id
+                        }
+                    });
+
                     await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Recolección a Domicilio`)
                 }
                 estatusLead = 'AGENDADO'
