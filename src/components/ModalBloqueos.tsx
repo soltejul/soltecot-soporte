@@ -48,10 +48,15 @@ export default function ModalBloqueos({
 
         setGuardando(true)
         try {
+            // 💡 Forzamos 'T00:00:00' para asegurarnos de que la fecha se envíe limpia en hora local
             const res = await fetch('/api/admin/bloqueos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify({
+                    ...form,
+                    fechaInicio: `${form.fechaInicio}T00:00:00`,
+                    fechaFin: `${form.fechaFin}T23:59:59`
+                })
             })
 
             if (!res.ok) throw new Error('Error al guardar el bloqueo')
@@ -76,6 +81,14 @@ export default function ModalBloqueos({
         } catch (error) {
             console.error('Error al eliminar bloqueo:', error)
         }
+    }
+
+    // 🗓️ Función de formato de fecha blindada contra desfase UTC
+    const formatearFecha = (fechaStr: string, opciones: Intl.DateTimeFormatOptions) => {
+        return new Date(fechaStr).toLocaleDateString('es-MX', {
+            ...opciones,
+            timeZone: 'UTC' // 👈 Mantiene el día exacto seleccionado
+        })
     }
 
     if (!isOpen) return null
@@ -172,9 +185,9 @@ export default function ModalBloqueos({
                                 >
                                     <div>
                                         <p className="font-bold text-amber-400">
-                                            {new Date(b.fechaInicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                                            {formatearFecha(b.fechaInicio, { day: 'numeric', month: 'short' })}
                                             {' ➔ '}
-                                            {new Date(b.fechaFin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            {formatearFecha(b.fechaFin, { day: 'numeric', month: 'short', year: 'numeric' })}
                                         </p>
                                         <p className="text-zinc-400 text-[11px] mt-0.5">
                                             {b.motivo || 'Fuera de laboratorio'}
