@@ -344,7 +344,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         try {
             const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
             const aiB2B = new GoogleGenAI({ apiKey });
-            const fechaHoyB2B = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const fechaHoyB2B = new Date().toLocaleDateString('es-MX', {
+                timeZone: 'America/Mexico_City', // 👈 ¡Candado de zona horaria!
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
 
             const responseB2B = await aiB2B.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -585,8 +591,20 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         if (bloqueos.length > 0) {
             const listaFechas = bloqueos.map(b => {
-                const inicio = new Date(b.fechaInicio).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-                const fin = new Date(b.fechaFin).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                const inicio = new Date(b.fechaInicio).toLocaleDateString('es-MX', {
+                    timeZone: 'UTC', // 👈 Lo dejamos en UTC porque así viaja limpio desde tu Panel
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
+                const fin = new Date(b.fechaFin).toLocaleDateString('es-MX', {
+                    timeZone: 'UTC',
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
                 return `• Del ${inicio} al ${fin} (Motivo: ${b.motivo || 'Fuera de laboratorio / Actividades externas'})`;
             }).join('\n');
 
@@ -613,7 +631,13 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
     for (let intento = 1; intento <= MAX_REINTENTOS; intento++) {
         try {
             const ai = new GoogleGenAI({ apiKey })
-            const fechaHoyString = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+            const fechaHoyString = new Date().toLocaleDateString('es-MX', {
+                timeZone: 'America/Mexico_City', // 👈 ¡Candado de zona horaria!
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
