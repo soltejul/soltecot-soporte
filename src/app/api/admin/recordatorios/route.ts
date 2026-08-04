@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export async function POST() {
     try {
-        // 📅 OBTENER FECHA DE HOY EN MÉXICO
-        const ahoraMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }))
+        // 📅 OBTENER FECHA DE HOY EN MÉXICO (Forzando la zona horaria)
+        const ahoraMexicoString = new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" })
+        const ahoraMexico = new Date(ahoraMexicoString)
 
         // Calcular el año, mes y día de MAÑANA de forma matemática exacta
         const mañana = new Date(ahoraMexico)
@@ -17,19 +18,20 @@ export async function POST() {
         const mes = String(mañana.getMonth() + 1).padStart(2, '0')
         const dia = String(mañana.getDate()).padStart(2, '0')
 
-        // 🛡️ CREAR STRINGS DE FECHA EN FORMATO ISO PURO (Límites exactos del día de mañana)
-        // Esto le dice a Neon: "Búscame todo lo que caiga entre el primer segundo y el último segundo de este día en específico"
-        const inicioMañanaISO = `${año}-${mes}-${dia}T00:00:00.000Z`
-        const finMañanaISO = `${año}-${mes}-${dia}T23:59:59.999Z`
+        // 🛡️ CREAR STRINGS DE FECHA CON EL OFFSET DE MÉXICO (-06:00)
+        // Quitamos la "Z" (Zulu/UTC) y le ponemos explícitamente -06:00. 
+        // Así Neon sabe perfectamente cuándo empieza y termina el día en México.
+        const inicioMañanaMX = `${año}-${mes}-${dia}T00:00:00.000-06:00`
+        const finMañanaMX = `${año}-${mes}-${dia}T23:59:59.999-06:00`
 
-        console.log(`📡 [RECORDATORIOS TIMING]: Buscando citas entre ${inicioMañanaISO} y ${finMañanaISO}`)
+        console.log(`📡 [RECORDATORIOS TIMING]: Buscando citas entre ${inicioMañanaMX} y ${finMañanaMX}`)
 
         // 🐘 Buscar en Neon todas las citas pendientes de mañana
         const citasDeMañana = await prisma.cita.findMany({
             where: {
                 fechaCita: {
-                    gte: new Date(inicioMañanaISO),
-                    lte: new Date(finMañanaISO)
+                    gte: new Date(inicioMañanaMX),
+                    lte: new Date(finMañanaMX)
                 },
                 estado: 'PENDIENTE'
             }
@@ -44,19 +46,18 @@ export async function POST() {
         // 🚀 Recorrer las citas encontradas y despachar por WhatsApp
         for (const cita of citasDeMañana) {
 
-            // 🛡️ ESCUDO DE PARSEO ANTICRASH: 
-            // Si ya es un objeto Date de JS lo dejamos, si viene como string de Neon lo forzamos a instanciarse correctamente.
+            // 🛡️ ESCUDO DE PARSEO ANTICRASH
             const objetoFecha = cita.fechaCita instanceof Date ? cita.fechaCita : new Date(cita.fechaCita)
 
             let horaFormateada = 'Hora pendiente'
 
-            // Validamos que el timestamp interno de la fecha sea un número real antes de formatear
+            // Convertimos la hora de la base de datos a formato local de México para el mensaje
             if (!isNaN(objetoFecha.getTime())) {
                 horaFormateada = objetoFecha.toLocaleTimeString('es-MX', {
                     hour: '2-digit',
                     minute: '2-digit',
-                    hour12: true, // 🕐 Cambia a formato natural de 12 horas (Ej: 10:00 AM / 03:30 PM)
-                    timeZone: 'America/Mexico_City'
+                    hour12: true, // 🕐 Cambia a formato natural de 12 horas (Ej: 10:00 a.m.)
+                    timeZone: 'America/Mexico_City' // 👈 Garantiza que diga la hora en MX
                 })
             }
 
@@ -68,7 +69,7 @@ export async function POST() {
                 textoRecordatorio = `🚚 *SOLTECOT_ RUTA DE RECOLECCIÓN* 🚚\n\nHola *${cita.nombreCliente}*, te recordamos que el día de mañana nuestro equipo de logística pasará a tu domicilio a recolectar tu equipo para ingresarlo al laboratorio.\n\n⏰ *Horario aproximado:* ${horaFormateada}\n📍 *Dirección de arribo:* ${cita.direccion}\n\n_Por favor, ten tu equipo listo (con su cargador en caso de laptops). ¡Vamos en camino!_ 🚚💨`
             }
 
-            // Disparar vía conector unificado Baileys
+            // Disparar vía Meta / Baileys
             const destinatarioReal = cita.telefono.includes('@') ? cita.telefono : `${cita.telefono}@s.whatsapp.net`
 
             const exito = await enviarMensajeWhatsApp(destinatarioReal, textoRecordatorio)
