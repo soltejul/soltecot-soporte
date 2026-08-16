@@ -148,7 +148,7 @@ export async function POST(request: Request) {
                     costoReparacion: costoNumerico || ticketExistente.costoReparacion,
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
                     estado: 'RECIBIDO',
-                    botActivo: false,
+                    botActivo: true,
                     fotosIngreso: fileIds.length > 0 ? fileIds : ticketExistente.fotosIngreso
                 }
             })
