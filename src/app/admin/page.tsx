@@ -23,6 +23,8 @@ export default function AdminDashboard() {
     const [telefonoRescate, setTelefonoRescate] = useState('5527107974')
     const [mensajeRescate, setMensajeRescate] = useState('¡Hola! Soy el Ing. Julio, jefe de laboratorio. Leí tu plática con mi asistente. Entiendo lo del costo, si gustas tráeme el control y te hago una revisión rápida sin compromiso para ver si podemos salvarlo con limpieza profunda en lugar de cambiar la pieza entera.')
     const [enviandoRescate, setEnviandoRescate] = useState(false)
+    const [historialDirecto, setHistorialDirecto] = useState<any[]>([])
+    const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
     // 💰 PRECIOS DINÁMICOS ASOCIADOS A CADA ROW DE LEAD
     const [preciosLeads, setPreciosLeads] = useState<{ [key: string]: string }>({})
@@ -52,9 +54,40 @@ export default function AdminDashboard() {
         }
     }
 
+    // 📜 CONSULTAR HISTORIAL EN TIEMPO REAL PARA EL MODAL DIRECTO
+    const consultarHistorialTelefono = async (num: string) => {
+        const cleanNum = num.replace(/[^0-9]/g, '')
+        if (cleanNum.length < 10) {
+            setHistorialDirecto([])
+            return
+        }
+        setCargandoHistorial(true)
+        try {
+            const res = await fetch(`/api/admin/mensajes?telefono=${cleanNum}`)
+            const data = await res.json()
+            if (res.ok && data.mensajes) {
+                setHistorialDirecto(data.mensajes)
+            } else {
+                setHistorialDirecto([])
+            }
+        } catch (err) {
+            console.error("Error al cargar historial directo", err)
+            setHistorialDirecto([])
+        } finally {
+            setCargandoHistorial(false)
+        }
+    }
+
     useEffect(() => {
         cargarTickets()
     }, [])
+
+    // 🔄 EFECTO DE BÚSQUEDA AUTOMÁTICA DE MENSAJES CUANDO CAMBIA EL TELÉFONO O SE ABRE EL MODAL
+    useEffect(() => {
+        if (modalChatDirecto && telefonoRescate) {
+            consultarHistorialTelefono(telefonoRescate)
+        }
+    }, [modalChatDirecto, telefonoRescate])
 
     const dispararRecordatoriosManual = async () => {
         try {
@@ -530,38 +563,64 @@ export default function AdminDashboard() {
                 onClose={() => setModalInactividadAbierto(false)}
             />
 
-            {/* ✉️ MODAL DE MENSAJE DIRECTO (Rescate de fantasmas) */}
+            {/* ✉️ MODAL DE MENSAJE DIRECTO (Rescate de fantasmas + Historial) */}
             {modalChatDirecto && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                        <h3 className="text-lg font-bold text-indigo-400 mb-1 flex justify-between items-center">
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-lg font-bold text-indigo-400 flex justify-between items-center">
                             ✉️ Nuevo Mensaje Directo
                             <button onClick={() => setModalChatDirecto(false)} className="text-zinc-500 hover:text-white text-base font-bold">✕</button>
                         </h3>
-                        <p className="text-xs text-zinc-400 mb-4">Envía un mensaje directo a cualquier número. El bot pasará a modo manual automáticamente.</p>
+                        <p className="text-xs text-zinc-400">Envía un mensaje directo a cualquier número. El bot pasará a modo manual automáticamente.</p>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Teléfono (10 dígitos)</label>
-                                <input
-                                    type="text"
-                                    value={telefonoRescate}
-                                    onChange={(e) => setTelefonoRescate(e.target.value)}
-                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Mensaje</label>
-                                <textarea
-                                    rows={4}
-                                    value={mensajeRescate}
-                                    onChange={(e) => setMensajeRescate(e.target.value)}
-                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors resize-none"
-                                />
+                        <div>
+                            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Teléfono (10 dígitos)</label>
+                            <input
+                                type="text"
+                                value={telefonoRescate}
+                                onChange={(e) => setTelefonoRescate(e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors"
+                            />
+                        </div>
+
+                        {/* 📜 VISTA DEL HISTORIAL REGISTRADO EN DB */}
+                        <div>
+                            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Historial de Conversación</label>
+                            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 text-xs">
+                                {cargandoHistorial ? (
+                                    <p className="text-zinc-500 text-center py-2">Buscando conversación previa...</p>
+                                ) : historialDirecto.length === 0 ? (
+                                    <p className="text-zinc-600 text-center py-2">Sin conversación registrada para este número.</p>
+                                ) : (
+                                    historialDirecto.map((m: any) => (
+                                        <div
+                                            key={m.id}
+                                            className={`p-2 rounded-lg max-w-[85%] ${m.origen === 'CLIENTE'
+                                                ? 'bg-zinc-800 text-zinc-200 self-start'
+                                                : 'bg-indigo-950/80 border border-indigo-800/50 text-indigo-200 ml-auto'
+                                                }`}
+                                        >
+                                            <p className="font-semibold text-[10px] opacity-60 mb-0.5">
+                                                {m.origen === 'CLIENTE' ? '👤 Cliente' : '🤖 IA / Taller'}
+                                            </p>
+                                            <p>{m.texto}</p>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 mt-6">
+                        <div>
+                            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Mensaje</label>
+                            <textarea
+                                rows={3}
+                                value={mensajeRescate}
+                                onChange={(e) => setMensajeRescate(e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors resize-none"
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
                             <button
                                 onClick={() => setModalChatDirecto(false)}
                                 className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sm text-zinc-400 transition-colors"
@@ -579,7 +638,8 @@ export default function AdminDashboard() {
                                         })
                                         if (res.ok) {
                                             alert('¡Mensaje enviado con éxito!')
-                                            setModalChatDirecto(false)
+                                            consultarHistorialTelefono(telefonoRescate)
+                                            setMensajeRescate('')
                                             cargarTickets()
                                         } else {
                                             alert('Error al enviar el mensaje por la API de Meta')
