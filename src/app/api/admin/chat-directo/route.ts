@@ -50,3 +50,37 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
+export async function PATCH(request: Request) {
+    try {
+        const body = await request.json()
+        const { telefono, botActivo } = body
+
+        if (!telefono) {
+            return NextResponse.json({ error: 'Teléfono requerido' }, { status: 400 })
+        }
+
+        const cleanPhone = telefono.replace(/[^0-9]/g, '').slice(-10)
+
+        const cliente = await prisma.cliente.findFirst({
+            where: {
+                OR: [
+                    { telefono: cleanPhone },
+                    { telefono: telefono.trim() }
+                ]
+            }
+        })
+
+        if (cliente) {
+            await prisma.cliente.update({
+                where: { id: cliente.id },
+                data: { atendidoPorBot: botActivo ?? true }
+            })
+            return NextResponse.json({ success: true, atendidoPorBot: botActivo })
+        }
+
+        return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}
