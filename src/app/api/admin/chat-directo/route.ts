@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-// Asegúrate de que la ruta a tu archivo whatsapp.ts sea la correcta
-import { enviarMensajeWhatsApp } from '@/lib/whatsapp'
+import { prisma } from '../../../../lib/prisma'
+import { enviarMensajeWhatsApp } from '../../../../lib/whatsapp'
 
 export async function POST(request: Request) {
     try {
@@ -15,14 +14,13 @@ export async function POST(request: Request) {
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
 
-        // Destinatario formateado para Baileys/Meta
         const destinatario = phone10.includes('@') ? phone10 : `${phone10}@s.whatsapp.net`
 
-        // 1. Enviar el mensaje por Meta
+        // 1. Enviar el mensaje por la API de Meta
         const exito = await enviarMensajeWhatsApp(destinatario, mensaje)
 
         if (exito) {
-            // 2. Silenciar el bot para este cliente (asumiendo que estás retomando el control)
+            // 2. Silenciar el bot y registrar en la base de datos
             let cliente = await prisma.cliente.findFirst({
                 where: { telefono: phone10 }
             })
@@ -33,11 +31,10 @@ export async function POST(request: Request) {
                     data: { atendidoPorBot: false }
                 })
 
-                // Guardar el mensaje en el historial efímero
                 await prisma.mensaje.create({
                     data: {
                         texto: mensaje,
-                        origen: 'BOT', // Queda como BOT/Agente en el historial
+                        origen: 'BOT',
                         clienteId: cliente.id
                     }
                 })
