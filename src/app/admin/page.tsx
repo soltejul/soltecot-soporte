@@ -18,6 +18,12 @@ export default function AdminDashboard() {
     // 🌴 ESTADO PARA EL MODAL DE INACTIVIDAD / VACACIONES (OUT OF OFFICE)
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
+    // ✉️ ESTADOS PARA CHAT DIRECTO / RESCATE DE LEADS FANTASMA
+    const [modalChatDirecto, setModalChatDirecto] = useState(false)
+    const [telefonoRescate, setTelefonoRescate] = useState('5527107974')
+    const [mensajeRescate, setMensajeRescate] = useState('¡Hola! Soy el Ing. Julio, jefe de laboratorio. Leí tu plática con mi asistente. Entiendo lo del costo, si gustas tráeme el control y te hago una revisión rápida sin compromiso para ver si podemos salvarlo con limpieza profunda en lugar de cambiar la pieza entera.')
+    const [enviandoRescate, setEnviandoRescate] = useState(false)
+
     // 💰 PRECIOS DINÁMICOS ASOCIADOS A CADA ROW DE LEAD
     const [preciosLeads, setPreciosLeads] = useState<{ [key: string]: string }>({})
 
@@ -217,6 +223,14 @@ export default function AdminDashboard() {
 
                     {/* Botones Flexibles */}
                     <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                        <button
+                            onClick={() => setModalChatDirecto(true)}
+                            className="flex-1 md:flex-none bg-indigo-950 hover:bg-indigo-900 text-indigo-400 border border-indigo-900/40 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            title="Iniciar chat con cualquier número"
+                        >
+                            ✉️ Mensaje Directo
+                        </button>
+
                         <button
                             onClick={() => setModalInactividadAbierto(true)}
                             className="flex-1 md:flex-none bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-amber-900/40 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
@@ -515,6 +529,77 @@ export default function AdminDashboard() {
                 isOpen={modalInactividadAbierto}
                 onClose={() => setModalInactividadAbierto(false)}
             />
+
+            {/* ✉️ MODAL DE MENSAJE DIRECTO (Rescate de fantasmas) */}
+            {modalChatDirecto && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                        <h3 className="text-lg font-bold text-indigo-400 mb-1 flex justify-between items-center">
+                            ✉️ Nuevo Mensaje Directo
+                            <button onClick={() => setModalChatDirecto(false)} className="text-zinc-500 hover:text-white text-base font-bold">✕</button>
+                        </h3>
+                        <p className="text-xs text-zinc-400 mb-4">Envía un mensaje directo a cualquier número. El bot pasará a modo manual automáticamente.</p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Teléfono (10 dígitos)</label>
+                                <input
+                                    type="text"
+                                    value={telefonoRescate}
+                                    onChange={(e) => setTelefonoRescate(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Mensaje</label>
+                                <textarea
+                                    rows={4}
+                                    value={mensajeRescate}
+                                    onChange={(e) => setMensajeRescate(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-indigo-500 transition-colors resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setModalChatDirecto(false)}
+                                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sm text-zinc-400 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setEnviandoRescate(true)
+                                    try {
+                                        const res = await fetch('/api/admin/chat-directo', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ telefono: telefonoRescate, mensaje: mensajeRescate })
+                                        })
+                                        if (res.ok) {
+                                            alert('¡Mensaje enviado con éxito!')
+                                            setModalChatDirecto(false)
+                                            cargarTickets()
+                                        } else {
+                                            alert('Error al enviar el mensaje por la API de Meta')
+                                        }
+                                    } catch (err) {
+                                        console.error(err)
+                                        alert('Error de conexión con el servidor')
+                                    } finally {
+                                        setEnviandoRescate(false)
+                                    }
+                                }}
+                                disabled={enviandoRescate}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-white text-sm transition-colors disabled:opacity-50 shadow-lg"
+                            >
+                                {enviandoRescate ? 'Enviando...' : 'Enviar 🚀'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
