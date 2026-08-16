@@ -760,20 +760,42 @@ export default function AdminDashboard() {
                                             ) : historialDirecto.length === 0 ? (
                                                 <p className="text-zinc-600 text-center py-8">Sin historial de mensajes. Escribe abajo para enviar.</p>
                                             ) : (
-                                                historialDirecto.map((m: any) => (
-                                                    <div
-                                                        key={m.id}
-                                                        className={`p-2.5 rounded-xl max-w-[85%] ${m.origen === 'CLIENTE'
-                                                            ? 'bg-zinc-800 text-zinc-200 self-start'
-                                                            : 'bg-indigo-950/80 border border-indigo-800/40 text-indigo-200 ml-auto'
-                                                            }`}
-                                                    >
-                                                        <p className="font-bold text-[10px] opacity-60 mb-0.5">
-                                                            {m.origen === 'CLIENTE' ? '👤 Cliente' : '🛠️ Taller / Agente'}
-                                                        </p>
-                                                        <p className="whitespace-pre-wrap">{m.texto}</p>
-                                                    </div>
-                                                ))
+                                                historialDirecto.map((m: any) => {
+                                                    const fechaObj = new Date(m.createdAt)
+                                                    const horaFormateada = fechaObj.toLocaleTimeString('es-MX', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                        hour12: true
+                                                    })
+                                                    const fechaFormateada = fechaObj.toLocaleDateString('es-MX', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        year: '2-digit'
+                                                    })
+
+                                                    return (
+                                                        <div
+                                                            key={m.id}
+                                                            className={`p-2.5 rounded-xl max-w-[85%] ${m.origen === 'CLIENTE'
+                                                                ? 'bg-zinc-800 text-zinc-200 self-start'
+                                                                : 'bg-indigo-950/80 border border-indigo-800/40 text-indigo-200 ml-auto'
+                                                                }`}
+                                                        >
+                                                            {/* ENCABEZADO CON REMITENTE Y HORA DE ENVÍO */}
+                                                            <div className="flex justify-between items-center gap-3 mb-1">
+                                                                <span className="font-bold text-[10px] opacity-60">
+                                                                    {m.origen === 'CLIENTE' ? '👤 Cliente' : '🛠️ Taller / Agente'}
+                                                                </span>
+                                                                <span className="text-[9px] opacity-50 font-mono">
+                                                                    {fechaFormateada} • {horaFormateada}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* CONTENIDO DEL MENSAJE */}
+                                                            <p className="whitespace-pre-wrap">{m.texto}</p>
+                                                        </div>
+                                                    )
+                                                })
                                             )}
                                         </div>
 
