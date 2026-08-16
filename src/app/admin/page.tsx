@@ -12,14 +12,16 @@ export default function AdminDashboard() {
     const [cargando, setCargando] = useState(true)
     const router = useRouter()
 
-    // 📂 ESTADO PARA CONTROL DE PESTAÑAS (TABS)
+    // 📂 PESTAÑAS Y MODALES
     const [pestanaActiva, setPestanaActiva] = useState<'taller' | 'leads'>('taller')
-
-    // 🌴 ESTADO PARA EL MODAL DE INACTIVIDAD / VACACIONES (OUT OF OFFICE)
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
-    // 💬 ESTADOS PARA EL CENTRO DE MENSAJERÍA DIRECTA Y MULTIMEDIA
+    // 💬 CENTRO DE CHATS Y MULTIMEDIA
     const [modalChatDirecto, setModalChatDirecto] = useState(false)
+    const [conversaciones, setConversaciones] = useState<any[]>([])
+    const [cargandoListaChats, setCargandoListaChats] = useState(false)
+    const [filtroChat, setFiltroChat] = useState('')
+
     const [telefonoRescate, setTelefonoRescate] = useState('')
     const [mensajeRescate, setMensajeRescate] = useState('')
     const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null)
@@ -28,16 +30,12 @@ export default function AdminDashboard() {
     const [cargandoHistorial, setCargandoHistorial] = useState(false)
     const [estadoBotDirecto, setEstadoBotDirecto] = useState<boolean | null>(null)
 
-    // 💰 PRECIOS DINÁMICOS ASOCIADOS A CADA ROW DE LEAD
+    // 💰 PRESUPUESTOS Y MODAL CHAT NATIVO
     const [preciosLeads, setPreciosLeads] = useState<{ [key: string]: string }>({})
-
-    // 💰 ESTADOS PARA EL MODAL DE PRESUPUESTOS (ÓRDENES REALES)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
     const [ticketSeleccionado, setTicketSeleccionado] = useState<any>(null)
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
-
-    // 💬 ESTADOS PARA EL MODAL DE CHAT NATIVO
     const [chatAbierto, setChatAbierto] = useState(false)
     const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
 
@@ -56,7 +54,23 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL Y ESTADO DEL BOT EN TIEMPO REAL
+    // 📜 CARGAR LISTA DE CONVERSACIONES
+    const cargarListaConversaciones = async () => {
+        setCargandoListaChats(true)
+        try {
+            const res = await fetch('/api/admin/mensajes')
+            const data = await res.json()
+            if (res.ok && data.conversaciones) {
+                setConversaciones(data.conversaciones)
+            }
+        } catch (err) {
+            console.error("Error al listar conversaciones", err)
+        } finally {
+            setCargandoListaChats(false)
+        }
+    }
+
+    // 📜 CONSULTAR UN CHAT ESPECÍFICO
     const consultarHistorialTelefono = async (num: string) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -76,9 +90,8 @@ export default function AdminDashboard() {
                 setEstadoBotDirecto(null)
             }
         } catch (err) {
-            console.error("Error al cargar historial directo", err)
+            console.error("Error al cargar chat", err)
             setHistorialDirecto([])
-            setEstadoBotDirecto(null)
         } finally {
             setCargandoHistorial(false)
         }
@@ -88,10 +101,12 @@ export default function AdminDashboard() {
         cargarTickets()
     }, [])
 
-    // 🔄 CONSULTA AUTOMÁTICA AL CAMBIAR EL NÚMERO
     useEffect(() => {
-        if (modalChatDirecto && telefonoRescate) {
-            consultarHistorialTelefono(telefonoRescate)
+        if (modalChatDirecto) {
+            cargarListaConversaciones()
+            if (telefonoRescate) {
+                consultarHistorialTelefono(telefonoRescate)
+            }
         }
     }, [modalChatDirecto, telefonoRescate])
 
@@ -247,6 +262,11 @@ export default function AdminDashboard() {
     const totalWorkshopGlobal = tickets.filter(t => !esLeadPuro(t)).length
     const totalLeadsGlobal = tickets.filter(t => esLeadPuro(t)).length
 
+    const conversacionesFiltradas = conversaciones.filter((c) => {
+        const term = filtroChat.toLowerCase().trim()
+        return c.telefono.includes(term) || (c.nombre || '').toLowerCase().includes(term)
+    })
+
     if (cargando) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Iniciando el Centro de Control de Soltecot_...</div>
 
     return (
@@ -260,14 +280,13 @@ export default function AdminDashboard() {
                         <p className="text-xs text-zinc-500 uppercase tracking-widest">Panel Híbrido: Taller y Bandeja de Leads</p>
                     </div>
 
-                    {/* Botones Flexibles */}
                     <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                         <button
                             onClick={() => setModalChatDirecto(true)}
                             className="flex-1 md:flex-none bg-indigo-950 hover:bg-indigo-900 text-indigo-400 border border-indigo-900/40 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-                            title="Iniciar chat con cualquier número"
+                            title="Abrir Centro de Chats WhatsApp"
                         >
-                            💬 Mensaje Directo
+                            💬 Mensajería Directa
                         </button>
 
                         <button
@@ -310,7 +329,7 @@ export default function AdminDashboard() {
                     />
                 </div>
 
-                {/* 📂 NAVEGACIÓN ENTRE PESTAÑAS (TABS) */}
+                {/* 📂 PESTAÑAS */}
                 <div className="flex border-b border-zinc-900 mb-6 overflow-x-auto pb-1 hide-scrollbar">
                     <button
                         onClick={() => setPestanaActiva('taller')}
@@ -337,7 +356,7 @@ export default function AdminDashboard() {
                     </button>
                 </div>
 
-                {/* 💻 CONTENIDO TAB 1: BANCO DE TRABAJO */}
+                {/* TAB 1: BANCO DE TRABAJO */}
                 {pestanaActiva === 'taller' && (
                     <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden shadow-2xl animate-fade-in overflow-x-auto">
                         <table className="w-full text-left border-collapse min-w-[700px]">
@@ -420,7 +439,7 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* 🎯 CONTENIDO TAB 2: BANDEJA DE LEADS */}
+                {/* TAB 2: BANDEJA DE LEADS */}
                 {pestanaActiva === 'leads' && (
                     <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden shadow-2xl animate-fade-in overflow-x-auto">
                         <table className="w-full text-left border-collapse min-w-[700px]">
@@ -497,90 +516,86 @@ export default function AdminDashboard() {
                 )}
             </div>
 
-            {/* 💰 MODAL FLOTANTE: ENVÍO DE PRESUPUESTO */}
-            {
-                mostrarModalPresupuesto && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-                        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl mt-[-10vh]">
-                            <h3 className="text-lg font-bold text-amber-400 mb-1">💰 Enviar Presupuesto</h3>
-                            <p className="text-xs text-zinc-400 mb-4">Orden: <span className="text-emerald-400 font-mono font-bold">{ticketSeleccionado?.numeroOrden}</span></p>
+            {/* MODAL: ENVÍO DE PRESUPUESTO */}
+            {mostrarModalPresupuesto && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl mt-[-10vh]">
+                        <h3 className="text-lg font-bold text-amber-400 mb-1">💰 Enviar Presupuesto</h3>
+                        <p className="text-xs text-zinc-400 mb-4">Orden: <span className="text-emerald-400 font-mono font-bold">{ticketSeleccionado?.numeroOrden}</span></p>
 
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Costo Total ($ MXN)</label>
-                                    <input
-                                        type="number"
-                                        inputMode="decimal"
-                                        placeholder="Ej: 2450"
-                                        value={costoReparacion}
-                                        onChange={(e) => setCostoReparacion(e.target.value)}
-                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Detalles del Diagnóstico</label>
-                                    <textarea
-                                        placeholder="Indica qué componentes se van a reparar..."
-                                        rows={3}
-                                        value={notasDiagnostico}
-                                        onChange={(e) => setNotasDiagnostico(e.target.value)}
-                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors resize-none"
-                                    />
-                                </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Costo Total ($ MXN)</label>
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    placeholder="Ej: 2450"
+                                    value={costoReparacion}
+                                    onChange={(e) => setCostoReparacion(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors"
+                                />
                             </div>
 
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button
-                                    onClick={() => setMostrarModalPresupuesto(false)}
-                                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sm text-zinc-400 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={guardarPresupuestoYEnviar}
-                                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-black text-sm transition-colors shadow-lg"
-                                >
-                                    Enviar 🚀
-                                </button>
+                            <div>
+                                <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Detalles del Diagnóstico</label>
+                                <textarea
+                                    placeholder="Indica qué componentes se van a reparar..."
+                                    rows={3}
+                                    value={notasDiagnostico}
+                                    onChange={(e) => setNotasDiagnostico(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-amber-500 transition-colors resize-none"
+                                />
                             </div>
                         </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setMostrarModalPresupuesto(false)}
+                                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sm text-zinc-400 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={guardarPresupuestoYEnviar}
+                                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-black text-sm transition-colors shadow-lg"
+                            >
+                                Enviar 🚀
+                            </button>
+                        </div>
                     </div>
-                )
-            }
+                </div>
+            )}
 
-            {/* 💬 MODAL DE CHAT NATIVO */}
-            {
-                chatAbierto && clienteSeleccionado && (
-                    <ModalChat
-                        isOpen={chatAbierto}
-                        onClose={() => setChatAbierto(false)}
-                        clienteId={clienteSeleccionado.id}
-                        nombreCliente={clienteSeleccionado.nombre}
-                        telefono={clienteSeleccionado.telefono}
-                        ticketId={ticketSeleccionado?.id}
-                    />
-                )
-            }
+            {/* MODAL DE CHAT NATIVO */}
+            {chatAbierto && clienteSeleccionado && (
+                <ModalChat
+                    isOpen={chatAbierto}
+                    onClose={() => setChatAbierto(false)}
+                    clienteId={clienteSeleccionado.id}
+                    nombreCliente={clienteSeleccionado.nombre}
+                    telefono={clienteSeleccionado.telefono}
+                    ticketId={ticketSeleccionado?.id}
+                />
+            )}
 
-            {/* 🌴 MODAL DE CONTROL DE INACTIVIDAD / VACACIONES */}
+            {/* MODAL DE CONTROL DE INACTIVIDAD */}
             <ModalBloqueos
                 isOpen={modalInactividadAbierto}
                 onClose={() => setModalInactividadAbierto(false)}
             />
 
-            {/* 💬 MODAL DE CENTRO DE MENSAJERÍA DIRECTA Y MULTIMEDIA */}
+            {/* 💬 MODAL DE CENTRO DE CHATS WHATSAPP (DOS COLUMNAS) */}
             {modalChatDirecto && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl p-4 md:p-6 shadow-2xl flex flex-col h-[85vh] max-h-[700px]">
 
                         {/* ENCABEZADO */}
-                        <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+                        <div className="flex justify-between items-center border-b border-zinc-900 pb-3 mb-4">
                             <div>
                                 <h3 className="text-lg font-bold text-indigo-400 flex items-center gap-2">
-                                    💬 Centro de Mensajería Directa
+                                    💬 Centro de Mensajería WhatsApp
                                 </h3>
-                                <p className="text-xs text-zinc-500">Consulta, chatea o envía evidencias a cualquier número.</p>
+                                <p className="text-xs text-zinc-500">Selecciona una conversación previa o inicia un nuevo chat.</p>
                             </div>
                             <button
                                 onClick={() => {
@@ -595,164 +610,238 @@ export default function AdminDashboard() {
                             </button>
                         </div>
 
-                        {/* BUSCADOR DE TELÉFONO Y PURGA */}
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Ingresa teléfono a 10 dígitos (Ej: 5512345678)"
-                                value={telefonoRescate}
-                                onChange={(e) => setTelefonoRescate(e.target.value)}
-                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-indigo-500 font-mono"
-                            />
-                            {telefonoRescate.replace(/[^0-9]/g, '').length >= 10 && (
-                                <button
-                                    onClick={async () => {
-                                        if (!confirm("¿Deseas purgar la conversación de este número de la base de datos?")) return
-                                        try {
-                                            const res = await fetch(`/api/admin/mensajes?telefono=${telefonoRescate}`, { method: 'DELETE' })
-                                            if (res.ok) {
-                                                setHistorialDirecto([])
-                                                alert("🧼 Historial de chat purgado con éxito.")
-                                            }
-                                        } catch (err) {
-                                            alert("Error al purgar conversación")
-                                        }
-                                    }}
-                                    className="bg-rose-950/40 hover:bg-rose-900 border border-rose-900/50 text-rose-400 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors"
-                                    title="Purga el historial de mensajes de Neon DB"
-                                >
-                                    🗑️ Purgar
-                                </button>
-                            )}
-                        </div>
+                        {/* ESTRUCTURA PRINCIPAL DE 2 COLUMNAS */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 flex-1 overflow-hidden">
 
-                        {/* HISTORIAL DE CHAT EN TIEMPO REAL */}
-                        <div className="flex-1 min-h-[160px] max-h-[220px] bg-zinc-900/50 border border-zinc-900 rounded-xl p-3 overflow-y-auto space-y-2 text-xs">
-                            {cargandoHistorial ? (
-                                <p className="text-zinc-500 text-center py-8">Cargando historial...</p>
-                            ) : historialDirecto.length === 0 ? (
-                                <p className="text-zinc-600 text-center py-8">
-                                    {telefonoRescate.length >= 10
-                                        ? "Sin mensajes previos. Escribe tu texto o adjunta un archivo para iniciar contacto."
-                                        : "Escribe un número de teléfono de 10 dígitos arriba para cargar o iniciar un chat."}
-                                </p>
-                            ) : (
-                                historialDirecto.map((m: any) => (
-                                    <div
-                                        key={m.id}
-                                        className={`p-2.5 rounded-xl max-w-[85%] ${m.origen === 'CLIENTE'
-                                            ? 'bg-zinc-800 text-zinc-200 self-start'
-                                            : 'bg-indigo-950/80 border border-indigo-800/40 text-indigo-200 ml-auto'
-                                            }`}
-                                    >
-                                        <p className="font-bold text-[10px] opacity-60 mb-0.5">
-                                            {m.origen === 'CLIENTE' ? '👤 Cliente' : '🛠️ Taller / Agente'}
-                                        </p>
-                                        <p className="whitespace-pre-wrap">{m.texto}</p>
-                                    </div>
-                                ))
-                            )}
-                        </div>
+                            {/* 👈 COLUMNA IZQUIERDA: LISTA DE CONVERSACIONES */}
+                            <div className="md:col-span-5 border-r border-zinc-900 pr-0 md:pr-4 flex flex-col h-full overflow-hidden">
 
-                        {/* INDICADOR Y INTERRUPTOR DE ESTADO DE IA */}
-                        {telefonoRescate.replace(/[^0-9]/g, '').length >= 10 && (
-                            <div className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl">
-                                <span className="text-xs text-zinc-400 font-semibold">
-                                    {estadoBotDirecto === null
-                                        ? '🔍 Verificando estado del bot...'
-                                        : estadoBotDirecto
-                                            ? '🤖 Bot Activo'
-                                            : '🚨 Modo Manual (IA Silenciada)'}
-                                </span>
-                                <button
-                                    onClick={async () => {
-                                        const nuevoEstado = !estadoBotDirecto
-                                        try {
-                                            const res = await fetch('/api/admin/chat-directo', {
-                                                method: 'PATCH',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ telefono: telefonoRescate, botActivo: nuevoEstado })
-                                            })
-                                            if (res.ok) {
-                                                setEstadoBotDirecto(nuevoEstado)
-                                                alert(nuevoEstado ? '🤖 Bot activado para este cliente.' : '🚨 Bot pausado (Modo Manual).')
-                                            }
-                                        } catch (err) {
-                                            alert('Error al cambiar el estado del bot')
-                                        }
-                                    }}
-                                    className={`text-[11px] font-bold px-3 py-1 rounded-lg border transition-colors ${estadoBotDirecto
-                                        ? 'bg-amber-950/50 text-amber-400 border-amber-800 hover:bg-amber-900/50'
-                                        : 'bg-emerald-950/50 text-emerald-400 border-emerald-800 hover:bg-emerald-900/50'
-                                        }`}
-                                >
-                                    {estadoBotDirecto ? '🚨 Pausar Bot' : '🤖 Entregar a IA'}
-                                </button>
-                            </div>
-                        )}
+                                {/* BUSCADOR / NUEVO NÚMERO */}
+                                <div className="mb-3 space-y-2">
+                                    <input
+                                        type="text"
+                                        placeholder="🔍 Buscar por nombre o teléfono..."
+                                        value={filtroChat}
+                                        onChange={(e) => setFiltroChat(e.target.value)}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+                                    />
+                                </div>
 
-                        {/* CAMPO PARA ADJUNTAR ARCHIVOS/EVIDENCIAS */}
-                        <div>
-                            <label className="block text-[11px] font-bold text-zinc-400 uppercase mb-1">
-                                📎 Adjuntar Evidencia (Opcional)
-                            </label>
-                            <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => setArchivoAdjunto(e.target.files?.[0] || null)}
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-indigo-900/50 file:text-indigo-300 file:font-semibold"
-                            />
-                        </div>
+                                {/* LISTA SCROLLABLE DE CHATS */}
+                                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar">
+                                    {cargandoListaChats ? (
+                                        <p className="text-zinc-500 text-center py-8 text-xs">Cargando conversaciones...</p>
+                                    ) : conversacionesFiltradas.length === 0 ? (
+                                        <div className="text-center py-8 px-2">
+                                            <p className="text-zinc-600 text-xs mb-2">No hay chats que coincidan.</p>
+                                            {filtroChat.replace(/[^0-9]/g, '').length >= 10 && (
+                                                <button
+                                                    onClick={() => {
+                                                        const clean = filtroChat.replace(/[^0-9]/g, '').slice(-10)
+                                                        setTelefonoRescate(clean)
+                                                    }}
+                                                    className="bg-indigo-950 text-indigo-400 border border-indigo-800 text-[11px] font-bold px-3 py-1.5 rounded-lg"
+                                                >
+                                                    ➕ Iniciar chat con {filtroChat}
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        conversacionesFiltradas.map((c) => {
+                                            const esSeleccionado = telefonoRescate.endsWith(c.telefono.slice(-10))
+                                            const ultimoMsg = c.mensajes[0]
 
-                        {/* CAJA DE TEXTO Y BOTÓN DE ENVÍO */}
-                        <div className="space-y-2">
-                            <textarea
-                                rows={2}
-                                placeholder="Escribe tu mensaje..."
-                                value={mensajeRescate}
-                                onChange={(e) => setMensajeRescate(e.target.value)}
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-indigo-500 resize-none"
-                            />
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    onClick={() => setTelefonoRescate(c.telefono)}
+                                                    className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1 ${esSeleccionado
+                                                        ? 'bg-indigo-950/60 border-indigo-600/60 text-white shadow-md'
+                                                        : 'bg-zinc-900/40 border-zinc-900 text-zinc-300 hover:bg-zinc-900/80 hover:border-zinc-800'
+                                                        }`}
+                                                >
+                                                    <div className="flex justify-between items-center w-full">
+                                                        <span className="font-bold text-xs truncate max-w-[130px]">
+                                                            {c.nombre !== 'Cliente WhatsApp' ? c.nombre : c.telefono}
+                                                        </span>
+                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${c.atendidoPorBot ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                                            }`}>
+                                                            {c.atendidoPorBot ? '🤖 IA' : '🚨 MAN'}
+                                                        </span>
+                                                    </div>
 
-                            <button
-                                onClick={async () => {
-                                    const cleanNum = telefonoRescate.replace(/[^0-9]/g, '')
-                                    if (cleanNum.length < 10) return alert('Ingresa un número válido de 10 dígitos')
-                                    if (!mensajeRescate.trim() && !archivoAdjunto) return alert('Escribe un mensaje o adjunta un archivo')
+                                                    <p className="text-[11px] text-zinc-500 font-mono">{c.telefono}</p>
 
-                                    setEnviandoRescate(true)
-                                    try {
-                                        const formData = new FormData()
-                                        formData.append('telefono', telefonoRescate)
-                                        formData.append('mensaje', mensajeRescate)
-                                        if (archivoAdjunto) formData.append('archivo', archivoAdjunto)
-
-                                        const res = await fetch('/api/admin/chat-directo', {
-                                            method: 'POST',
-                                            body: formData
+                                                    {ultimoMsg && (
+                                                        <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                                                            <span className="opacity-60">{ultimoMsg.origen === 'CLIENTE' ? '👤' : '🛠️'} </span>
+                                                            {ultimoMsg.texto}
+                                                        </p>
+                                                    )}
+                                                </button>
+                                            )
                                         })
+                                    )}
+                                </div>
+                            </div>
 
-                                        if (res.ok) {
-                                            setMensajeRescate('')
-                                            setArchivoAdjunto(null)
-                                            consultarHistorialTelefono(telefonoRescate)
-                                            setEstadoBotDirecto(false)
-                                            cargarTickets()
-                                        } else {
-                                            alert('Error al enviar el mensaje por la API de Meta')
-                                        }
-                                    } catch (err) {
-                                        console.error(err)
-                                        alert('Error de conexión con el servidor')
-                                    } finally {
-                                        setEnviandoRescate(false)
-                                    }
-                                }}
-                                disabled={enviandoRescate}
-                                className="w-full bg-indigo-600 hover:bg-indigo-500 font-bold text-white text-xs py-2.5 rounded-xl transition-colors disabled:opacity-50 shadow-md"
-                            >
-                                {enviandoRescate ? 'Enviando a WhatsApp...' : 'Enviar Mensaje / Evidencia 🚀'}
-                            </button>
+                            {/* 👉 COLUMNA DERECHA: VISOR Y ACCIONES DE CHAT */}
+                            <div className="md:col-span-7 flex flex-col h-full overflow-hidden space-y-3">
+
+                                {telefonoRescate.length < 10 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-600 space-y-2 border border-dashed border-zinc-900 rounded-xl">
+                                        <span className="text-3xl">💬</span>
+                                        <p className="text-xs">Selecciona una conversación de la izquierda o ingresa un número de 10 dígitos en el buscador para chatear.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* BARRA SUPERIOR DE CHAT SELECCIONADO */}
+                                        <div className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl">
+                                            <div>
+                                                <p className="text-xs font-bold text-indigo-300 font-mono">📱 {telefonoRescate}</p>
+                                                <p className="text-[10px] text-zinc-500">
+                                                    {estadoBotDirecto ? '🤖 Bot respondiendo' : '🚨 Modo Manual Activo'}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={async () => {
+                                                        const nuevoEstado = !estadoBotDirecto
+                                                        try {
+                                                            const res = await fetch('/api/admin/chat-directo', {
+                                                                method: 'PATCH',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ telefono: telefonoRescate, botActivo: nuevoEstado })
+                                                            })
+                                                            if (res.ok) {
+                                                                setEstadoBotDirecto(nuevoEstado)
+                                                                cargarListaConversaciones()
+                                                            }
+                                                        } catch (err) {
+                                                            alert('Error al cambiar estado del bot')
+                                                        }
+                                                    }}
+                                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${estadoBotDirecto
+                                                        ? 'bg-amber-950/50 text-amber-400 border-amber-800 hover:bg-amber-900/50'
+                                                        : 'bg-emerald-950/50 text-emerald-400 border-emerald-800 hover:bg-emerald-900/50'
+                                                        }`}
+                                                >
+                                                    {estadoBotDirecto ? '🚨 Pausar Bot' : '🤖 Entregar a IA'}
+                                                </button>
+
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm("¿Deseas purgar la conversación de este número de la base de datos?")) return
+                                                        try {
+                                                            const res = await fetch(`/api/admin/mensajes?telefono=${telefonoRescate}`, { method: 'DELETE' })
+                                                            if (res.ok) {
+                                                                setHistorialDirecto([])
+                                                                setTelefonoRescate('')
+                                                                cargarListaConversaciones()
+                                                                alert("🧼 Historial de chat purgado con éxito.")
+                                                            }
+                                                        } catch (err) {
+                                                            alert("Error al purgar conversación")
+                                                        }
+                                                    }}
+                                                    className="bg-rose-950/40 hover:bg-rose-900 border border-rose-900/50 text-rose-400 p-1.5 rounded-lg text-xs font-bold transition-colors"
+                                                    title="Purga el historial de mensajes"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* CAJA DE MENSAJES SCROLLABLE */}
+                                        <div className="flex-1 bg-zinc-900/40 border border-zinc-900 rounded-xl p-3 overflow-y-auto space-y-2 text-xs">
+                                            {cargandoHistorial ? (
+                                                <p className="text-zinc-500 text-center py-8">Cargando mensajes...</p>
+                                            ) : historialDirecto.length === 0 ? (
+                                                <p className="text-zinc-600 text-center py-8">Sin historial de mensajes. Escribe abajo para enviar.</p>
+                                            ) : (
+                                                historialDirecto.map((m: any) => (
+                                                    <div
+                                                        key={m.id}
+                                                        className={`p-2.5 rounded-xl max-w-[85%] ${m.origen === 'CLIENTE'
+                                                            ? 'bg-zinc-800 text-zinc-200 self-start'
+                                                            : 'bg-indigo-950/80 border border-indigo-800/40 text-indigo-200 ml-auto'
+                                                            }`}
+                                                    >
+                                                        <p className="font-bold text-[10px] opacity-60 mb-0.5">
+                                                            {m.origen === 'CLIENTE' ? '👤 Cliente' : '🛠️ Taller / Agente'}
+                                                        </p>
+                                                        <p className="whitespace-pre-wrap">{m.texto}</p>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        {/* ADJUNTAR Y ENVIAR */}
+                                        <div className="space-y-2">
+                                            <div>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*,.pdf"
+                                                    onChange={(e) => setArchivoAdjunto(e.target.files?.[0] || null)}
+                                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 text-[11px] text-zinc-300 file:mr-2 file:py-0.5 file:px-2 file:rounded-md file:border-0 file:bg-indigo-900/50 file:text-indigo-300 file:font-semibold"
+                                                />
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <textarea
+                                                    rows={2}
+                                                    placeholder="Escribe un mensaje..."
+                                                    value={mensajeRescate}
+                                                    onChange={(e) => setMensajeRescate(e.target.value)}
+                                                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-indigo-500 resize-none"
+                                                />
+                                                <button
+                                                    onClick={async () => {
+                                                        const cleanNum = telefonoRescate.replace(/[^0-9]/g, '')
+                                                        if (cleanNum.length < 10) return alert('Ingresa un número válido de 10 dígitos')
+                                                        if (!mensajeRescate.trim() && !archivoAdjunto) return alert('Escribe un mensaje o adjunta un archivo')
+
+                                                        setEnviandoRescate(true)
+                                                        try {
+                                                            const formData = new FormData()
+                                                            formData.append('telefono', telefonoRescate)
+                                                            formData.append('mensaje', mensajeRescate)
+                                                            if (archivoAdjunto) formData.append('archivo', archivoAdjunto)
+
+                                                            const res = await fetch('/api/admin/chat-directo', {
+                                                                method: 'POST',
+                                                                body: formData
+                                                            })
+
+                                                            if (res.ok) {
+                                                                setMensajeRescate('')
+                                                                setArchivoAdjunto(null)
+                                                                consultarHistorialTelefono(telefonoRescate)
+                                                                cargarListaConversaciones()
+                                                                setEstadoBotDirecto(false)
+                                                            } else {
+                                                                alert('Error al enviar el mensaje por Meta')
+                                                            }
+                                                        } catch (err) {
+                                                            console.error(err)
+                                                            alert('Error de conexión')
+                                                        } finally {
+                                                            setEnviandoRescate(false)
+                                                        }
+                                                    }}
+                                                    disabled={enviandoRescate}
+                                                    className="bg-indigo-600 hover:bg-indigo-500 font-bold text-white text-xs px-4 rounded-xl transition-colors disabled:opacity-50 shadow-md flex items-center justify-center"
+                                                >
+                                                    {enviandoRescate ? 'Enviando...' : 'Enviar 🚀'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                            </div>
+
                         </div>
 
                     </div>
