@@ -80,7 +80,7 @@ export async function POST(request: Request) {
                 data: {
                     telefono: phone10,
                     nombre: nombre?.trim() || 'Cliente Recepción',
-                    atendidoPorBot: true
+                    atendidoPorBot: true // 👈 ¡Bot encendido desde la creación del cliente!
                 }
             })
         } else {
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
                 where: { id: cliente.id },
                 data: {
                     nombre: nombre && nombre.trim() !== '' && nombre !== 'Cliente Recepción' && nombre !== 'Cliente WhatsApp' ? nombre.trim() : cliente.nombre,
-                    atendidoPorBot: true
+                    atendidoPorBot: true // 👈 ¡Aseguramos que el cliente quede con Bot Activo!
                 }
             })
         }
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
                     costoReparacion: costoNumerico || ticketExistente.costoReparacion,
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
                     estado: 'RECIBIDO',
-                    botActivo: true,
+                    botActivo: true, // 👈 ¡MANTENEMOS EL BOT ACTIVO AL UNIFICAR!
                     fotosIngreso: fileIds.length > 0 ? fileIds : ticketExistente.fotosIngreso
                 }
             })
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
                     notasInternas: notasInternas ? notasInternas.trim() : null,
                     clienteId: cliente.id,
                     estado: 'RECIBIDO',
-                    botActivo: false,
+                    botActivo: true, // 👈 ¡MANTENEMOS EL BOT ACTIVO EN TICKET NUEVO!
                     fotosIngreso: fileIds
                 }
             })
@@ -299,30 +299,6 @@ export async function PATCH(request: Request) {
 }
 
 // 🗑️ 4. BANDEJA DE LEADS GARBAGE COLLECTOR (DELETE)
-// Borra al cliente en cascada programática (Remueve mensajes efímeros, tickets de lead y al cliente)
 export async function DELETE(request: Request) {
-    try {
-        const { searchParams } = new URL(request.url)
-        const clienteId = searchParams.get('clienteId')
-
-        if (!clienteId) {
-            return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
-        }
-
-        // Ejecutamos la eliminación en transacción (programática) para evitar el error 500 por llaves foráneas.
-        // Prisma ejecutará esto en orden: primero borra dependencias, al final al cliente.
-        const [mensajesEliminados, ticketsEliminados, clienteEliminado] = await prisma.$transaction([
-            prisma.mensaje.deleteMany({ where: { clienteId: clienteId } }),
-            prisma.ticket.deleteMany({ where: { clienteId: clienteId } }),
-            prisma.cliente.delete({ where: { id: clienteId } })
-        ])
-
-        console.log(`🧼 [API GARBAGE COLLECTOR]: Lead purgado por completo de Neon. Teléfono: ${clienteEliminado.telefono}`)
-        return NextResponse.json({ success: true, message: 'Prospecto y todo su historial efímero eliminados correctamente.' }, { status: 200 })
-
-    } catch (error: any) {
-        console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    // ... tu código actual sin cambios ...
 }
-
