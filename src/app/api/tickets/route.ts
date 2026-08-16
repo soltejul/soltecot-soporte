@@ -80,7 +80,7 @@ export async function POST(request: Request) {
                 data: {
                     telefono: phone10,
                     nombre: nombre?.trim() || 'Cliente Recepción',
-                    atendidoPorBot: false
+                    atendidoPorBot: true
                 }
             })
         } else {
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
                 where: { id: cliente.id },
                 data: {
                     nombre: nombre && nombre.trim() !== '' && nombre !== 'Cliente Recepción' && nombre !== 'Cliente WhatsApp' ? nombre.trim() : cliente.nombre,
-                    atendidoPorBot: false
+                    atendidoPorBot: true
                 }
             })
         }
