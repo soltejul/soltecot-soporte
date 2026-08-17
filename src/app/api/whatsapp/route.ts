@@ -1112,34 +1112,36 @@ export async function POST(req: Request) {
             return new Response('Ignorado Multimedia', { status: 200 })
         }
 
-        const messageId = message.id;
+        const messageId = message.id
 
         // 🛡️ DEDUPLICADOR CENTRALIZADO ANTI-RETRYS DE META
         if (messageId) {
             try {
-                await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
-                await prisma.$executeRaw`INSERT INTO "WebhookLog" ("id") VALUES (${messageId});`;
+                await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
+                await prisma.$executeRaw`INSERT INTO "WebhookLog" ("id") VALUES (${messageId});`
             } catch (error) {
-                console.log(`♻️ [DEDUPLICADOR CENTRALIZADO]: Clon en paralelo interceptado para el mensaje ID: ${messageId}. Abortando con 200 OK.`);
-                return new Response('Retry Ignorado por Concurrencia', { status: 200 });
+                console.log(`♻️ [DEDUPLICADOR CENTRALIZADO]: Clon en paralelo interceptado para el mensaje ID: ${messageId}. Abortando con 200 OK.`)
+                return new Response('Retry Ignorado por Concurrencia', { status: 200 })
             }
         }
 
         const mensajeCliente = message.text?.body
         const numeroCliente = message.from
 
+        // Ignora el número de eco del bot
         if (numeroCliente.includes('5546088200')) {
             return new Response('Eco Ignorado', { status: 200 })
         }
 
         if (mensajeCliente && numeroCliente) {
-            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`);
+            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`)
 
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
             const textoNormalizado = mensajeCliente.trim().toLowerCase()
 
-            const clienteExistente = await prisma.cliente.findFirst({
+            // 1️⃣ Buscamos o creamos al cliente en Neon DB
+            let cliente = await prisma.cliente.findFirst({
                 where: {
                     OR: [
                         { telefono: numeroCliente },
@@ -1149,47 +1151,87 @@ export async function POST(req: Request) {
                 }
             })
 
-            // Clave maestra de reseteo del bot
+            if (!cliente) {
+                cliente = await prisma.cliente.create({
+                    data: {
+                        telefono: telefono10Digitos,
+                        nombre: 'Cliente WhatsApp',
+                        atendidoPorBot: true
+                    }
+                })
+                console.log(`👤 [NUEVO CLIENTE]: Registrado en Neon con teléfono ${telefono10Digitos}`)
+            }
+
+            // 🔑 CLAVE MAESTRA DE RESETEO DEL BOT
             if (textoNormalizado === 'kanzer1986') {
-                if (clienteExistente) {
-                    await prisma.cliente.update({
-                        where: { id: clienteExistente.id },
-                        data: { atendidoPorBot: true, googleChatThreadId: null }
-                    })
-                    console.log(`🧼 [RESET SUCCESS]: Hilo de Google Chat borrado en Neon para ${telefono10Digitos}.`)
+                await prisma.cliente.update({
+                    where: { id: cliente.id },
+                    data: { atendidoPorBot: true, googleChatThreadId: null }
+                })
+
+                // Reseteo de colas de memoria local
+                if (typeof MEMORIA_CHAT !== 'undefined') {
+                    MEMORIA_CHAT.delete(numeroCliente)
+                    MEMORIA_CHAT.delete(`B2B_${numeroCliente}`)
                 }
-                MEMORIA_CHAT.delete(numeroCliente)
-                MEMORIA_CHAT.delete(`B2B_${numeroCliente}`) // Resetea también la cola de PYMEs
+
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
+                console.log(`🧼 [RESET SUCCESS]: Hilo borrado y Bot reactivado para ${telefono10Digitos}.`)
                 return new Response('Bot reseteado', { status: 200 })
             }
 
-            // Captura en vivo cuando el chat está en "Modo Humano"
-            if (clienteExistente && clienteExistente.atendidoPorBot === false) {
-                console.log(`👤 [HUMAN TAKEOVER]: El bot está silenciado para ${telefono10Digitos}. Enviando alerta...`);
+            // 2️⃣ 🎯 AUTO-CREACIÓN DE FICHA LEAD EN EL SEGUNDO CERO (OPCIÓN C)
+            // Verificamos si el cliente tiene alguna orden activa en el taller o bandeja
+            let ticketActivo = await prisma.ticket.findFirst({
+                where: {
+                    clienteId: cliente.id,
+                    estado: { notIn: ['ENTREGADO', 'RECHAZADO'] }
+                }
+            })
+
+            // Si es un prospecto nuevo o sin órdenes vigentes, inyectamos la ficha LEAD- en la Tab 2
+            if (!ticketActivo) {
+                ticketActivo = await prisma.ticket.create({
+                    data: {
+                        numeroOrden: `LEAD-${telefono10Digitos}`,
+                        equipo: 'Consulta WhatsApp',
+                        fallaReportada: mensajeCliente, // Guarda la consulta inicial
+                        estado: 'ESPERANDO_APROBACION', // Visibilidad inmediata en Bandeja de Leads
+                        clienteId: cliente.id,
+                        botActivo: true
+                    }
+                })
+                console.log(`🎯 [AUTO-LEAD CREADO]: Ficha LEAD-${telefono10Digitos} inyectada en la Bandeja de Leads.`)
+            }
+
+            // 3️⃣ CAPTURA EN VIVO CUANDO EL CHAT ESTÁ EN "MODO MANUAL / HUMANO"
+            if (cliente.atendidoPorBot === false) {
+                console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado para ${telefono10Digitos}. Registrando mensaje...`)
 
                 await prisma.mensaje.create({
                     data: {
                         texto: mensajeCliente,
                         origen: 'CLIENTE',
-                        clienteId: clienteExistente.id
+                        clienteId: cliente.id
                     }
-                });
+                })
+
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '📥 ATENCIÓN MANUAL',
                     `El cliente en atención humana envió un nuevo mensaje:\n💬 "${mensajeCliente}"`
                 )
+
                 return new Response('Atendido de forma manual', { status: 200 })
             }
 
-            // Despacho al cerebro de la Inteligencia Artificial Híbrida
+            // 4️⃣ DESPACHO AL CEREBRO DE IA (Sigue el flujo de atención y agendamiento)
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 
         return new Response('Processed', { status: 200 })
     } catch (error: any) {
-        console.error('🔴 Error en Receptor Webhook Meta:', error.message)
+        console.error('🔴 Error en Receptor Webhook Meta:', error?.message || error)
         return new Response('Error', { status: 500 })
     }
 }

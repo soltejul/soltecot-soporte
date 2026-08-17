@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '../../../lib/prisma'
+import { prisma } from '../../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
-// 🔐 Credenciales oficiales de Meta configuradas en tus variables de entorno
+// 🔐 Credenciales oficiales de Meta configuradas en variables de entorno
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
@@ -45,7 +45,6 @@ async function enviarMensajeMeta(to: string, texto: string) {
 // 💾 1. CREAR O UNIFICAR TICKET DESDE PORTAL DE INGRESO (POST)
 export async function POST(request: Request) {
     try {
-        // 1️⃣ Leemos la petición como FormData (texto + fotos comprimidas)
         const formData = await request.formData()
 
         const telefono = formData.get('telefono') as string
@@ -64,7 +63,7 @@ export async function POST(request: Request) {
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
 
-        // 2️⃣ Buscamos o creamos el cliente
+        // 1️⃣ Buscamos o creamos el cliente
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
@@ -80,7 +79,7 @@ export async function POST(request: Request) {
                 data: {
                     telefono: phone10,
                     nombre: nombre?.trim() || 'Cliente Recepción',
-                    atendidoPorBot: true // 👈 ¡Bot encendido desde la creación del cliente!
+                    atendidoPorBot: true
                 }
             })
         } else {
@@ -88,37 +87,57 @@ export async function POST(request: Request) {
                 where: { id: cliente.id },
                 data: {
                     nombre: nombre && nombre.trim() !== '' && nombre !== 'Cliente Recepción' && nombre !== 'Cliente WhatsApp' ? nombre.trim() : cliente.nombre,
-                    atendidoPorBot: true // 👈 ¡Aseguramos que el cliente quede con Bot Activo!
+                    atendidoPorBot: true
                 }
             })
         }
 
-        // 3️⃣ Determinamos el Folio EXACTO antes de tocar Google Drive
+        // 2️⃣ Buscamos si existe un Lead o Pre-orden activa para este cliente
         let ticketExistente = await prisma.ticket.findFirst({
             where: {
                 clienteId: cliente.id,
-                estado: 'ESPERANDO_APROBACION'
+                OR: [
+                    { estado: 'ESPERANDO_APROBACION' },
+                    { numeroOrden: { startsWith: 'LEAD-' } }
+                ]
             },
             orderBy: { createdAt: 'desc' }
         })
 
-        let folioAsignado = 'SOL-1001'
+        let folioAsignado = ''
         let esUnificacion = false
 
-        if (ticketExistente) {
-            folioAsignado = ticketExistente.numeroOrden
-            esUnificacion = true
-        } else {
-            const ultimoTicket = await prisma.ticket.findFirst({ orderBy: { createdAt: 'desc' }, select: { numeroOrden: true } })
-            if (ultimoTicket?.numeroOrden) {
-                folioAsignado = `SOL-${parseInt(ultimoTicket.numeroOrden.split('-')[1]) + 1}`
+        // 3️⃣ Cálculo del Folio Oficial SOL-XXXX
+        const obtenerSiguienteFolioOficial = async () => {
+            const ultimoTicketOficial = await prisma.ticket.findFirst({
+                where: { numeroOrden: { startsWith: 'SOL-' } },
+                orderBy: { createdAt: 'desc' },
+                select: { numeroOrden: true }
+            })
+            if (ultimoTicketOficial?.numeroOrden) {
+                const numero = parseInt(ultimoTicketOficial.numeroOrden.split('-')[1])
+                if (!isNaN(numero)) return `SOL-${numero + 1}`
             }
+            return 'SOL-1001'
         }
 
-        // 4️⃣ Subimos las fotos a Google Drive dentro de la carpeta con el FOLIO
+        if (ticketExistente) {
+            esUnificacion = true
+            // Si venía de un Lead o borrador, le asignamos el número de serie oficial SOL-XXXX
+            if (ticketExistente.numeroOrden.startsWith('LEAD-')) {
+                folioAsignado = await obtenerSiguienteFolioOficial()
+            } else {
+                // Si la IA ya le había asignado un SOL-XXXX al agendar, conservamos el folio
+                folioAsignado = ticketExistente.numeroOrden
+            }
+        } else {
+            folioAsignado = await obtenerSiguienteFolioOficial()
+        }
+
+        // 4️⃣ Subida de evidencias a Google Drive dentro de la carpeta con el FOLIO
         let fileIds: string[] = []
         if (files && files.length > 0) {
-            console.log(`📸 [DRIVE]: Creando/buscando carpeta para Folio ${folioAsignado}...`);
+            console.log(`📸 [DRIVE]: Creando/buscando carpeta para Folio ${folioAsignado}...`)
             const targetFolderId = await obtenerOCrearCarpetaFolio(folioAsignado)
 
             const subidasPromises = files.map(async (file, index) => {
@@ -134,7 +153,7 @@ export async function POST(request: Request) {
             fileIds = uploadedFileIds.filter((id): id is string => Boolean(id))
         }
 
-        // 5️⃣ Guardamos o actualizamos en la base de datos Neon
+        // 5️⃣ Actualización o creación unificada en Neon DB
         let ticketFinal
         const costoNumerico = costoEstimado ? parseFloat(costoEstimado) : null
 
@@ -142,13 +161,14 @@ export async function POST(request: Request) {
             ticketFinal = await prisma.ticket.update({
                 where: { id: ticketExistente.id },
                 data: {
+                    numeroOrden: folioAsignado, // Promociona LEAD-XXXX a SOL-XXXX si aplica
                     equipo: equipo.trim(),
                     fallaReportada: fallaReportada.trim(),
                     costoEstimado: costoNumerico || ticketExistente.costoEstimado,
                     costoReparacion: costoNumerico || ticketExistente.costoReparacion,
                     notasInternas: notasInternas ? `[Ingreso Taller]: ${notasInternas.trim()}` : ticketExistente.notasInternas,
                     estado: 'RECIBIDO',
-                    botActivo: true, // 👈 ¡MANTENEMOS EL BOT ACTIVO AL UNIFICAR!
+                    botActivo: true,
                     fotosIngreso: fileIds.length > 0 ? fileIds : ticketExistente.fotosIngreso
                 }
             })
@@ -163,20 +183,20 @@ export async function POST(request: Request) {
                     notasInternas: notasInternas ? notasInternas.trim() : null,
                     clienteId: cliente.id,
                     estado: 'RECIBIDO',
-                    botActivo: true, // 👈 ¡MANTENEMOS EL BOT ACTIVO EN TICKET NUEVO!
+                    botActivo: true,
                     fotosIngreso: fileIds
                 }
             })
         }
 
-        // 6️⃣ Notificamos al cliente por WhatsApp
+        // 6️⃣ Notificación de confirmación de ingreso al cliente
         const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso formal de tu equipo a nuestro laboratorio de ingeniería.\n\n🎫 *Folio de Seguimiento:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla Reportada:* ${ticketFinal.fallaReportada}\n📍 *Estatus Actual:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:* Puedes consultar la evolución de tu orden en tiempo real dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
 
         await enviarMensajeMeta(cliente.telefono, textoMensaje)
 
         return NextResponse.json({
             success: true,
-            message: esUnificacion ? 'Ticket de preventa WhatsApp unificado con éxito.' : 'Nueva orden generada desde cero.',
+            message: esUnificacion ? 'Pre-orden / Lead unificado con éxito.' : 'Nueva orden registrada.',
             ticket: ticketFinal
         }, { status: esUnificacion ? 200 : 201 })
 
@@ -243,16 +263,15 @@ export async function PATCH(request: Request) {
                         atendidoPorBot: true,
                         googleChatThreadId: null
                     }
-                });
+                })
                 await prisma.mensaje.deleteMany({
                     where: { clienteId: ticketActualizado.clienteId }
-                });
-                console.log(`🧹 [DB CLEANUP]: Historial de chat efímero destruido con éxito para el cliente: ${ticketActualizado.cliente.telefono}`);
+                })
+                console.log(`🧹 [DB CLEANUP]: Historial de chat efímero destruido con éxito para el cliente: ${ticketActualizado.cliente.telefono}`)
             }
 
             if (estadoNormalizado === "ESPERANDO_APROBACION") {
-                // Si el ingeniero reactiva un lead inyectando costo, personalizamos el mensaje para que el bot retome
-                const esLead = ticketActualizado.numeroOrden.startsWith('LEAD-');
+                const esLead = ticketActualizado.numeroOrden.startsWith('LEAD-')
 
                 if (esLead && botActivo === true) {
                     textoMensaje = `[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización por un total de $${costoReparacion || ticketActualizado.costoReparacion} MXN. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos.\n\n¡Hola de nuevo! Ya guardé la cotización del ingeniero. Para confirmar tu espacio y proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?`
@@ -300,5 +319,25 @@ export async function PATCH(request: Request) {
 
 // 🗑️ 4. BANDEJA DE LEADS GARBAGE COLLECTOR (DELETE)
 export async function DELETE(request: Request) {
-    // ... tu código actual sin cambios ...
+    try {
+        const { searchParams } = new URL(request.url)
+        const clienteId = searchParams.get('clienteId')
+
+        if (!clienteId) {
+            return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
+        }
+
+        const [mensajesEliminados, ticketsEliminados, clienteEliminado] = await prisma.$transaction([
+            prisma.mensaje.deleteMany({ where: { clienteId: clienteId } }),
+            prisma.ticket.deleteMany({ where: { clienteId: clienteId } }),
+            prisma.cliente.delete({ where: { id: clienteId } })
+        ])
+
+        console.log(`🧼 [API GARBAGE COLLECTOR]: Lead purgado por completo de Neon. Teléfono: ${clienteEliminado.telefono}`)
+        return NextResponse.json({ success: true, message: 'Prospecto y todo su historial efímero eliminados correctamente.' }, { status: 200 })
+
+    } catch (error: any) {
+        console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 }
