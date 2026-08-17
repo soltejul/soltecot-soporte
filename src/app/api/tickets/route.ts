@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '../../../../lib/prisma'
+import { prisma } from '../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
 // 🔐 Credenciales oficiales de Meta configuradas en variables de entorno
