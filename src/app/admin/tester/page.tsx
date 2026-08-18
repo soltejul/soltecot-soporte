@@ -50,7 +50,8 @@ export default function GamepadTester() {
         outerRadiusL.current = new Array(36).fill(0)
         outerRadiusR.current = new Array(36).fill(0)
 
-        [canvasTrailLRef.current, canvasTrailRRef.current].forEach(canvas => {
+        const canvasList = [canvasTrailLRef.current, canvasTrailRRef.current]
+        canvasList.forEach(canvas => {
             if (canvas) {
                 const ctx = canvas.getContext('2d')
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -443,7 +444,7 @@ export default function GamepadTester() {
                                     📳 PRUEBA DE MOTORES DE VIBRACIÓN (RUMBLE TEST)
                                 </h3>
                                 <p className="text-xs text-zinc-500 mt-1">
-                                    Verifica la respuesta de los contrapesos/motores háticos (Izquierdo / Derecho).
+                                    Verifica la respuesta de los contrapesos/motores hápticos (Izquierdo / Derecho).
                                 </p>
                             </div>
 
@@ -469,7 +470,7 @@ export default function GamepadTester() {
                             </div>
                         </div>
 
-                        {/* FERRAMIENTAS DE CALIBRACIÓN TMR */}
+                        {/* HERRAMIENTAS DE CALIBRACIÓN TMR */}
                         <div className="bg-zinc-950 border border-purple-900/40 p-5 rounded-2xl space-y-3">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                                 <div>
