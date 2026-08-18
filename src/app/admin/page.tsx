@@ -312,6 +312,13 @@ export default function AdminDashboard() {
                             ➕ Recibir Equipo
                         </Link>
 
+                        <Link
+                            href="/admin/tester"
+                            className="flex-1 md:flex-none bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-900/50 font-bold px-3 py-2 rounded text-xs md:text-sm transition-colors text-center flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            🎮 Gamepad Tester
+                        </Link>
+
                         <button onClick={ejecutarLogout} className="bg-zinc-950 hover:bg-zinc-900 text-rose-500 border border-zinc-900 font-semibold px-3 py-2 rounded text-xs md:text-sm transition-colors">
                             🚪
                         </button>
@@ -753,7 +760,7 @@ export default function AdminDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* CAJA DE MENSAJES SCROLLABLE */}
+                                        {/* CAJA DE MENSAJES SCROLLABLE CON FECHA Y HORA */}
                                         <div className="flex-1 bg-zinc-900/40 border border-zinc-900 rounded-xl p-3 overflow-y-auto space-y-2 text-xs">
                                             {cargandoHistorial ? (
                                                 <p className="text-zinc-500 text-center py-8">Cargando mensajes...</p>
