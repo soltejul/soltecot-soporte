@@ -123,11 +123,9 @@ export async function POST(request: Request) {
 
         if (ticketExistente) {
             esUnificacion = true
-            // Si venía de un Lead o borrador, le asignamos el número de serie oficial SOL-XXXX
             if (ticketExistente.numeroOrden.startsWith('LEAD-')) {
                 folioAsignado = await obtenerSiguienteFolioOficial()
             } else {
-                // Si la IA ya le había asignado un SOL-XXXX al agendar, conservamos el folio
                 folioAsignado = ticketExistente.numeroOrden
             }
         } else {
@@ -161,7 +159,7 @@ export async function POST(request: Request) {
             ticketFinal = await prisma.ticket.update({
                 where: { id: ticketExistente.id },
                 data: {
-                    numeroOrden: folioAsignado, // Promociona LEAD-XXXX a SOL-XXXX si aplica
+                    numeroOrden: folioAsignado,
                     equipo: equipo.trim(),
                     fallaReportada: fallaReportada.trim(),
                     costoEstimado: costoNumerico || ticketExistente.costoEstimado,
@@ -270,6 +268,8 @@ export async function PATCH(request: Request) {
                 console.log(`🧹 [DB CLEANUP]: Historial de chat efímero destruido con éxito para el cliente: ${ticketActualizado.cliente.telefono}`)
             }
 
+            const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' && ticketActualizado.cliente.nombre !== 'Cliente WhatsApp' ? ticketActualizado.cliente.nombre : 'amigo'
+
             if (estadoNormalizado === "ESPERANDO_APROBACION") {
                 const esLead = ticketActualizado.numeroOrden.startsWith('LEAD-')
 
@@ -288,16 +288,22 @@ export async function PATCH(request: Request) {
                         `🌐 *Rastreo en Vivo:* Consulta tu nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
                 }
 
-            } else if (estadoNormalizado === "LISTO_PARA_ENTREGA" || estadoNormalizado === "ENTREGADO") {
-                const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' && ticketActualizado.cliente.nombre !== 'Cliente WhatsApp' ? ticketActualizado.cliente.nombre : 'amigo'
-
-                textoMensaje = `🔬 *¡SOPORTE TÉCNICO CONCLUIDO CON ÉXITO!* ⚡\n\n` +
-                    `Hola, *${nombreClienteEstetico}*. El Ingeniero Julio ha finalizado las intervenciones, reparaciones y pruebas de calidad en tu equipo de forma exitosa.\n\n` +
+            } else if (estadoNormalizado === "LISTO_PARA_ENTREGA") {
+                textoMensaje = `🔬 *¡EQUIPO LISTO PARA ENTREGA!* ⚡\n\n` +
+                    `Hola, *${nombreClienteEstetico}*. Te informamos que el Ingeniero Julio ha finalizado las intervenciones, reparaciones y pruebas de calidad en tu equipo de forma exitosa.\n\n` +
                     `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
                     `🎫 *Folio de Orden:* ${ticketActualizado.numeroOrden}\n\n` +
-                    `✨ *Tu sistema ya se encuentra operativo al 100%.* Tu reporte técnico final y los registros de laboratorio han sido archivados con éxito.\n\n` +
-                    `🧾 *Control Fiscal (CFDI 4.0):* Si solicitaste factura fiscal al aperturar tu orden, nuestro departamento contable la procesará a la brevedad. Si indicaste que no la requerías, tu nota de servicio digital queda resguardada permanentemente.\n\n` +
-                    `🙏 ¡Muchas gracias por confiar en el laboratorio de Soltecot_! Puedes consultar tu comprobante de cierre dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                    `📍 *Estatus Actual:* ✅ LISTO PARA ENTREGA\n\n` +
+                    `Ya puedes pasar a recogerlo a nuestro laboratorio dentro de nuestros horarios de atención o coordinar la entrega a domicilio si elegiste esa modalidad.\n\n` +
+                    `🌐 *Consulta tu comprobante digital aquí:* \n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+
+            } else if (estadoNormalizado === "ENTREGADO") {
+                textoMensaje = `📦 *¡GRACIAS POR CONFIAR EN SOLTECOT_!* 🤝✨\n\n` +
+                    `Hola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*) ha sido entregado exitosamente.\n\n` +
+                    `🙏 *Agradecemos enormemente tu preferencia.* En nuestro laboratorio trabajamos con máxima dedicación para que tus dispositivos queden operando al 100%.\n\n` +
+                    `💡 *¿Requiere mantenimiento futuro o soporte para otro equipo?* Recuerda que estamos a tus órdenes para consolas, controles, Laptops o PC.\n\n` +
+                    `🧾 *Comprobante Digital:* Tu nota de servicio y garantía quedan resguardadas en el siguiente enlace:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}\n\n` +
+                    `¡Esperamos volver a verte pronto en Soltecot_!`
 
             } else if (estadoNormalizado === "EN_DIAGNOSTICO") {
                 textoMensaje = `🔬 *SOLTECOT_ WORKSHOP* 🔬\n\nTu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha avanzado al banco de pruebas.\n\n📍 *Estatus:* 🔍 EN DIAGNÓSTICO\n\nNuestros ingenieros están realizando las mediciones de voltajes y consumos en placa base para localizar el origen exacto de la falla. Te notificaremos los resultados a la brevedad.`
