@@ -2,16 +2,16 @@ import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
-// 🔐 Credenciales oficiales de Meta configuradas en variables de entorno
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
-// 🚀 FUNCIÓN AUXILIAR UNIFICADA PARA META CLOUD API
+// 🚀 FUNCIÓN 1: ENVÍO DE TEXTO LIBRE (DENTRO DE LA VENTANA DE 24 HORAS)
 async function enviarMensajeMeta(to: string, texto: string) {
-    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
-        console.error('🔴 [META CONFIG ERROR]: Tokens o Phone ID ausentes en las variables de entorno.')
-        return false
-    }
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
+
+    const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
+    const toMeta = `52${cleanPhone}` // Prefijo de México obligatorio por Meta
+
     try {
         const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
         const respuesta = await fetch(urlMeta, {
@@ -23,21 +23,69 @@ async function enviarMensajeMeta(to: string, texto: string) {
             body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',
-                to: to,
+                to: toMeta,
                 type: 'text',
                 text: { body: texto }
             })
         })
 
+        return respuesta.ok
+    } catch (err: any) {
+        console.error(`🔴 [META FETCH ERROR]:`, err.message)
+        return false
+    }
+}
+
+// ⚡ FUNCIÓN 2: ENVÍO DE PLANTILLA DE UTILIDAD (SALTA LA REGLA DE 24 HORAS)
+async function enviarPlantillaMeta(
+    to: string,
+    nombreCliente: string,
+    equipo: string,
+    folio: string,
+    estatusFormateado: string
+) {
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
+
+    const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
+    const toMeta = `52${cleanPhone}`
+
+    try {
+        const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+        const respuesta = await fetch(urlMeta, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: toMeta,
+                type: 'template',
+                template: {
+                    name: 'actualizacion_estatus_taller',
+                    language: { code: 'es_MX' },
+                    components: [
+                        {
+                            type: 'body',
+                            parameters: [
+                                { type: 'text', text: nombreCliente },
+                                { type: 'text', text: equipo },
+                                { type: 'text', text: folio },
+                                { type: 'text', text: estatusFormateado }
+                            ]
+                        }
+                    ]
+                }
+            })
+        })
+
         if (!respuesta.ok) {
-            const errorRaw = await respuesta.text()
-            console.error(`🔴 [META API REJECT]: Error devuelto por Facebook:`, errorRaw)
+            console.log('⚠️ Plantilla no disponible o rechazada por Meta, reintentando por texto libre...')
             return false
         }
-        console.log(`✉️ [META API SUCCESS]: Mensaje automatizado entregado con éxito a: ${to}`)
         return true
     } catch (err: any) {
-        console.error(`🔴 [META FETCH CRITICAL]: Fallo de conexión de red con Meta:`, err.message)
+        console.error(`🔴 [META TEMPLATE ERROR]:`, err.message)
         return false
     }
 }
@@ -60,16 +108,13 @@ export async function POST(request: Request) {
         }
 
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
-        const cleanPhone = telefono.replace(/[^0-9]/g, '')
-        const phone10 = cleanPhone.slice(-10)
+        const cleanPhone = telefono.replace(/[^0-9]/g, '').slice(-10)
 
-        // 1️⃣ Buscamos o creamos el cliente
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [
                     { telefono: telefono.trim() },
-                    { telefono: cleanPhone },
-                    { telefono: phone10 }
+                    { telefono: cleanPhone }
                 ]
             }
         })
@@ -77,7 +122,7 @@ export async function POST(request: Request) {
         if (!cliente) {
             cliente = await prisma.cliente.create({
                 data: {
-                    telefono: phone10,
+                    telefono: cleanPhone,
                     nombre: nombre?.trim() || 'Cliente Recepción',
                     atendidoPorBot: true
                 }
@@ -92,7 +137,6 @@ export async function POST(request: Request) {
             })
         }
 
-        // 2️⃣ Buscamos si existe un Lead o Pre-orden activa para este cliente
         let ticketExistente = await prisma.ticket.findFirst({
             where: {
                 clienteId: cliente.id,
@@ -107,7 +151,6 @@ export async function POST(request: Request) {
         let folioAsignado = ''
         let esUnificacion = false
 
-        // 3️⃣ Cálculo del Folio Oficial SOL-XXXX
         const obtenerSiguienteFolioOficial = async () => {
             const ultimoTicketOficial = await prisma.ticket.findFirst({
                 where: { numeroOrden: { startsWith: 'SOL-' } },
@@ -123,35 +166,27 @@ export async function POST(request: Request) {
 
         if (ticketExistente) {
             esUnificacion = true
-            if (ticketExistente.numeroOrden.startsWith('LEAD-')) {
-                folioAsignado = await obtenerSiguienteFolioOficial()
-            } else {
-                folioAsignado = ticketExistente.numeroOrden
-            }
+            folioAsignado = ticketExistente.numeroOrden.startsWith('LEAD-')
+                ? await obtenerSiguienteFolioOficial()
+                : ticketExistente.numeroOrden
         } else {
             folioAsignado = await obtenerSiguienteFolioOficial()
         }
 
-        // 4️⃣ Subida de evidencias a Google Drive dentro de la carpeta con el FOLIO
         let fileIds: string[] = []
         if (files && files.length > 0) {
-            console.log(`📸 [DRIVE]: Creando/buscando carpeta para Folio ${folioAsignado}...`)
             const targetFolderId = await obtenerOCrearCarpetaFolio(folioAsignado)
-
             const subidasPromises = files.map(async (file, index) => {
                 const arrayBuffer = await file.arrayBuffer()
                 const buffer = Buffer.from(arrayBuffer)
                 const extension = file.name.split('.').pop() || 'jpg'
                 const nombreArchivo = `${folioAsignado}_evidencia_${index + 1}_${Date.now()}.${extension}`
-
                 return await subirFotoEvidencia(buffer, nombreArchivo, file.type, targetFolderId)
             })
-
             const uploadedFileIds = await Promise.all(subidasPromises)
             fileIds = uploadedFileIds.filter((id): id is string => Boolean(id))
         }
 
-        // 5️⃣ Actualización o creación unificada en Neon DB
         let ticketFinal
         const costoNumerico = costoEstimado ? parseFloat(costoEstimado) : null
 
@@ -187,14 +222,24 @@ export async function POST(request: Request) {
             })
         }
 
-        // 6️⃣ Notificación de confirmación de ingreso al cliente
-        const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso formal de tu equipo a nuestro laboratorio de ingeniería.\n\n🎫 *Folio de Seguimiento:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla Reportada:* ${ticketFinal.fallaReportada}\n📍 *Estatus Actual:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:* Puedes consultar la evolución de tu orden en tiempo real dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
+        // Intenta enviar mediante Plantilla garantizada; si falla por no estar aprobada aún, manda texto libre
+        const nombreEstetico = cliente.nombre || 'amigo'
+        const exitoPlantilla = await enviarPlantillaMeta(
+            cliente.telefono,
+            nombreEstetico,
+            ticketFinal.equipo,
+            ticketFinal.numeroOrden,
+            '⚙️ RECIBIDO EN LABORATORIO'
+        )
 
-        await enviarMensajeMeta(cliente.telefono, textoMensaje)
+        if (!exitoPlantilla) {
+            const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
+            await enviarMensajeMeta(cliente.telefono, textoMensaje)
+        }
 
         return NextResponse.json({
             success: true,
-            message: esUnificacion ? 'Pre-orden / Lead unificado con éxito.' : 'Nueva orden registrada.',
+            message: esUnificacion ? 'Pre-orden unificada con éxito.' : 'Nueva orden registrada.',
             ticket: ticketFinal
         }, { status: esUnificacion ? 200 : 201 })
 
@@ -228,7 +273,6 @@ export async function PATCH(request: Request) {
         }
 
         const datosAActualizar: any = {}
-
         if (nuevoEstado !== undefined) datosAActualizar.estado = nuevoEstado
         if (botActivo !== undefined) datosAActualizar.botActivo = botActivo
         if (costoReparacion !== undefined) datosAActualizar.costoReparacion = parseFloat(costoReparacion)
@@ -245,75 +289,51 @@ export async function PATCH(request: Request) {
                 where: { id: ticketActualizado.clienteId },
                 data: { atendidoPorBot: botActivo }
             })
-            console.log(`🤖 [CRM INTERN]: Estado del Bot alterado desde el Dashboard a: ${botActivo} para el cliente ${ticketActualizado.cliente.telefono}`)
         }
 
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
 
         if (nuevoEstado) {
-            let textoMensaje = ""
             const estadoNormalizado = nuevoEstado.replace(/[\s_]+/g, '_').toUpperCase()
 
             if (estadoNormalizado === 'ENTREGADO' || estadoNormalizado === 'RECHAZADO') {
                 await prisma.cliente.update({
                     where: { id: ticketActualizado.clienteId },
-                    data: {
-                        atendidoPorBot: true,
-                        googleChatThreadId: null
-                    }
+                    data: { atendidoPorBot: true, googleChatThreadId: null }
                 })
                 await prisma.mensaje.deleteMany({
                     where: { clienteId: ticketActualizado.clienteId }
                 })
-                console.log(`🧹 [DB CLEANUP]: Historial de chat efímero destruido con éxito para el cliente: ${ticketActualizado.cliente.telefono}`)
             }
 
             const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' && ticketActualizado.cliente.nombre !== 'Cliente WhatsApp' ? ticketActualizado.cliente.nombre : 'amigo'
+            const estadoFormateado = estadoNormalizado.replace(/_/g, ' ')
 
-            if (estadoNormalizado === "ESPERANDO_APROBACION") {
-                const esLead = ticketActualizado.numeroOrden.startsWith('LEAD-')
+            // Intentamos enviar primero como Plantilla (salta límite de 24h)
+            const envioPlantillaExitoso = await enviarPlantillaMeta(
+                ticketActualizado.cliente.telefono,
+                nombreClienteEstetico,
+                ticketActualizado.equipo,
+                ticketActualizado.numeroOrden,
+                estadoFormateado
+            )
 
-                if (esLead && botActivo === true) {
-                    textoMensaje = `[SISTEMA]: El Ingeniero Julio ha autorizado tu cotización por un total de $${costoReparacion || ticketActualizado.costoReparacion} MXN. Nuestro Asistente Virtual retoma el chat para ayudarte a agendar tu cita y tomar tus datos.\n\n¡Hola de nuevo! Ya guardé la cotización del ingeniero. Para confirmar tu espacio y proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?`
+            // Si la plantilla no fue enviada o aún no está activa en Meta, recurre al mensaje de texto alternativo
+            if (!envioPlantillaExitoso) {
+                let textoMensaje = ""
+
+                if (estadoNormalizado === "ESPERANDO_APROBACION") {
+                    textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\nHola, *${nombreClienteEstetico}*. Diagnóstico concluido para *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*).\n\n🔬 *Diagnóstico:* ${notasDiagnostico || 'Revisión y corrección de circuito principal.'}\n💵 *Costo Total:* *$${costoReparacion || ticketActualizado.costoReparacion} MXN*\n\nResponde *Aceptar* para autorizar o *Rechazar* para cancelar.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                } else if (estadoNormalizado === "LISTO_PARA_ENTREGA") {
+                    textoMensaje = `🔬 *EQUIPO LISTO PARA ENTREGA* ⚡\n\nHola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*) ya está listo para recolección en nuestro taller.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                } else if (estadoNormalizado === "ENTREGADO") {
+                    textoMensaje = `📦 *¡GRACIAS POR CONFIAR EN SOLTECOT_!* 🤝✨\n\nHola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* ha sido entregado exitosamente.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
                 } else {
-                    textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\n` +
-                        `Hola, *${ticketActualizado.cliente.nombre}*. Hemos concluido el diagnóstico completo de tu equipo:\n\n` +
-                        `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
-                        `🎫 *Orden de Servicio:* ${ticketActualizado.numeroOrden}\n\n` +
-                        `🔬 *Diagnóstico Técnico:* ${notasDiagnostico || 'Revisión general y corrección de líneas principales en placa base.'}\n\n` +
-                        `💵 *Costo Total Autorizado:* *$${costoReparacion || ticketActualizado.costoReparacion} MXN* (Neto)\n\n` +
-                        `📌 *¿Cómo deseas proceder?* Por favor, responde a este chat con una sola palabra:\n\n` +
-                        `👉 Escribe *Aceptar* (Para autorizar el inicio de la reparación y recibir datos de anticipo).\n` +
-                        `👉 Escribe *Rechazar* (Para cancelar y preparar la devolución de tu equipo).\n\n` +
-                        `🌐 *Rastreo en Vivo:* Consulta tu nota técnica digital aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                    textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEstatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}):\n👉 *${estadoFormateado}*\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
                 }
 
-            } else if (estadoNormalizado === "LISTO_PARA_ENTREGA") {
-                textoMensaje = `🔬 *¡EQUIPO LISTO PARA ENTREGA!* ⚡\n\n` +
-                    `Hola, *${nombreClienteEstetico}*. Te informamos que el Ingeniero Julio ha finalizado las intervenciones, reparaciones y pruebas de calidad en tu equipo de forma exitosa.\n\n` +
-                    `💻 *Equipo:* ${ticketActualizado.equipo}\n` +
-                    `🎫 *Folio de Orden:* ${ticketActualizado.numeroOrden}\n\n` +
-                    `📍 *Estatus Actual:* ✅ LISTO PARA ENTREGA\n\n` +
-                    `Ya puedes pasar a recogerlo a nuestro laboratorio dentro de nuestros horarios de atención o coordinar la entrega a domicilio si elegiste esa modalidad.\n\n` +
-                    `🌐 *Consulta tu comprobante digital aquí:* \n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-
-            } else if (estadoNormalizado === "ENTREGADO") {
-                textoMensaje = `📦 *¡GRACIAS POR CONFIAR EN SOLTECOT_!* 🤝✨\n\n` +
-                    `Hola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*) ha sido entregado exitosamente.\n\n` +
-                    `🙏 *Agradecemos enormemente tu preferencia.* En nuestro laboratorio trabajamos con máxima dedicación para que tus dispositivos queden operando al 100%.\n\n` +
-                    `💡 *¿Requiere mantenimiento futuro o soporte para otro equipo?* Recuerda que estamos a tus órdenes para consolas, controles, Laptops o PC.\n\n` +
-                    `🧾 *Comprobante Digital:* Tu nota de servicio y garantía quedan resguardadas en el siguiente enlace:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}\n\n` +
-                    `¡Esperamos volver a verte pronto en Soltecot_!`
-
-            } else if (estadoNormalizado === "EN_DIAGNOSTICO") {
-                textoMensaje = `🔬 *SOLTECOT_ WORKSHOP* 🔬\n\nTu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha avanzado al banco de pruebas.\n\n📍 *Estatus:* 🔍 EN DIAGNÓSTICO\n\nNuestros ingenieros están realizando las mediciones de voltajes y consumos en placa base para localizar el origen exacto de la falla. Te notificaremos los resultados a la brevedad.`
-
-            } else {
-                const estadoFormateado = typeof nuevoEstado === 'string' ? nuevoEstado.replace(/_/g, ' ') : 'ACTUALIZADO'
-                textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEl estatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}) ha cambiado a:\n👉 *${estadoFormateado}*\n\n🌐 *Rastreo en Vivo:* Consulta el avance actualizado dándole clic aquí:\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
+                await enviarMensajeMeta(ticketActualizado.cliente.telefono, textoMensaje)
             }
-
-            await enviarMensajeMeta(ticketActualizado.cliente.telefono, textoMensaje)
         }
 
         return NextResponse.json({ success: true, ticket: ticketActualizado }, { status: 200 })
@@ -333,14 +353,13 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
         }
 
-        const [mensajesEliminados, ticketsEliminados, clienteEliminado] = await prisma.$transaction([
+        await prisma.$transaction([
             prisma.mensaje.deleteMany({ where: { clienteId: clienteId } }),
             prisma.ticket.deleteMany({ where: { clienteId: clienteId } }),
             prisma.cliente.delete({ where: { id: clienteId } })
         ])
 
-        console.log(`🧼 [API GARBAGE COLLECTOR]: Lead purgado por completo de Neon. Teléfono: ${clienteEliminado.telefono}`)
-        return NextResponse.json({ success: true, message: 'Prospecto y todo su historial efímero eliminados correctamente.' }, { status: 200 })
+        return NextResponse.json({ success: true, message: 'Prospecto purgado de Neon DB.' }, { status: 200 })
 
     } catch (error: any) {
         console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
