@@ -37,6 +37,13 @@ export default function GamepadTester() {
     const outerRadiusL = useRef<number[]>(new Array(36).fill(0))
     const outerRadiusR = useRef<number[]>(new Array(36).fill(0))
 
+    // 📈 Refs para el Osciloscopio Dual (Canvas en Tiempo Real)
+    const canvasOscLRef = useRef<HTMLCanvasElement>(null)
+    const canvasOscRRef = useRef<HTMLCanvasElement>(null)
+    const historyOscL = useRef<{ x: number; y: number }[]>([])
+    const historyOscR = useRef<{ x: number; y: number }[]>([])
+    const MAX_OSC_HISTORY = 150
+
     const requestRef = useRef<number>(0)
 
     useEffect(() => {
@@ -69,7 +76,6 @@ export default function GamepadTester() {
             setHidDevice(device)
             setHidStatus(`🟢 Conectado a ${device.productName} vía WebHID`)
 
-            // Lectura inicial del Feature Report 0x05 (Tabla NVS / EEPROM de fábrica)
             const reportNVS = await device.receiveFeatureReport(0x05)
             console.log('📡 [WebHID SONY NVS DATA]:', new Uint8Array(reportNVS.buffer))
 
@@ -87,7 +93,6 @@ export default function GamepadTester() {
         }
 
         try {
-            // Generación de paquete de calibración de origen NVS
             alert('⚡ [WEBHID SUCCESS]: Tabla de offsets TMR inyectada a la memoria NVS/EEPROM del control de PlayStation con éxito.')
             setHidStatus(`✅ EEPROM Sincronizada (${new Date().toLocaleTimeString('es-MX')})`)
         } catch (err: any) {
@@ -108,6 +113,43 @@ export default function GamepadTester() {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
             }
         })
+    }
+
+    // Dibujador gráfico del Osciloscopio
+    const drawOscilloscope = (canvas: HTMLCanvasElement | null, data: { x: number; y: number }[], colorX: string, colorY: string) => {
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const width = canvas.width
+        const height = canvas.height
+
+        ctx.clearRect(0, 0, width, height)
+
+        // Línea central de referencia cero
+        ctx.beginPath()
+        ctx.strokeStyle = '#27272a'
+        ctx.lineWidth = 1.5
+        ctx.moveTo(0, height / 2)
+        ctx.lineTo(width, height / 2)
+        ctx.stroke()
+
+        // Dibujo de ondas X e Y
+        const drawLine = (key: 'x' | 'y', color: string) => {
+            ctx.beginPath()
+            ctx.strokeStyle = color
+            ctx.lineWidth = 2
+            for (let i = 0; i < data.length; i++) {
+                const xPos = (i / MAX_OSC_HISTORY) * width
+                const yPos = (height / 2) + (data[i][key] * (height / 2))
+                if (i === 0) ctx.moveTo(xPos, yPos)
+                else ctx.lineTo(xPos, yPos)
+            }
+            ctx.stroke()
+        }
+
+        drawLine('x', colorX)
+        drawLine('y', colorY)
     }
 
     const scanGamepads = () => {
@@ -170,6 +212,16 @@ export default function GamepadTester() {
 
             renderCanvasTrail(canvasTrailLRef.current, pointsTrailL.current, '#38bdf8')
             renderCanvasTrail(canvasTrailRRef.current, pointsTrailR.current, '#38bdf8')
+
+            // 📈 Alimentar y renderizar datos del Osciloscopio
+            historyOscL.current.push({ x: lx, y: ly })
+            if (historyOscL.current.length > MAX_OSC_HISTORY) historyOscL.current.shift()
+
+            historyOscR.current.push({ x: rx, y: ry })
+            if (historyOscR.current.length > MAX_OSC_HISTORY) historyOscR.current.shift()
+
+            drawOscilloscope(canvasOscLRef.current, historyOscL.current, '#34d399', '#818cf8')
+            drawOscilloscope(canvasOscRRef.current, historyOscR.current, '#f59e0b', '#fb7185')
 
         } else {
             setGamepad(null)
@@ -327,7 +379,7 @@ export default function GamepadTester() {
                             <div><strong className="text-emerald-400">ESTADO:</strong> {gamepad.connected ? '🟢 CONECTADO (60/120 Hz)' : '🔴 DESCONECTADO'}</div>
                         </div>
 
-                        {/* ⚡ MÓDULO WEBHID SONY (DS4 / DUALSENSE EEPROM CALIBRATION) */}
+                        {/* ⚡ MÓDULO WEBHID SONY */}
                         <div className="bg-zinc-950 border border-indigo-900/50 p-5 rounded-2xl space-y-3">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
@@ -400,7 +452,7 @@ export default function GamepadTester() {
                             </div>
                         </div>
 
-                        {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL Y JOYSTICKS CORREGIDOS */}
+                        {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL */}
                         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 relative flex flex-col items-center">
 
                             {/* BARRA DE HERRAMIENTAS DE TRAZO */}
@@ -423,12 +475,12 @@ export default function GamepadTester() {
                                 </button>
                             </div>
 
-                            {/* ILUSTRACIÓN SVG CORREGIDA (GATILLOS ARRIBA, D-PAD SEPARADO) */}
+                            {/* ILUSTRACIÓN SVG DEL CONTROL */}
                             <div className="relative w-full max-w-3xl aspect-[1.8/1] bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-center overflow-hidden">
 
                                 <svg viewBox="0 0 800 440" className="w-full h-full select-none">
 
-                                    {/* GATILLOS ANALÓGICOS (LT / RT) EN LOS HOMBROS SUPERIORES */}
+                                    {/* GATILLOS ANALÓGICOS (LT / RT) */}
                                     <g transform="translate(140, 20)">
                                         <rect x="0" y="0" width="120" height="28" rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
                                         <rect x="0" y="0" width={120 * getBtn(6).value} height="28" rx="8" fill="#6366f1" />
@@ -456,7 +508,7 @@ export default function GamepadTester() {
                                         strokeWidth="4"
                                     />
 
-                                    {/* D-PAD CORREGIDO */}
+                                    {/* D-PAD */}
                                     <g transform="translate(260, 280)">
                                         <rect x="-12" y="-38" width="24" height="26" rx="4" fill={getBtn(12).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
                                         <rect x="-12" y="12" width="24" height="26" rx="4" fill={getBtn(13).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
@@ -523,7 +575,7 @@ export default function GamepadTester() {
 
                             </div>
 
-                            {/* LECTURAS TIPO GULIKIT / HARDWARE TESTER */}
+                            {/* LECTURAS TIPO GULIKIT */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6 text-xs font-mono">
                                 <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-xl space-y-1">
                                     <div className="flex justify-between font-bold text-sky-400 border-b border-zinc-800 pb-1 mb-2">
@@ -560,6 +612,41 @@ export default function GamepadTester() {
                                 </div>
                             </div>
 
+                        </div>
+
+                        {/* 📈 OSCILOSCOPIO DUAL DE EJES TMR (RUIDO / JITTER) */}
+                        <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-2xl space-y-4">
+                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                                📈 OSCILOSCOPIO DUAL DE EJES TMR (MONITOREO DE RUIDO Y JITTER EN TIEMPO REAL)
+                            </h3>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <div className="flex gap-4 text-[10px] font-bold mb-2 font-mono">
+                                        <span className="text-emerald-400">● Eje X (L3)</span>
+                                        <span className="text-indigo-400">● Eje Y (L3)</span>
+                                    </div>
+                                    <canvas
+                                        ref={canvasOscLRef}
+                                        width={400}
+                                        height={120}
+                                        className="w-full h-28 bg-black border border-zinc-800 rounded-lg shadow-inner"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="flex gap-4 text-[10px] font-bold mb-2 font-mono">
+                                        <span className="text-amber-500">● Eje X (R3)</span>
+                                        <span className="text-rose-400">● Eje Y (R3)</span>
+                                    </div>
+                                    <canvas
+                                        ref={canvasOscRRef}
+                                        width={400}
+                                        height={120}
+                                        className="w-full h-28 bg-black border border-zinc-800 rounded-lg shadow-inner"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                     </div>
