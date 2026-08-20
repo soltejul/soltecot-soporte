@@ -37,7 +37,7 @@ export default function GamepadTester() {
     const outerRadiusL = useRef<number[]>(new Array(36).fill(0))
     const outerRadiusR = useRef<number[]>(new Array(36).fill(0))
 
-    // 📈 Refs para el Osciloscopio Dual (Canvas en Tiempo Real)
+    // 📈 Refs para el Osciloscopio Dual
     const canvasOscLRef = useRef<HTMLCanvasElement>(null)
     const canvasOscRRef = useRef<HTMLCanvasElement>(null)
     const historyOscL = useRef<{ x: number; y: number }[]>([])
@@ -57,7 +57,7 @@ export default function GamepadTester() {
             .catch(console.error)
     }, [])
 
-    // ⚡ CONEXIÓN DIRECTA WEBHID CON MANDOS PLAYSTATION (DS4 / DUALSENSE)
+    // ⚡ CONEXIÓN DIRECTA WEBHID CON MANDOS PLAYSTATION
     const conectarWebHIDPS = async () => {
         if (typeof window === 'undefined' || !('hid' in navigator)) {
             alert('⚠️ WebHID solo está disponible en navegadores basados en Chromium (Google Chrome / Microsoft Edge).')
@@ -85,7 +85,6 @@ export default function GamepadTester() {
         }
     }
 
-    // ⚡ ESCRIBIR / REAJUSTAR TABLA DE CALIBRACIÓN EN MEMORIA NVS
     const sincronizarCalibracionEEPROM = async () => {
         if (!hidDevice) {
             alert('Primero conecta un mando DualShock 4 o DualSense mediante el botón "⚡ Conectar WebHID PS".')
@@ -115,6 +114,44 @@ export default function GamepadTester() {
         })
     }
 
+    // Dibujo del trazo circular neón con resplandor cyan estilo GuliKit
+    const renderCanvasTrail = (canvas: HTMLCanvasElement | null, points: { x: number; y: number }[]) => {
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const w = canvas.width
+        const h = canvas.height
+        const centerX = w / 2
+        const centerY = h / 2
+        const maxRadius = 42 // Sincronización exacta con el radio del Joystick
+
+        ctx.clearRect(0, 0, w, h)
+        if (points.length < 2) return
+
+        ctx.save()
+        ctx.shadowColor = '#00f3ff'
+        ctx.shadowBlur = 10
+        ctx.strokeStyle = '#00f3ff'
+        ctx.lineWidth = 2.5
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+
+        ctx.beginPath()
+        points.forEach((p, i) => {
+            const clampedX = Math.max(-1, Math.min(1, p.x))
+            const clampedY = Math.max(-1, Math.min(1, p.y))
+
+            const cx = centerX + (clampedX * maxRadius)
+            const cy = centerY + (clampedY * maxRadius)
+
+            if (i === 0) ctx.moveTo(cx, cy)
+            else ctx.lineTo(cx, cy)
+        })
+        ctx.stroke()
+        ctx.restore()
+    }
+
     // Dibujador gráfico del Osciloscopio
     const drawOscilloscope = (canvas: HTMLCanvasElement | null, data: { x: number; y: number }[], colorX: string, colorY: string) => {
         if (!canvas) return
@@ -126,7 +163,6 @@ export default function GamepadTester() {
 
         ctx.clearRect(0, 0, width, height)
 
-        // Línea central de referencia cero
         ctx.beginPath()
         ctx.strokeStyle = '#27272a'
         ctx.lineWidth = 1.5
@@ -134,7 +170,6 @@ export default function GamepadTester() {
         ctx.lineTo(width, height / 2)
         ctx.stroke()
 
-        // Dibujo de ondas X e Y
         const drawLine = (key: 'x' | 'y', color: string) => {
             ctx.beginPath()
             ctx.strokeStyle = color
@@ -210,10 +245,9 @@ export default function GamepadTester() {
             setStatsL({ lx, ly, drift: driftL, errCirc: parseFloat(errCircL.toFixed(1)) })
             setStatsR({ rx, ry, drift: driftR, errCirc: parseFloat(errCircR.toFixed(1)) })
 
-            renderCanvasTrail(canvasTrailLRef.current, pointsTrailL.current, '#38bdf8')
-            renderCanvasTrail(canvasTrailRRef.current, pointsTrailR.current, '#38bdf8')
+            renderCanvasTrail(canvasTrailLRef.current, pointsTrailL.current)
+            renderCanvasTrail(canvasTrailRRef.current, pointsTrailR.current)
 
-            // 📈 Alimentar y renderizar datos del Osciloscopio
             historyOscL.current.push({ x: lx, y: ly })
             if (historyOscL.current.length > MAX_OSC_HISTORY) historyOscL.current.shift()
 
@@ -228,31 +262,6 @@ export default function GamepadTester() {
         }
 
         requestRef.current = requestAnimationFrame(scanGamepads)
-    }
-
-    const renderCanvasTrail = (canvas: HTMLCanvasElement | null, points: { x: number; y: number }[], color: string) => {
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        if (points.length < 2) return
-
-        ctx.beginPath()
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2.5
-        ctx.lineCap = 'round'
-
-        const w = canvas.width
-        const h = canvas.height
-
-        points.forEach((p, i) => {
-            const cx = ((p.x + 1) / 2) * w
-            const cy = ((p.y + 1) / 2) * h
-            if (i === 0) ctx.moveTo(cx, cy)
-            else ctx.lineTo(cx, cy)
-        })
-        ctx.stroke()
     }
 
     useEffect(() => {
@@ -452,7 +461,7 @@ export default function GamepadTester() {
                             </div>
                         </div>
 
-                        {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL */}
+                        {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL INTEGRADO */}
                         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 relative flex flex-col items-center">
 
                             {/* BARRA DE HERRAMIENTAS DE TRAZO */}
@@ -475,41 +484,41 @@ export default function GamepadTester() {
                                 </button>
                             </div>
 
-                            {/* ILUSTRACIÓN SVG DEL CONTROL */}
+                            {/* ILUSTRACIÓN SVG DEL CONTROL CON JOYSTICKS INTEGRADOS (0 TRASLAPES) */}
                             <div className="relative w-full max-w-3xl aspect-[1.8/1] bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-center overflow-hidden">
 
-                                <svg viewBox="0 0 800 440" className="w-full h-full select-none">
+                                <svg viewBox="0 0 800 450" className="w-full h-full select-none">
 
                                     {/* GATILLOS ANALÓGICOS (LT / RT) */}
-                                    <g transform="translate(140, 20)">
-                                        <rect x="0" y="0" width="120" height="28" rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
-                                        <rect x="0" y="0" width={120 * getBtn(6).value} height="28" rx="8" fill="#6366f1" />
-                                        <text x="60" y="18" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">LT / L2 ({(getBtn(6).value * 100).toFixed(0)}%)</text>
+                                    <g transform="translate(150, 20)">
+                                        <rect x="0" y="0" width="120" height="25" rx="6" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
+                                        <rect x="0" y="0" width={120 * getBtn(6).value} height="25" rx="6" fill="#6366f1" />
+                                        <text x="60" y="16" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">LT / L2 ({(getBtn(6).value * 100).toFixed(0)}%)</text>
                                     </g>
 
-                                    <g transform="translate(540, 20)">
-                                        <rect x="0" y="0" width="120" height="28" rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
-                                        <rect x="0" y="0" width={120 * getBtn(7).value} height="28" rx="8" fill="#6366f1" />
-                                        <text x="60" y="18" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">RT / R2 ({(getBtn(7).value * 100).toFixed(0)}%)</text>
+                                    <g transform="translate(530, 20)">
+                                        <rect x="0" y="0" width="120" height="25" rx="6" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
+                                        <rect x="0" y="0" width={120 * getBtn(7).value} height="25" rx="6" fill="#6366f1" />
+                                        <text x="60" y="16" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">RT / R2 ({(getBtn(7).value * 100).toFixed(0)}%)</text>
                                     </g>
 
                                     {/* BUMPERS (LB / RB) */}
-                                    <rect x="150" y="58" width="100" height="24" rx="6" fill={getBtn(4).pressed ? '#818cf8' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                    <text x="200" y="74" textAnchor="middle" fill={getBtn(4).pressed ? '#000' : '#a1a1aa'} fontSize="11" fontWeight="bold">LB / L1</text>
+                                    <rect x="160" y="55" width="100" height="22" rx="6" fill={getBtn(4).pressed ? '#818cf8' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                    <text x="210" y="70" textAnchor="middle" fill={getBtn(4).pressed ? '#000' : '#a1a1aa'} fontSize="11" fontWeight="bold">LB / L1</text>
 
-                                    <rect x="550" y="58" width="100" height="24" rx="6" fill={getBtn(5).pressed ? '#818cf8' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                    <text x="600" y="74" textAnchor="middle" fill={getBtn(5).pressed ? '#000' : '#a1a1aa'} fontSize="11" fontWeight="bold">RB / R1</text>
+                                    <rect x="540" y="55" width="100" height="22" rx="6" fill={getBtn(5).pressed ? '#818cf8' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                    <text x="590" y="70" textAnchor="middle" fill={getBtn(5).pressed ? '#000' : '#a1a1aa'} fontSize="11" fontWeight="bold">RB / R1</text>
 
                                     {/* CUERPO PRINCIPAL DEL MANDO */}
                                     <path
-                                        d="M 220 90 C 300 80, 500 80, 580 90 C 650 100, 740 180, 720 370 C 710 420, 630 430, 570 350 C 520 290, 470 290, 400 290 C 330 290, 280 290, 230 350 C 170 430, 90 420, 80 370 C 60 180, 150 100, 220 90 Z"
+                                        d="M 220 90 C 300 80, 500 80, 580 90 C 660 100, 750 180, 730 380 C 710 430, 630 440, 570 360 C 520 300, 470 300, 400 300 C 330 300, 280 300, 230 360 C 170 440, 90 430, 70 380 C 50 180, 140 100, 220 90 Z"
                                         fill="#09090b"
                                         stroke="#27272a"
                                         strokeWidth="4"
                                     />
 
-                                    {/* D-PAD */}
-                                    <g transform="translate(260, 280)">
+                                    {/* D-PAD DESPLAZADO A LA PARTE INFERIOR IZQUIERDA */}
+                                    <g transform="translate(320, 280)">
                                         <rect x="-12" y="-38" width="24" height="26" rx="4" fill={getBtn(12).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
                                         <rect x="-12" y="12" width="24" height="26" rx="4" fill={getBtn(13).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
                                         <rect x="-38" y="-12" width="26" height="24" rx="4" fill={getBtn(14).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
@@ -518,60 +527,62 @@ export default function GamepadTester() {
                                     </g>
 
                                     {/* BOTONES DE ACCIÓN (ABXY) */}
-                                    <g transform="translate(600, 190)">
-                                        <circle cx="0" cy="-36" r="16" fill={getBtn(3).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                        <text x="0" y="-31" textAnchor="middle" fill={getBtn(3).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">Y</text>
+                                    <g transform="translate(560, 170)">
+                                        <circle cx="0" cy="-35" r="16" fill={getBtn(3).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                        <text x="0" y="-30" textAnchor="middle" fill={getBtn(3).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">Y</text>
 
-                                        <circle cx="0" cy="36" r="16" fill={getBtn(0).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                        <text x="0" y="41" textAnchor="middle" fill={getBtn(0).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">A</text>
+                                        <circle cx="0" cy="35" r="16" fill={getBtn(0).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                        <text x="0" y="40" textAnchor="middle" fill={getBtn(0).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">A</text>
 
-                                        <circle cx="-36" cy="0" r="16" fill={getBtn(2).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                        <text x="-36" y="5" textAnchor="middle" fill={getBtn(2).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">X</text>
+                                        <circle cx="-35" cy="0" r="16" fill={getBtn(2).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                        <text x="-35" y="5" textAnchor="middle" fill={getBtn(2).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">X</text>
 
-                                        <circle cx="36" cy="0" r="16" fill={getBtn(1).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
-                                        <text x="36" y="5" textAnchor="middle" fill={getBtn(1).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">B</text>
+                                        <circle cx="35" cy="0" r="16" fill={getBtn(1).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                        <text x="35" y="5" textAnchor="middle" fill={getBtn(1).pressed ? '#000' : '#34d399'} fontSize="14" fontWeight="bold">B</text>
                                     </g>
 
                                     {/* BOTONES CENTRALES */}
-                                    <circle cx="340" cy="170" r="9" fill={getBtn(8).pressed ? '#e4e4e7' : '#18181b'} stroke="#3f3f46" />
-                                    <circle cx="460" cy="170" r="9" fill={getBtn(9).pressed ? '#e4e4e7' : '#18181b'} stroke="#3f3f46" />
-                                    <circle cx="400" cy="150" r="16" fill={getBtn(16).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+                                    <circle cx="360" cy="170" r="9" fill={getBtn(8).pressed ? '#e4e4e7' : '#18181b'} stroke="#3f3f46" />
+                                    <circle cx="440" cy="170" r="9" fill={getBtn(9).pressed ? '#e4e4e7' : '#18181b'} stroke="#3f3f46" />
+                                    <circle cx="400" cy="140" r="16" fill={getBtn(16).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
+
+                                    {/* 🎯 JOYSTICK IZQUIERDO (L3) DENTRO DE LA COORDENADA EXACTA SVG */}
+                                    <foreignObject x="180" y="110" width="120" height="120">
+                                        <div className="relative w-full h-full rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
+                                            <canvas
+                                                ref={canvasTrailLRef}
+                                                width={120}
+                                                height={120}
+                                                className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
+                                            />
+                                            <div
+                                                className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(10).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
+                                                style={{
+                                                    transform: `translate(${Math.max(-1, Math.min(1, statsL.lx)) * 42}px, ${Math.max(-1, Math.min(1, statsL.ly)) * 42}px)`
+                                                }}
+                                            />
+                                        </div>
+                                    </foreignObject>
+
+                                    {/* 🎯 JOYSTICK DERECHO (R3) DENTRO DE LA COORDENADA EXACTA SVG */}
+                                    <foreignObject x="420" y="220" width="120" height="120">
+                                        <div className="relative w-full h-full rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
+                                            <canvas
+                                                ref={canvasTrailRRef}
+                                                width={120}
+                                                height={120}
+                                                className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
+                                            />
+                                            <div
+                                                className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(11).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
+                                                style={{
+                                                    transform: `translate(${Math.max(-1, Math.min(1, statsR.rx)) * 42}px, ${Math.max(-1, Math.min(1, statsR.ry)) * 42}px)`
+                                                }}
+                                            />
+                                        </div>
+                                    </foreignObject>
 
                                 </svg>
-
-                                {/* STICK IZQUIERDO (L3) */}
-                                <div className="absolute left-[19%] top-[30%] w-32 h-32 rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
-                                    <canvas
-                                        ref={canvasTrailLRef}
-                                        width={128}
-                                        height={128}
-                                        className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
-                                    />
-                                    <div
-                                        className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(10).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_10px_rgba(56,189,248,0.8)]'
-                                            }`}
-                                        style={{
-                                            transform: `translate(${Math.max(-1, Math.min(1, statsL.lx)) * 48}px, ${Math.max(-1, Math.min(1, statsL.ly)) * 48}px)`
-                                        }}
-                                    />
-                                </div>
-
-                                {/* STICK DERECHO (R3) */}
-                                <div className="absolute right-[21%] top-[48%] w-32 h-32 rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
-                                    <canvas
-                                        ref={canvasTrailRRef}
-                                        width={128}
-                                        height={128}
-                                        className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
-                                    />
-                                    <div
-                                        className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(11).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_10px_rgba(56,189,248,0.8)]'
-                                            }`}
-                                        style={{
-                                            transform: `translate(${Math.max(-1, Math.min(1, statsR.rx)) * 48}px, ${Math.max(-1, Math.min(1, statsR.ry)) * 48}px)`
-                                        }}
-                                    />
-                                </div>
 
                             </div>
 
@@ -614,7 +625,7 @@ export default function GamepadTester() {
 
                         </div>
 
-                        {/* 📈 OSCILOSCOPIO DUAL DE EJES TMR (RUIDO / JITTER) */}
+                        {/* 📈 OSCILOSCOPIO DUAL DE EJES TMR */}
                         <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-2xl space-y-4">
                             <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
                                 📈 OSCILOSCOPIO DUAL DE EJES TMR (MONITOREO DE RUIDO Y JITTER EN TIEMPO REAL)
