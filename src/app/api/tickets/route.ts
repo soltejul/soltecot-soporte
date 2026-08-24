@@ -62,7 +62,7 @@ async function enviarPlantillaMeta(
                 to: toMeta,
                 type: 'template',
                 template: {
-                    name: 'actualizacion_estatus_taller',
+                    name: 'soltecot_seguimiento',
                     language: { code: 'es_MX' },
                     components: [
                         {
