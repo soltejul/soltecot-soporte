@@ -110,6 +110,48 @@ export default function AdminDashboard() {
         }
     }, [modalChatDirecto, telefonoRescate])
 
+    // ⚡ ENVIAR PLANTILLA DE REACTIVACIÓN / COTIZACIÓN DIRECTA (+24 HORAS)
+    const handleEnviarPlantillaCotizacion = async (telefono: string) => {
+        const cleanNum = telefono.replace(/[^0-9]/g, '')
+        if (cleanNum.length < 10) return alert('Ingresa un número válido de 10 dígitos')
+
+        const equipoPrompt = prompt('Escribe el nombre del equipo o accesorio a cotizar:', 'su control')
+        if (equipoPrompt === null) return
+
+        const rangoCostoPrompt = prompt('Escribe la cotización o rango de precio a enviar:', '$250 y $350 MXN')
+        if (rangoCostoPrompt === null) return
+
+        setEnviandoRescate(true)
+        try {
+            const formData = new FormData()
+            formData.append('telefono', telefono)
+            formData.append('usarPlantilla', 'true')
+            formData.append('equipo', equipoPrompt || 'su equipo')
+            formData.append('rangoCosto', rangoCostoPrompt || '$250 y $450 MXN')
+
+            const res = await fetch('/api/admin/chat-directo', {
+                method: 'POST',
+                body: formData
+            })
+
+            const data = await res.json()
+
+            if (res.ok) {
+                alert('🚀 ¡Plantilla de reactivación enviada! En cuanto el cliente presione el botón o responda, la ventana de chat libre quedará abierta.')
+                consultarHistorialTelefono(telefono)
+                cargarListaConversaciones()
+                setEstadoBotDirecto(false)
+            } else {
+                alert('🔴 Error al enviar la plantilla: ' + (data.error || 'Rechazado por Meta'))
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Error de conexión con el servidor')
+        } finally {
+            setEnviandoRescate(false)
+        }
+    }
+
     const dispararRecordatoriosManual = async () => {
         try {
             const res = await fetch('/api/admin/recordatorios', { method: 'POST' })
@@ -702,8 +744,8 @@ export default function AdminDashboard() {
                                     </div>
                                 ) : (
                                     <>
-                                        {/* BARRA SUPERIOR DE CHAT SELECCIONADO */}
-                                        <div className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl">
+                                        {/* BARRA SUPERIOR DE CHAT SELECCIONADO CON REABRIR CHAT DE 24H */}
+                                        <div className="flex flex-wrap items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl gap-2">
                                             <div>
                                                 <p className="text-xs font-bold text-indigo-300 font-mono">📱 {telefonoRescate}</p>
                                                 <p className="text-[10px] text-zinc-500">
@@ -711,7 +753,16 @@ export default function AdminDashboard() {
                                                 </p>
                                             </div>
 
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {/* ⚡ BOTÓN PARA DISPARAR PLANTILLA (+24H) */}
+                                                <button
+                                                    onClick={() => handleEnviarPlantillaCotizacion(telefonoRescate)}
+                                                    className="bg-amber-950/60 hover:bg-amber-900 text-amber-400 border border-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                                                    title="Reabre el chat enviando la plantilla de cotización oficial"
+                                                >
+                                                    ⚡ Reabrir Chat (+24h)
+                                                </button>
+
                                                 <button
                                                     onClick={async () => {
                                                         const nuevoEstado = !estadoBotDirecto
@@ -843,14 +894,20 @@ export default function AdminDashboard() {
                                                                 body: formData
                                                             })
 
+                                                            const data = await res.json()
+
                                                             if (res.ok) {
                                                                 setMensajeRescate('')
                                                                 setArchivoAdjunto(null)
                                                                 consultarHistorialTelefono(telefonoRescate)
                                                                 cargarListaConversaciones()
                                                                 setEstadoBotDirecto(false)
+
+                                                                if (data.tipo === 'plantilla_fallback') {
+                                                                    alert('⚠️ Pasaron más de 24h desde el último mensaje del cliente. El sistema envió automáticamente la plantilla de cotización oficial para reactivar el chat.')
+                                                                }
                                                             } else {
-                                                                alert('Error al enviar el mensaje por Meta')
+                                                                alert('Error al enviar el mensaje por Meta: ' + (data.error || 'Rechazado'))
                                                             }
                                                         } catch (err) {
                                                             console.error(err)

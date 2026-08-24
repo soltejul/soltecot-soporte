@@ -6,12 +6,48 @@ export const dynamic = 'force-dynamic'
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
+// ⚡ Función auxiliar para disparar la plantilla de reactivación (salta las 24h)
+async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equipo: string, rangoCosto: string) {
+    const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+    const respuesta = await fetch(urlMeta, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: toMeta,
+            type: 'template',
+            template: {
+                name: 'recuperacion_cotizacion',
+                language: { code: 'es_MX' },
+                components: [
+                    {
+                        type: 'body',
+                        parameters: [
+                            { type: 'text', text: nombre || 'Cliente' },
+                            { type: 'text', text: equipo || 'tu equipo' },
+                            { type: 'text', text: rangoCosto || '$250 y $450 MXN' }
+                        ]
+                    }
+                ]
+            }
+        })
+    })
+
+    return respuesta
+}
+
 export async function POST(request: Request) {
     try {
         const formData = await request.formData()
         const telefono = formData.get('telefono') as string
         const mensaje = (formData.get('mensaje') as string) || ''
         const archivo = formData.get('archivo') as File | null
+        const usarPlantillaDirecta = formData.get('usarPlantilla') === 'true'
+        const equipoInput = (formData.get('equipo') as string) || 'su equipo'
+        const rangoCostoInput = (formData.get('rangoCosto') as string) || '$250 y $450 MXN'
 
         if (!telefono) {
             return NextResponse.json({ error: 'El teléfono es obligatorio' }, { status: 400 })
@@ -19,67 +55,9 @@ export async function POST(request: Request) {
 
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
+        const toMeta = `52${phone10}` // 👈 LADA de México agregada obligatoriamente
 
-        let mediaId: string | null = null
-
-        // 1️⃣ Si adjuntaste una imagen/archivo, la subimos a Meta Media API
-        if (archivo && archivo.size > 0) {
-            const metaFormData = new FormData()
-            metaFormData.append('file', archivo)
-            metaFormData.append('type', archivo.type)
-            metaFormData.append('messaging_product', 'whatsapp')
-
-            const resMedia = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}` },
-                body: metaFormData
-            })
-
-            if (resMedia.ok) {
-                const dataMedia = await resMedia.json()
-                mediaId = dataMedia.id
-            } else {
-                console.error("🔴 Error subiendo media a Meta:", await resMedia.text())
-            }
-        }
-
-        // 2️⃣ Preparamos el payload según sea Texto o Imagen/Documento
-        let payloadMeta: any = {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: phone10
-        }
-
-        if (mediaId) {
-            const esImagen = archivo?.type.startsWith('image/')
-            const tipoMedia = esImagen ? 'image' : 'document'
-            payloadMeta.type = tipoMedia
-            payloadMeta[tipoMedia] = {
-                id: mediaId,
-                caption: mensaje || undefined,
-                filename: !esImagen ? archivo?.name : undefined
-            }
-        } else {
-            payloadMeta.type = 'text'
-            payloadMeta.text = { body: mensaje }
-        }
-
-        // 3️⃣ Despachamos a Meta
-        const resMeta = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payloadMeta)
-        })
-
-        if (!resMeta.ok) {
-            const errorRaw = await resMeta.text()
-            throw new Error(`Meta rechazó el mensaje: ${errorRaw}`)
-        }
-
-        // 4️⃣ Registramos en la BD y silenciamos a la IA (Modo Manual)
+        // 1️⃣ Buscar o crear al cliente en DB
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [{ telefono: phone10 }, { telefono: cleanPhone }]
@@ -101,6 +79,98 @@ export async function POST(request: Request) {
             })
         }
 
+        const nombreCliente = cliente.nombre && cliente.nombre !== 'Cliente WhatsApp' ? cliente.nombre : 'Cliente'
+
+        // 2️⃣ Si forzaste el uso de plantilla desde el panel
+        if (usarPlantillaDirecta) {
+            const resPlantilla = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput, rangoCostoInput)
+            if (!resPlantilla.ok) {
+                const errText = await resPlantilla.text()
+                throw new Error(`Meta rechazó la plantilla: ${errText}`)
+            }
+
+            const textoRegistrado = `⚡ [Plantilla Enviada]: Reactivación de cotización (${rangoCostoInput}) para ${equipoInput}`
+            await prisma.mensaje.create({
+                data: { texto: textoRegistrado, origen: 'BOT', clienteId: cliente.id }
+            })
+
+            return NextResponse.json({ success: true, tipo: 'plantilla' })
+        }
+
+        // 3️⃣ Proceso habitual: Subida de archivo (si existe)
+        let mediaId: string | null = null
+        if (archivo && archivo.size > 0) {
+            const metaFormData = new FormData()
+            metaFormData.append('file', archivo)
+            metaFormData.append('type', archivo.type)
+            metaFormData.append('messaging_product', 'whatsapp')
+
+            const resMedia = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}` },
+                body: metaFormData
+            })
+
+            if (resMedia.ok) {
+                const dataMedia = await resMedia.json()
+                mediaId = dataMedia.id
+            } else {
+                console.error("🔴 Error subiendo media a Meta:", await resMedia.text())
+            }
+        }
+
+        // 4️⃣ Construir payload de texto libre o archivo
+        let payloadMeta: any = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: toMeta
+        }
+
+        if (mediaId) {
+            const esImagen = archivo?.type.startsWith('image/')
+            const tipoMedia = esImagen ? 'image' : 'document'
+            payloadMeta.type = tipoMedia
+            payloadMeta[tipoMedia] = {
+                id: mediaId,
+                caption: mensaje || undefined,
+                filename: !esImagen ? archivo?.name : undefined
+            }
+        } else {
+            payloadMeta.type = 'text'
+            payloadMeta.text = { body: mensaje }
+        }
+
+        // 5️⃣ Despachar mensaje a Meta
+        let resMeta = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payloadMeta)
+        })
+
+        // 6️⃣ REINTENTO AUTOMÁTICO: Si Meta rechaza el mensaje por ventana de 24h cerrada (Error 131047 / 400)
+        if (!resMeta.ok) {
+            const errorRaw = await resMeta.text()
+            console.warn(`⚠️ [CHAT DIRECTO BLOQUEADO POR 24H]: ${errorRaw}. Reintentando con Plantilla de Recuperación...`)
+
+            // Si no llevaba archivo, intentamos rescatar el envío con la Plantilla
+            if (!mediaId) {
+                const resFallback = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput, rangoCostoInput)
+                if (resFallback.ok) {
+                    const textoRegistrado = `⚡ [Reactivación Auto]: Plantilla enviada tras caducar ventana de 24h`
+                    await prisma.mensaje.create({
+                        data: { texto: textoRegistrado, origen: 'BOT', clienteId: cliente.id }
+                    })
+                    return NextResponse.json({ success: true, tipo: 'plantilla_fallback' })
+                }
+            }
+
+            throw new Error(`Meta rechazó el mensaje: ${errorRaw}`)
+        }
+
+        // 7️⃣ Registro normal en la base de datos
         const textoAArchivar = mediaId
             ? `📷 [Evidencia/Archivo]: ${archivo?.name || 'Imagen'}${mensaje ? ` - ${mensaje}` : ''}`
             : mensaje
@@ -113,7 +183,7 @@ export async function POST(request: Request) {
             }
         })
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true, tipo: mediaId ? 'media' : 'texto' })
 
     } catch (error: any) {
         console.error("🔴 Error en Chat Directo:", error.message)

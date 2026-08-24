@@ -48,6 +48,8 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             icono = '🚨 Urgente';
         } else if (estatus.includes('MANUAL') || estatus.includes('ATENCION')) {
             icono = '💬 Chat Humano';
+        } else if (estatus.includes('REACTIVADO')) {
+            icono = '⚡ Cliente Reactivado';
         } else if (estatus === 'AGENDADO') {
             icono = '📅 ¡CITA AGENDADA!';
         } else if (estatus === 'FUERA_DE_COBERTURA') {
@@ -826,7 +828,6 @@ _DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte 
             if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
         }
 
-        // 🔒 BLINDAJE ANTI-HALLUCINACIÓN: Se ignora lo que invente la IA y se usa SIEMPRE el número real del Webhook Meta
         const telefonoParaCita = telefono10Digitos
 
         if (nombreCrm.toLowerCase() === 'nombre' || nombreCrm.toLowerCase() === 'desconocido' || nombreCrm.includes('@')) {
@@ -1104,7 +1105,15 @@ export async function POST(req: Request) {
 
         const message = value.messages[0]
 
-        if (message.type !== 'text') {
+        // 🎯 1. EXTRAER TEXTO DE MENSAJES NORMALES O BOTONES INTERACTIVOS DE PLANTILLAS
+        let mensajeCliente = ''
+        if (message.type === 'text') {
+            mensajeCliente = message.text?.body || ''
+        } else if (message.type === 'button') {
+            mensajeCliente = message.button?.text || message.button?.payload || ''
+        } else if (message.type === 'interactive') {
+            mensajeCliente = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || ''
+        } else {
             return new Response('Ignorado Multimedia', { status: 200 })
         }
 
@@ -1120,7 +1129,6 @@ export async function POST(req: Request) {
             }
         }
 
-        const mensajeCliente = message.text?.body
         const numeroCliente = message.from
 
         if (numeroCliente.includes('5546088200')) {
@@ -1128,7 +1136,7 @@ export async function POST(req: Request) {
         }
 
         if (mensajeCliente && numeroCliente) {
-            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Texto: "${mensajeCliente}"`)
+            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Tipo: ${message.type} | Texto: "${mensajeCliente}"`)
 
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
@@ -1169,6 +1177,44 @@ export async function POST(req: Request) {
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 console.log(`🧼 [RESET SUCCESS]: Hilo borrado y Bot reactivado para ${telefono10Digitos}.`)
                 return new Response('Bot reseteado', { status: 200 })
+            }
+
+            // 🎯 2. INTERCEPCIÓN DE CLIC EN BOTÓN DE PLANTILLA ("Hablar con el Ing. Julio")
+            const esBotonReactivacion = message.type === 'button' ||
+                message.type === 'interactive' ||
+                textoNormalizado.includes('hablar con el ing. julio') ||
+                textoNormalizado.includes('ing. julio');
+
+            if (esBotonReactivacion) {
+                // Silenciar bot para pasar a atención manual
+                await prisma.cliente.update({
+                    where: { id: cliente.id },
+                    data: { atendidoPorBot: false }
+                });
+
+                // Registrar mensaje en la base de datos
+                await prisma.mensaje.create({
+                    data: {
+                        texto: `⚡ [Respuesta a Botón]: ${mensajeCliente}`,
+                        origen: 'CLIENTE',
+                        clienteId: cliente.id
+                    }
+                });
+
+                // Disparar alerta en Google Chat
+                await dispararAlertaInmediata(
+                    telefono10Digitos,
+                    '💬 CLIENTE REACTIVADO',
+                    `El cliente *${cliente.nombre || 'WhatsApp'}* (${telefono10Digitos}) presionó el botón *"${mensajeCliente}"*. La ventana de 24h de WhatsApp está abierta y lista en el panel.`
+                );
+
+                // Mensaje de confirmación al cliente
+                await enviarMensajeWhatsApp(
+                    numeroCliente,
+                    "👋 ¡Hola! He notificado directamente al Ingeniero Julio. En un momento tomará tu chat desde el panel de control para atenderte. 🔬"
+                );
+
+                return new Response('Reactivación por botón procesada con éxito', { status: 200 });
             }
 
             let ticketActivo = await prisma.ticket.findFirst({
