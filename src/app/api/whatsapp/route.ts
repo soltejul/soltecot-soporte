@@ -322,7 +322,6 @@ async function calcularDistanciaKm(direccionDestino: string, apiKey: string): Pr
 async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const textoNormalizado = mensajeCliente.trim().toLowerCase()
 
-    // 🔍 COMPRENSIÓN DIACRÍTICA AVANZADA (Limpia acentos invisibles de WhatsApp)
     const textoSinAcentos = textoNormalizado.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
     const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
@@ -345,7 +344,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
             const aiB2B = new GoogleGenAI({ apiKey });
             const fechaHoyB2B = new Date().toLocaleDateString('es-MX', {
-                timeZone: 'America/Mexico_City', // 👈 ¡Candado de zona horaria!
+                timeZone: 'America/Mexico_City',
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -377,10 +376,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                 const servicioDetectado = calcularServicioDeMensaje(textoSinAcentos);
 
-                // 📊 Registro analítico histórico en Google Sheets
                 await registrarAnaliticaB2BEnSheets(telefono10Digitos, nombreB2B, empresaB2B, equiposB2B, servicioDetectado, 'NUEVO');
 
-                // 💾 Registro operativo en Neon
                 const emailVirtualB2B = `${telefono10Digitos}@soltecot-whatsapp.local`;
                 const leadExistente = await prisma.leadB2B.findFirst({ where: { email: emailVirtualB2B } });
 
@@ -584,15 +581,16 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
 
-        const bloqueos = await prisma.bloqueoAgenda.findMany({
+        const prismaAny = prisma as any;
+        const bloqueos = await prismaAny.bloqueoAgenda?.findMany({
             where: { fechaFin: { gte: hoy } },
             orderBy: { fechaInicio: 'asc' }
-        });
+        }) ?? [];
 
         if (bloqueos.length > 0) {
-            const listaFechas = bloqueos.map(b => {
+            const listaFechas = bloqueos.map((b: any) => {
                 const inicio = new Date(b.fechaInicio).toLocaleDateString('es-MX', {
-                    timeZone: 'UTC', // 👈 Lo dejamos en UTC porque así viaja limpio desde tu Panel
+                    timeZone: 'UTC',
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long',
@@ -632,7 +630,7 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         try {
             const ai = new GoogleGenAI({ apiKey })
             const fechaHoyString = new Date().toLocaleDateString('es-MX', {
-                timeZone: 'America/Mexico_City', // 👈 ¡Candado de zona horaria!
+                timeZone: 'America/Mexico_City',
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -706,7 +704,7 @@ Si el costo en Neon es 'Por cotizar', aplica este filtro según el equipo:
 1. Si está en la TABLA DE PRECIOS FIJOS: Entrega el precio exacto.
 2. Si es una falla de CONSOLA o CONTROL fuera de la tabla (ej. botón atascado, no enciende, corto, puertos): PROHIBIDO dar precios o usar el rango de computadoras. Explica que se requiere revisión en banco de trabajo para diagnosticar y ofrece Visita o Recolección.
 3. Si es producto Apple (MacBook, iMac): Indica que requiere diagnóstico técnico previo. NO des rangos de precio.
-4. Exclusivamente para PC o Laptops Windows (Fallas de Hardware no remotas): Puedes brindar el rango base de mercado ($790 a $2,500 MXN) y ofrecer Visita o Recolección.
+4. Exclusivamente para PC o Laptops Windows (Fallas de Hardware no remotas): Ofrecer Visita o Recolección y explica que el costo final se confirmará tras la revisión en banco de trabajo. NO des rangos de precio ni costos aproximados.
 - CANDADO DE REPETICIÓN: Si en el historial ya mencionaste un costo/rango y el cliente insiste en pedir descuento, costo exacto o agente humano, aborta la venta imprimiendo la etiqueta: __TRANSFERIR_HUMANO__
 
 PASO 4: REGLA DE MULTI-EQUIPOS
@@ -805,13 +803,12 @@ _DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte 
             .replace(/__TRANSFERIR_REMOTO__/gi, '')
             .trim()
 
-        let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General', telefonoRealCrm = ''
+        let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General'
         if (matchCrm) {
             const campos = matchCrm[1].split('|')
             if (campos[0]) nombreCrm = campos[0].trim()
             if (campos[1]) dispositivoCrm = campos[1].trim()
             if (campos[2]) fallaCrm = campos[2].trim()
-            if (campos[3]) telefonoRealCrm = campos[3].trim().replace(/\D/g, '')
         }
 
         let reqFactura = 'NO', rfcCrm = '', nombreFiscalCrm = '', cpCrm = '', regimenCrm = '', usoCfdiCrm = '', correoCrm = ''
@@ -829,7 +826,8 @@ _DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte 
             if (camposFiscales[6]) correoCrm = camposFiscales[6].trim()
         }
 
-        const telefonoParaCita = (telefonoRealCrm && telefonoRealCrm.length >= 10) ? telefonoRealCrm.slice(-10) : telefono10Digitos
+        // 🔒 BLINDAJE ANTI-HALLUCINACIÓN: Se ignora lo que invente la IA y se usa SIEMPRE el número real del Webhook Meta
+        const telefonoParaCita = telefono10Digitos
 
         if (nombreCrm.toLowerCase() === 'nombre' || nombreCrm.toLowerCase() === 'desconocido' || nombreCrm.includes('@')) {
             if (clientePrisma && clientePrisma.nombre && clientePrisma.nombre !== 'Desconocido' && clientePrisma.nombre !== 'Cliente WhatsApp') {
@@ -909,7 +907,6 @@ _DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte 
 
                         await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
 
-                        // 🚀 CREAR / ACTUALIZAR TICKET LEAD EN NEON DB PARA EL DASHBOARD
                         const clienteDb = await prisma.cliente.upsert({
                             where: { telefono: telefonoParaCita },
                             update: { nombre: nombreCrm },
@@ -955,7 +952,6 @@ _DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte 
                     const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
                     await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
 
-                    // 🚀 CREAR / ACTUALIZAR TICKET LEAD EN NEON DB PARA EL DASHBOARD
                     const clienteDb = await prisma.cliente.upsert({
                         where: { telefono: telefonoParaCita },
                         update: { nombre: nombreCrm },
@@ -1114,7 +1110,6 @@ export async function POST(req: Request) {
 
         const messageId = message.id
 
-        // 🛡️ DEDUPLICADOR CENTRALIZADO ANTI-RETRYS DE META
         if (messageId) {
             try {
                 await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
@@ -1128,7 +1123,6 @@ export async function POST(req: Request) {
         const mensajeCliente = message.text?.body
         const numeroCliente = message.from
 
-        // Ignora el número de eco del bot
         if (numeroCliente.includes('5546088200')) {
             return new Response('Eco Ignorado', { status: 200 })
         }
@@ -1140,7 +1134,6 @@ export async function POST(req: Request) {
             const telefono10Digitos = telefonoLimpio.slice(-10)
             const textoNormalizado = mensajeCliente.trim().toLowerCase()
 
-            // 1️⃣ Buscamos o creamos al cliente en Neon DB
             let cliente = await prisma.cliente.findFirst({
                 where: {
                     OR: [
@@ -1162,14 +1155,12 @@ export async function POST(req: Request) {
                 console.log(`👤 [NUEVO CLIENTE]: Registrado en Neon con teléfono ${telefono10Digitos}`)
             }
 
-            // 🔑 CLAVE MAESTRA DE RESETEO DEL BOT
             if (textoNormalizado === 'kanzer1986') {
                 await prisma.cliente.update({
                     where: { id: cliente.id },
                     data: { atendidoPorBot: true, googleChatThreadId: null }
                 })
 
-                // Reseteo de colas de memoria local
                 if (typeof MEMORIA_CHAT !== 'undefined') {
                     MEMORIA_CHAT.delete(numeroCliente)
                     MEMORIA_CHAT.delete(`B2B_${numeroCliente}`)
@@ -1180,8 +1171,6 @@ export async function POST(req: Request) {
                 return new Response('Bot reseteado', { status: 200 })
             }
 
-            // 2️⃣ 🎯 AUTO-CREACIÓN DE FICHA LEAD EN EL SEGUNDO CERO (OPCIÓN C)
-            // Verificamos si el cliente tiene alguna orden activa en el taller o bandeja
             let ticketActivo = await prisma.ticket.findFirst({
                 where: {
                     clienteId: cliente.id,
@@ -1189,14 +1178,13 @@ export async function POST(req: Request) {
                 }
             })
 
-            // Si es un prospecto nuevo o sin órdenes vigentes, inyectamos la ficha LEAD- en la Tab 2
             if (!ticketActivo) {
                 ticketActivo = await prisma.ticket.create({
                     data: {
                         numeroOrden: `LEAD-${telefono10Digitos}`,
                         equipo: 'Consulta WhatsApp',
-                        fallaReportada: mensajeCliente, // Guarda la consulta inicial
-                        estado: 'ESPERANDO_APROBACION', // Visibilidad inmediata en Bandeja de Leads
+                        fallaReportada: mensajeCliente,
+                        estado: 'ESPERANDO_APROBACION',
                         clienteId: cliente.id,
                         botActivo: true
                     }
@@ -1204,7 +1192,6 @@ export async function POST(req: Request) {
                 console.log(`🎯 [AUTO-LEAD CREADO]: Ficha LEAD-${telefono10Digitos} inyectada en la Bandeja de Leads.`)
             }
 
-            // 3️⃣ CAPTURA EN VIVO CUANDO EL CHAT ESTÁ EN "MODO MANUAL / HUMANO"
             if (cliente.atendidoPorBot === false) {
                 console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado para ${telefono10Digitos}. Registrando mensaje...`)
 
@@ -1225,7 +1212,6 @@ export async function POST(req: Request) {
                 return new Response('Atendido de forma manual', { status: 200 })
             }
 
-            // 4️⃣ DESPACHO AL CEREBRO DE IA (Sigue el flujo de atención y agendamiento)
             await ejecutarLogicaIA(mensajeCliente, numeroCliente)
         }
 
@@ -1249,11 +1235,9 @@ function calcularServicioDeMensaje(textoSinAcentos: string): string {
 
 async function registrarAnaliticaB2BEnSheets(telefono: string, nombre: string, empresa: string, equipos: string, servicio: string, estadoFinal: string) {
     try {
-        // Enlaza inteligentemente con tu SPREADSHEET_ID global
         const sheetId = process.env.GOOGLE_B2B_SHEETS_ID || SPREADSHEET_ID;
         if (!sheetId) return;
 
-        // Reutilizamos tu propia lógica nativa de tokens
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets']);
         const sheets = google.sheets({ version: 'v4', auth });
 
