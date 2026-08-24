@@ -44,50 +44,74 @@ async function enviarPlantillaMeta(
     folio: string,
     estatusFormateado: string
 ) {
-    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
-
-    const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
-    const toMeta = `52${cleanPhone}`
-
-    try {
-        const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
-        const respuesta = await fetch(urlMeta, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: toMeta,
-                type: 'template',
-                template: {
-                    name: 'soltecot_seguimiento',
-                    language: { code: 'es_MX' },
-                    components: [
-                        {
-                            type: 'body',
-                            parameters: [
-                                { type: 'text', text: nombreCliente },
-                                { type: 'text', text: equipo },
-                                { type: 'text', text: folio },
-                                { type: 'text', text: estatusFormateado }
-                            ]
-                        }
-                    ]
-                }
-            })
-        })
-
-        if (!respuesta.ok) {
-            console.log('⚠️ Plantilla no disponible o rechazada por Meta, reintentando por texto libre...')
-            return false
-        }
-        return true
-    } catch (err: any) {
-        console.error(`🔴 [META TEMPLATE ERROR]:`, err.message)
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+        console.error('🔴 [META CONFIG ERROR]: Falta WHATSAPP_TOKEN o PHONE_NUMBER_ID en las variables de entorno.')
         return false
     }
+
+    // 1. Sanitización de teléfono a 10 dígitos con LADA 52
+    const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
+    if (cleanPhone.length < 10) {
+        console.error('🔴 [META PHONE ERROR]: El número ingresado es inválido:', to)
+        return false
+    }
+    const toMeta = `52${cleanPhone}`
+
+    // 2. Protege los parámetros contra valores nulos o vacíos que rechaza Meta
+    const paramNombre = String(nombreCliente || 'Cliente').trim()
+    const paramEquipo = String(equipo || 'Dispositivo').trim()
+    const paramFolio = String(folio || 'Sin Folio').trim()
+    const paramEstatus = String(estatusFormateado || 'ACTUALIZADO').trim()
+
+    // 3. Intenta enviar en es_MX y si Meta rechaza por código de idioma, reintenta en es
+    const idiomasATrobar = ['es_MX', 'es']
+
+    for (const codigoIdioma of idiomasATrobar) {
+        try {
+            const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+            const respuesta = await fetch(urlMeta, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    to: toMeta,
+                    type: 'template',
+                    template: {
+                        name: 'soltecot_seguimiento',
+                        language: { code: codigoIdioma },
+                        components: [
+                            {
+                                type: 'body',
+                                parameters: [
+                                    { type: 'text', text: paramNombre },
+                                    { type: 'text', text: paramEquipo },
+                                    { type: 'text', text: paramFolio },
+                                    { type: 'text', text: paramEstatus }
+                                ]
+                            }
+                        ]
+                    }
+                })
+            })
+
+            const dataMeta = await respuesta.json()
+
+            if (respuesta.ok) {
+                console.log(`✅ [META SUCCESS]: Plantilla enviada con éxito a ${toMeta} en idioma (${codigoIdioma})`)
+                return true
+            }
+
+            console.warn(`⚠️ [META WARN]: Intento fallido con idioma ${codigoIdioma}:`, dataMeta.error?.message || dataMeta)
+        } catch (err: any) {
+            console.error(`🔴 [META TEMPLATE ERROR]: Excepción en intento con ${codigoIdioma}:`, err.message)
+        }
+    }
+
+    console.error('🔴 [META FATAL]: No se pudo entregar la plantilla tras probar es_MX y es.')
+    return false
 }
 
 // 💾 1. CREAR O UNIFICAR TICKET DESDE PORTAL DE INGRESO (POST)
