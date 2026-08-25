@@ -600,11 +600,59 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="space-y-3 text-xs">
-                            {/* DATOS DEL CLIENTE */}
+                            {/* DATOS DEL CLIENTE CON EDICIÓN DE TELÉFONO Y REENVÍO DE NOTIFICACIÓN */}
                             <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
                                 <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Cliente y Contacto</span>
                                 <p className="text-zinc-200 font-semibold text-sm">{ticketDetalle.cliente?.nombre || 'Sin Nombre'}</p>
-                                <p className="text-emerald-400 font-mono mt-0.5">📱 {ticketDetalle.cliente?.telefono}</p>
+
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                    <span className="text-sm">📱</span>
+                                    <input
+                                        type="text"
+                                        defaultValue={ticketDetalle.cliente?.telefono || ''}
+                                        id={`edit-phone-${ticketDetalle.id}`}
+                                        className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-emerald-400 font-mono focus:border-emerald-500 outline-none w-36"
+                                        placeholder="10 dígitos"
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            const inputEl = document.getElementById(`edit-phone-${ticketDetalle.id}`) as HTMLInputElement
+                                            const rawPhone = inputEl?.value || ''
+                                            const clean = rawPhone.replace(/[^0-9]/g, '').slice(-10)
+
+                                            if (!clean || clean.length < 10) {
+                                                alert('Por favor ingresa un número de teléfono válido a 10 dígitos.')
+                                                return
+                                            }
+
+                                            try {
+                                                const res = await fetch('/api/tickets', {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        ticketId: ticketDetalle.id,
+                                                        telefonoNuevo: clean,
+                                                        reenviarNotificacion: true
+                                                    })
+                                                })
+
+                                                if (res.ok) {
+                                                    alert(`✅ Teléfono actualizado a ${clean} y notificación de recepción reenviada por WhatsApp.`)
+                                                    setTicketDetalle(null)
+                                                    cargarTickets()
+                                                } else {
+                                                    const data = await res.json()
+                                                    alert('🔴 Error al actualizar: ' + (data.error || 'Fallo en servidor'))
+                                                }
+                                            } catch (err) {
+                                                alert('Error de conexión al guardar el teléfono')
+                                            }
+                                        }}
+                                        className="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                                    >
+                                        ✏️ Guardar y Reenviar WhatsApp 🚀
+                                    </button>
+                                </div>
                             </div>
 
                             {/* EQUIPO Y FALLA REPORTADA */}

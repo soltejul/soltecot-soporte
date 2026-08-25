@@ -290,79 +290,60 @@ export async function GET() {
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
-        const { ticketId, nuevoEstado, botActivo, costoReparacion, notasDiagnostico } = body
+        const { ticketId, nuevoEstado, costoReparacion, notasDiagnostico, botActivo, telefonoNuevo, reenviarNotificacion } = body
 
-        if (!ticketId) {
-            return NextResponse.json({ error: 'El parámetro ticketId es obligatorio' }, { status: 400 })
-        }
+        if (!ticketId) return NextResponse.json({ error: 'Ticket ID requerido' }, { status: 400 })
 
-        const datosAActualizar: any = {}
-        if (nuevoEstado !== undefined) datosAActualizar.estado = nuevoEstado
-        if (botActivo !== undefined) datosAActualizar.botActivo = botActivo
-        if (costoReparacion !== undefined) datosAActualizar.costoReparacion = parseFloat(costoReparacion)
-        if (notasDiagnostico !== undefined) datosAActualizar.notasDiagnostico = notasDiagnostico
-
-        const ticketActualizado = await prisma.ticket.update({
+        // 1. Obtener ticket con cliente
+        const ticket = await prisma.ticket.findUnique({
             where: { id: ticketId },
-            data: datosAActualizar,
             include: { cliente: true }
         })
 
-        if (botActivo !== undefined) {
-            await prisma.cliente.update({
-                where: { id: ticketActualizado.clienteId },
-                data: { atendidoPorBot: botActivo }
-            })
+        if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 })
+
+        // 2. Si se solicitó corregir el teléfono
+        let telefonoFinal = ticket.cliente.telefono
+        if (telefonoNuevo) {
+            const cleanPhone = telefonoNuevo.replace(/[^0-9]/g, '').slice(-10)
+            if (cleanPhone.length === 10) {
+                await prisma.cliente.update({
+                    where: { id: ticket.clienteId },
+                    data: { telefono: cleanPhone }
+                })
+                telefonoFinal = cleanPhone
+            }
         }
 
-        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
+        // 3. Actualizar datos del ticket
+        const ticketActualizado = await prisma.ticket.update({
+            where: { id: ticketId },
+            data: {
+                estado: nuevoEstado || undefined,
+                costoReparacion: costoReparacion !== undefined ? costoReparacion : undefined,
+                notasDiagnostico: notasDiagnostico !== undefined ? notasDiagnostico : undefined,
+                botActivo: botActivo !== undefined ? botActivo : undefined
+            },
+            include: { cliente: true }
+        })
 
-        if (nuevoEstado) {
-            const estadoNormalizado = nuevoEstado.replace(/[\s_]+/g, '_').toUpperCase()
+        // 4. Reenviar mensaje de recepción si se solicitó o si cambió el teléfono
+        if (reenviarNotificacion || telefonoNuevo) {
+            const estatusTexto = ticketActualizado.estado === 'RECIBIDO' ? 'RECIBIDO EN TALLER' : ticketActualizado.estado
 
-            if (estadoNormalizado === 'ENTREGADO' || estadoNormalizado === 'RECHAZADO') {
-                await prisma.cliente.update({
-                    where: { id: ticketActualizado.clienteId },
-                    data: { atendidoPorBot: true, googleChatThreadId: null }
-                })
-                await prisma.mensaje.deleteMany({
-                    where: { clienteId: ticketActualizado.clienteId }
-                })
-            }
-
-            const nombreClienteEstetico = ticketActualizado.cliente.nombre && ticketActualizado.cliente.nombre !== 'Cliente Recepción' && ticketActualizado.cliente.nombre !== 'Cliente WhatsApp' ? ticketActualizado.cliente.nombre : 'amigo'
-            const estadoFormateado = estadoNormalizado.replace(/_/g, ' ')
-
-            // Intentamos enviar primero como Plantilla (salta límite de 24h)
-            const envioPlantillaExitoso = await enviarPlantillaMeta(
-                ticketActualizado.cliente.telefono,
-                nombreClienteEstetico,
+            // Dispara la plantilla oficial soltecot_seguimiento al nuevo número
+            await enviarPlantillaMeta(
+                telefonoFinal,
+                ticketActualizado.cliente.nombre || 'Cliente',
                 ticketActualizado.equipo,
                 ticketActualizado.numeroOrden,
-                estadoFormateado
+                estatusTexto
             )
-
-            // Si la plantilla no fue enviada o aún no está activa en Meta, recurre al mensaje de texto alternativo
-            if (!envioPlantillaExitoso) {
-                let textoMensaje = ""
-
-                if (estadoNormalizado === "ESPERANDO_APROBACION") {
-                    textoMensaje = `💰 *SOLTECOT_ PRESUPUESTO DE REPARACIÓN* 💰\n\nHola, *${nombreClienteEstetico}*. Diagnóstico concluido para *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*).\n\n🔬 *Diagnóstico:* ${notasDiagnostico || 'Revisión y corrección de circuito principal.'}\n💵 *Costo Total:* *$${costoReparacion || ticketActualizado.costoReparacion} MXN*\n\nResponde *Aceptar* para autorizar o *Rechazar* para cancelar.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-                } else if (estadoNormalizado === "LISTO_PARA_ENTREGA") {
-                    textoMensaje = `🔬 *EQUIPO LISTO PARA ENTREGA* ⚡\n\nHola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* (Folio: *${ticketActualizado.numeroOrden}*) ya está listo para recolección en nuestro taller.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-                } else if (estadoNormalizado === "ENTREGADO") {
-                    textoMensaje = `📦 *¡GRACIAS POR CONFIAR EN SOLTECOT_!* 🤝✨\n\nHola, *${nombreClienteEstetico}*. Tu equipo *${ticketActualizado.equipo}* ha sido entregado exitosamente.\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-                } else {
-                    textoMensaje = `🔬 *SOLTECOT_ ACTUALIZACIÓN* 🔬\n\nEstatus de tu orden *${ticketActualizado.numeroOrden}* (${ticketActualizado.equipo}):\n👉 *${estadoFormateado}*\n👉 ${APP_URL}?folio=${ticketActualizado.numeroOrden}`
-                }
-
-                await enviarMensajeMeta(ticketActualizado.cliente.telefono, textoMensaje)
-            }
         }
 
-        return NextResponse.json({ success: true, ticket: ticketActualizado }, { status: 200 })
+        return NextResponse.json({ success: true, ticket: ticketActualizado })
     } catch (error: any) {
-        console.error("🔴 [PATCH TICKETS ERROR]:", error.message)
+        console.error('🔴 Error en PATCH /api/tickets:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
