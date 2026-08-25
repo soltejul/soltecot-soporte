@@ -16,6 +16,9 @@ export default function AdminDashboard() {
     const [pestanaActiva, setPestanaActiva] = useState<'taller' | 'leads'>('taller')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
+    // 🔍 MODAL DETALLE DE FOLIO (FICHA DE INGRESO)
+    const [ticketDetalle, setTicketDetalle] = useState<any>(null)
+
     // 💬 CENTRO DE CHATS Y MULTIMEDIA
     const [modalChatDirecto, setModalChatDirecto] = useState(false)
     const [conversaciones, setConversaciones] = useState<any[]>([])
@@ -425,7 +428,17 @@ export default function AdminDashboard() {
                                         ? 'bg-rose-950/10 border-l-4 border-l-rose-500 hover:bg-rose-950/20'
                                         : 'border-l-4 border-l-transparent hover:bg-zinc-900/50'
                                         }`}>
-                                        <td className="p-3 md:p-4 font-bold text-emerald-400">{t.numeroOrden}</td>
+                                        <td className="p-3 md:p-4">
+                                            {/* 🎯 FOLIO INTERACTIVO QUE ABRE LA FICHA TÉCNICA DE RECEPCIÓN */}
+                                            <button
+                                                onClick={() => setTicketDetalle(t)}
+                                                className="font-bold text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 font-mono cursor-pointer"
+                                                title="Ver datos recopilados en el formulario de entrada"
+                                            >
+                                                <span>{t.numeroOrden}</span>
+                                                <span className="text-[10px] opacity-70">📋</span>
+                                            </button>
+                                        </td>
                                         <td className="p-3 md:p-4 text-zinc-500 text-xs">{new Date(t.createdAt).toLocaleDateString('es-MX')}</td>
                                         <td className="p-3 md:p-4">
                                             <div className="font-semibold text-zinc-200">{t.cliente?.nombre}</div>
@@ -564,6 +577,114 @@ export default function AdminDashboard() {
                     </div>
                 )}
             </div>
+
+            {/* 📋 MODAL DETALLE DE FICHA TÉCNICA DE RECEPCIÓN */}
+            {ticketDetalle && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-start border-b border-zinc-900 pb-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-emerald-400 font-mono">
+                                    📋 FICHA DE INGRESO: {ticketDetalle.numeroOrden}
+                                </h3>
+                                <p className="text-xs text-zinc-500">
+                                    Registrado el {new Date(ticketDetalle.createdAt).toLocaleString('es-MX')}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setTicketDetalle(null)}
+                                className="text-zinc-500 hover:text-white font-bold text-base"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-3 text-xs">
+                            {/* DATOS DEL CLIENTE */}
+                            <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Cliente y Contacto</span>
+                                <p className="text-zinc-200 font-semibold text-sm">{ticketDetalle.cliente?.nombre || 'Sin Nombre'}</p>
+                                <p className="text-emerald-400 font-mono mt-0.5">📱 {ticketDetalle.cliente?.telefono}</p>
+                            </div>
+
+                            {/* EQUIPO Y FALLA REPORTADA */}
+                            <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900 space-y-2">
+                                <div>
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-0.5">Dispositivo / Equipo</span>
+                                    <p className="text-zinc-200 font-bold">{ticketDetalle.equipo}</p>
+                                </div>
+                                <div>
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-0.5">Falla Reportada por el Cliente</span>
+                                    <p className="text-amber-300 font-medium bg-zinc-950/80 p-2 rounded-lg border border-zinc-800/80">
+                                        {ticketDetalle.fallaReportada || 'Sin detalle de falla.'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* COSTOS Y NOTAS INTERNAS */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Costo Estimado</span>
+                                    <p className="text-zinc-300 font-bold font-mono">
+                                        {ticketDetalle.costoEstimado ? `$${ticketDetalle.costoEstimado} MXN` : 'Sin estimación inicial'}
+                                    </p>
+                                </div>
+                                <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Costo Pactado</span>
+                                    <p className="text-emerald-400 font-bold font-mono">
+                                        {ticketDetalle.costoReparacion ? `$${ticketDetalle.costoReparacion} MXN` : 'Por cotizar'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* NOTAS INTERNAS DEL INGRESO */}
+                            {ticketDetalle.notasInternas && (
+                                <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Notas Internas de Recepción</span>
+                                    <p className="text-zinc-300 font-mono text-[11px] whitespace-pre-wrap">{ticketDetalle.notasInternas}</p>
+                                </div>
+                            )}
+
+                            {/* DIAGNÓSTICO TÉCNICO REGISTRADO */}
+                            {ticketDetalle.notasDiagnostico && (
+                                <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Notas de Diagnóstico en Taller</span>
+                                    <p className="text-indigo-300 font-mono text-[11px] whitespace-pre-wrap">{ticketDetalle.notasDiagnostico}</p>
+                                </div>
+                            )}
+
+                            {/* EVIDENCIAS DE FOTOS SUBIDAS A GOOGLE DRIVE */}
+                            {ticketDetalle.fotosIngreso && ticketDetalle.fotosIngreso.length > 0 && (
+                                <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
+                                    <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-2">Evidencias Fotográficas (Google Drive)</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {ticketDetalle.fotosIngreso.map((fotoId: string, idx: number) => (
+                                            <a
+                                                key={fotoId}
+                                                href={`https://drive.google.com/file/d/${fotoId}/view`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                            >
+                                                📷 Foto Evidencia {idx + 1}
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                onClick={() => setTicketDetalle(null)}
+                                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 font-bold transition-colors"
+                            >
+                                Cerrar Ficha
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MODAL: ENVÍO DE PRESUPUESTO */}
             {mostrarModalPresupuesto && (
