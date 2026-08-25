@@ -5,6 +5,8 @@ import Link from 'next/link'
 
 // IDs oficiales de Sony Corp.
 const VENDOR_SONY = 0x054c
+const VENDOR_NINTENDO = 0x057e
+const PRODUCT_SWITCH_PRO = 0x2009
 
 export default function GamepadTester() {
     const [gamepad, setGamepad] = useState<Gamepad | null>(null)
@@ -60,13 +62,17 @@ export default function GamepadTester() {
     // ⚡ CONEXIÓN DIRECTA WEBHID CON MANDOS PLAYSTATION
     const conectarWebHIDPS = async () => {
         if (typeof window === 'undefined' || !('hid' in navigator)) {
-            alert('⚠️ WebHID solo está disponible en navegadores basados en Chromium (Google Chrome / Microsoft Edge).')
+            alert('⚠️ WebHID solo está disponible en Chrome / Edge.')
             return
         }
 
         try {
+            // Permitir selección de controles Sony y Nintendo Switch Pro
             const devices = await (navigator as any).hid.requestDevice({
-                filters: [{ vendorId: VENDOR_SONY }]
+                filters: [
+                    { vendorId: VENDOR_SONY },      // DualShock 4 / DualSense PS5
+                    { vendorId: VENDOR_NINTENDO }   // Switch Pro Controller
+                ]
             })
 
             if (!devices || devices.length === 0) return
@@ -75,9 +81,6 @@ export default function GamepadTester() {
             await device.open()
             setHidDevice(device)
             setHidStatus(`🟢 Conectado a ${device.productName} vía WebHID`)
-
-            const reportNVS = await device.receiveFeatureReport(0x05)
-            console.log('📡 [WebHID SONY NVS DATA]:', new Uint8Array(reportNVS.buffer))
 
         } catch (err: any) {
             console.error('🔴 Error WebHID:', err)
