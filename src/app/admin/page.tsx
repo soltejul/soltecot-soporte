@@ -1031,7 +1031,7 @@ export default function AdminDashboard() {
                                             <div>
                                                 <input
                                                     type="file"
-                                                    accept="image/*,.pdf"
+                                                    accept="image/*,video/*,.pdf"
                                                     onChange={(e) => setArchivoAdjunto(e.target.files?.[0] || null)}
                                                     className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 text-[11px] text-zinc-300 file:mr-2 file:py-0.5 file:px-2 file:rounded-md file:border-0 file:bg-indigo-900/50 file:text-indigo-300 file:font-semibold"
                                                 />

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
         const cleanPhone = telefono.replace(/[^0-9]/g, '')
         const phone10 = cleanPhone.slice(-10)
-        const toMeta = `52${phone10}` // 👈 LADA de México agregada obligatoriamente
+        const toMeta = `52${phone10}`
 
         // 1️⃣ Buscar o crear al cliente en DB
         let cliente = await prisma.cliente.findFirst({
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, tipo: 'plantilla' })
         }
 
-        // 3️⃣ Proceso habitual: Subida de archivo (si existe)
+        // 3️⃣ Proceso habitual: Subida de archivo a Meta Media API (Imagen, Video o Documento)
         let mediaId: string | null = null
         if (archivo && archivo.size > 0) {
             const metaFormData = new FormData()
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // 4️⃣ Construir payload de texto libre o archivo
+        // 4️⃣ Construir payload dinámico (Imagen, Video, Documento o Texto)
         let payloadMeta: any = {
             messaging_product: 'whatsapp',
             recipient_type: 'individual',
@@ -128,12 +128,17 @@ export async function POST(request: Request) {
 
         if (mediaId) {
             const esImagen = archivo?.type.startsWith('image/')
-            const tipoMedia = esImagen ? 'image' : 'document'
+            const esVideo = archivo?.type.startsWith('video/')
+
+            let tipoMedia = 'document'
+            if (esImagen) tipoMedia = 'image'
+            else if (esVideo) tipoMedia = 'video'
+
             payloadMeta.type = tipoMedia
             payloadMeta[tipoMedia] = {
                 id: mediaId,
                 caption: mensaje || undefined,
-                filename: !esImagen ? archivo?.name : undefined
+                filename: tipoMedia === 'document' ? archivo?.name : undefined
             }
         } else {
             payloadMeta.type = 'text'
@@ -150,12 +155,11 @@ export async function POST(request: Request) {
             body: JSON.stringify(payloadMeta)
         })
 
-        // 6️⃣ REINTENTO AUTOMÁTICO: Si Meta rechaza el mensaje por ventana de 24h cerrada (Error 131047 / 400)
+        // 6️⃣ REINTENTO AUTOMÁTICO por ventana de 24h cerrada
         if (!resMeta.ok) {
             const errorRaw = await resMeta.text()
-            console.warn(`⚠️ [CHAT DIRECTO BLOQUEADO POR 24H]: ${errorRaw}. Reintentando con Plantilla de Recuperación...`)
+            console.warn(`⚠️ [CHAT DIRECTO BLOQUEADO POR 24H]: ${errorRaw}. Reintentando con Plantilla...`)
 
-            // Si no llevaba archivo, intentamos rescatar el envío con la Plantilla
             if (!mediaId) {
                 const resFallback = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput, rangoCostoInput)
                 if (resFallback.ok) {
@@ -170,9 +174,13 @@ export async function POST(request: Request) {
             throw new Error(`Meta rechazó el mensaje: ${errorRaw}`)
         }
 
-        // 7️⃣ Registro normal en la base de datos
+        // 7️⃣ Registro en la base de datos con prefijo según el tipo de archivo
+        const esImagen = archivo?.type.startsWith('image/')
+        const esVideo = archivo?.type.startsWith('video/')
+        const prefijo = esImagen ? '📷 [Imagen]' : esVideo ? '🎥 [Video]' : '📄 [Documento]'
+
         const textoAArchivar = mediaId
-            ? `📷 [Evidencia/Archivo]: ${archivo?.name || 'Imagen'}${mensaje ? ` - ${mensaje}` : ''}`
+            ? `${prefijo}: ${archivo?.name || 'Archivo'}${mensaje ? ` - ${mensaje}` : ''}`
             : mensaje
 
         await prisma.mensaje.create({
@@ -183,7 +191,7 @@ export async function POST(request: Request) {
             }
         })
 
-        return NextResponse.json({ success: true, tipo: mediaId ? 'media' : 'texto' })
+        return NextResponse.json({ success: true, tipo: mediaId ? payloadMeta.type : 'texto' })
 
     } catch (error: any) {
         console.error("🔴 Error en Chat Directo:", error.message)
