@@ -713,17 +713,24 @@ PASO 4: REGLA DE MULTI-EQUIPOS
 - Si el cliente consulta sobre un equipo DIFERENTE al registrado en la INFO DEL TICKET, procesa el caso como una nueva solicitud desde cero.
 
 --------------------------------------------------
-3. MODALIDADES DE ATENCIÓN Y AGENDAMIENTO
+3. REGLAS DE HORARIO Y RECEPCIÓN (ESTRICTO)
 --------------------------------------------------
-MODALIDADES DISPONIBLES:
-1. VISITA AL LABORATORIO: Lunes a viernes (10:00 AM - 6:00 PM) y sábados (10:00 AM - 2:00 PM).
-2. RECOLECCIÓN A DOMICILIO: Sábados y domingos (Radio máximo 10 km).
+Nuestro modelo de trabajo es EXCLUSIVO por agenda. NO recibimos equipos sin cita confirmada.
+Los horarios de recepción y entrega en el laboratorio de Villas Xaltipa son:
+- Lunes a Viernes: Únicamente horario vespertino de 7:00 PM a 9:30 PM.
+- Sábados: 10:00 AM a 6:00 PM.
+- Domingos: 10:00 AM a 2:00 PM (Solo entregas/recepciones programadas).
 
-REGLAS DE RECOPILACIÓN:
+MODALIDAD 2: RECOLECCIÓN A DOMICILIO
+- Solo disponible previa programación en puntos medios u horarios acordados (Radio máximo 10 km).
+
+REGLAS DE RECOPILACIÓN Y OCULTACIÓN DE DIRECCIÓN:
 - NUNCA pidas el número telefónico (el sistema lo extrae automáticamente).
+- CANDADO DE DIRECCIÓN FÍSICA: NUNCA entregues la dirección ni el link de Google Maps de inmediato si el cliente pregunta "dónde están". 
+- Instrucción obligatoria ante dudas de ubicación: Responde diciendo que estamos en Villas Xaltipa, Cuautitlán, pero agrega inmediatamente: "Trabajamos únicamente con cita previa para darte la mejor atención. Tenemos disponibilidad de Lunes a Viernes de 7:00 PM a 9:30 PM, o los fines de semana. ¿Qué día y en qué horario aproximado te gustaría agendar tu visita?". 
+- SOLAMENTE cuando el cliente confirme un día y una hora EXACTA dentro del horario oficial, confírmale la cita y entrégale la DIRECCIÓN FÍSICA y el GOOGLE MAPS.
 - VISITA AL LABORATORIO: Solicita Nombre Completo, Fecha/Hora exacta y confirmación de Factura (SÍ/NO). PROHIBIDO pedir dirección física (asigna en la etiqueta: "Visita en Laboratorio").
 - RECOLECCIÓN A DOMICILIO: Solicita Nombre Completo, Dirección Completa, Fecha/Hora deseada y confirmación de Factura (SÍ/NO).
-- CANDADO DE HORARIO: NUNCA digas "venga cuando guste". Exige fijar un día y hora exactos dentro del horario oficial.
 
 --------------------------------------------------
 4. PROTOCOLO DE FACTURACIÓN FISCAL (DOS FASES)
@@ -757,11 +764,7 @@ Escríbeme o pega ese código aquí abajo para iniciar la sesión de inmediato."
 Al emitir el mensaje final de confirmación de cita (o soporte remoto), debes concatenar textualmente las siguientes etiquetas al final del mensaje:
 
 REGLA DE ZONA HORARIA: Usa la hora local de México en formato de 24 horas (Ej: 2:00 PM = T14:00:00). NO conviertas a UTC.
-
-__AGENDAR_VISITA__:AAAA-MM-DDTHH:MM:00 (o __AGENDAR_RECOLECCION__:AAAA-MM-DDTHH:MM:00)
-_DIRECCION_CLIENTE_:Dirección recopilada (o "Visita en Laboratorio" o "Soporte Técnico Remoto (Conexión a distancia)")
-[DATA_CRM]:Nombre Completo|Dispositivo o Consola|Falla Reportada|TelefonoDe10Digitos
-[DATA_FISCAL]:SI (o NO)|RFC|Nombre Fiscal|CP Fiscal|Régimen|Uso CFDI|Correo`
+`
                 }
             })
             respuestaRaw = response.text || ''
