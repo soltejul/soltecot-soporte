@@ -98,6 +98,7 @@ export default function AdminDashboard() {
 
         const intervaloGlobal = setInterval(() => {
             cargarListaConversaciones()
+            cargarTickets()
         }, 10000)
         return () => clearInterval(intervaloGlobal)
     }, [])
@@ -123,6 +124,87 @@ export default function AdminDashboard() {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [historialDirecto])
+
+    // ⚡ UNIFICACIÓN ATÓMICA DE TICKETS + CONVERSACIONES DE WHATSAPP
+    const listaUnificada = (() => {
+        const items: any[] = []
+        const telefonosProcesados = new Set<string>()
+
+        // 1️⃣ Añadir todas las órdenes activas del taller (SOL-XXXX y LEAD-XXXX)
+        tickets.forEach(ticket => {
+            const tel10 = ticket.cliente?.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
+            if (tel10) telefonosProcesados.add(tel10)
+
+            const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
+            const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
+
+            items.push({
+                id: ticket.id,
+                tipo: esTallerOficial ? 'taller' : 'lead',
+                folio: ticket.numeroOrden,
+                nombre: ticket.cliente?.nombre || convAsociada?.nombre || 'Cliente WhatsApp',
+                telefono: ticket.cliente?.telefono || convAsociada?.telefono || '',
+                equipo: ticket.equipo,
+                falla: ticket.fallaReportada,
+                costo: ticket.costoReparacion || ticket.costoEstimado || '',
+                estadoTaller: ticket.estado,
+                botActivo: ticket.botActivo ?? convAsociada?.atendidoPorBot ?? true,
+                ultimoMensaje: convAsociada?.mensajes?.[0] || null,
+                ticketOriginal: ticket,
+                clienteId: ticket.clienteId
+            })
+        })
+
+        // 2️⃣ Añadir conversaciones sueltas de WhatsApp que no tengan ticket registrado aún
+        conversaciones.forEach(conv => {
+            const tel10 = conv.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
+            if (!telefonosProcesados.has(tel10)) {
+                telefonosProcesados.add(tel10)
+                const ultimoMsg = conv.mensajes?.[0]
+
+                items.push({
+                    id: conv.id,
+                    tipo: 'lead',
+                    folio: `LEAD-${tel10}`,
+                    nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
+                    telefono: conv.telefono,
+                    equipo: 'Consulta WhatsApp',
+                    falla: ultimoMsg?.texto || 'Consulta general',
+                    costo: '',
+                    estadoTaller: 'ESPERANDO_APROBACION',
+                    botActivo: conv.atendidoPorBot ?? true,
+                    ultimoMensaje: ultimoMsg || null,
+                    ticketOriginal: null,
+                    clienteId: conv.id
+                })
+            }
+        })
+
+        return items
+    })()
+
+    // 🎯 FILTRADO POR BÚSQUEDA Y PESTAÑA
+    const itemsFiltrados = listaUnificada.filter((item) => {
+        const term = busqueda.toLowerCase().trim()
+        const coincideBusqueda =
+            item.telefono.includes(term) ||
+            item.nombre.toLowerCase().includes(term) ||
+            item.folio.toLowerCase().includes(term) ||
+            item.equipo.toLowerCase().includes(term)
+
+        if (!coincideBusqueda) return false
+
+        if (filtroPestana === 'manual') return !item.botActivo
+        if (filtroPestana === 'taller') return item.tipo === 'taller'
+        if (filtroPestana === 'leads') return item.tipo === 'lead'
+        return true
+    })
+
+    // 📊 CONTEOS EXACTOS
+    const conteoTodos = listaUnificada.length
+    const conteoManual = listaUnificada.filter(i => !i.botActivo).length
+    const conteoTaller = listaUnificada.filter(i => i.tipo === 'taller').length
+    const conteoLeads = listaUnificada.filter(i => i.tipo === 'lead').length
 
     // ⚡ ACCIONES DE CHAT
     const handleEnviarMensaje = async () => {
@@ -308,30 +390,6 @@ export default function AdminDashboard() {
         if (res.ok) router.push('/admin/login')
     }
 
-    // 🎯 FILTRADO UNIFICADO Y Detección de Orden Oficial (SOL-XXXX)
-    const conversacionesFiltradas = conversaciones.filter((c) => {
-        const term = busqueda.toLowerCase().trim()
-        const coincideBusqueda = c.telefono.includes(term) || (c.nombre || '').toLowerCase().includes(term)
-
-        if (!coincideBusqueda) return false
-
-        const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
-        const tieneOrdenTallerOficial = ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
-
-        if (filtroPestana === 'manual') return !c.atendidoPorBot
-        if (filtroPestana === 'leads') return !tieneOrdenTallerOficial
-        if (filtroPestana === 'taller') return tieneOrdenTallerOficial
-        return true
-    })
-
-    // 📊 CONTEOS EXACTOS BASADOS EN CONVERSACIONES ACTIVAS
-    const conteoManual = conversaciones.filter(c => !c.atendidoPorBot).length
-    const conteoTaller = conversaciones.filter(c => {
-        const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
-        return ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
-    }).length
-    const conteoLeads = conversaciones.length - conteoTaller
-
     if (cargando) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono">Iniciando SO Soltecot_...</div>
 
     return (
@@ -386,7 +444,7 @@ export default function AdminDashboard() {
             {/* 💬 CONTENEDOR PRINCIPAL TIPO WHATSAPP WEB (2 COLUMNAS) */}
             <div className="flex-1 flex overflow-hidden relative">
 
-                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR, FILTROS Y CHATS */}
+                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR, FILTROS Y REGISTROS DE TALLER / LEADS */}
                 <aside className={`absolute md:static w-full md:w-[380px] lg:w-[420px] h-full bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0 z-10 transition-transform duration-300 ${telefonoRescate.length >= 10 ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}`}>
 
                     {/* BUSCADOR */}
@@ -406,7 +464,7 @@ export default function AdminDashboard() {
                             onClick={() => setFiltroPestana('todos')}
                             className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'todos' ? 'border-emerald-500 text-emerald-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
-                            Todos ({conversaciones.length})
+                            Todos ({conteoTodos})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('manual')}
@@ -428,26 +486,24 @@ export default function AdminDashboard() {
                         </button>
                     </div>
 
-                    {/* LISTA DE CONVERSACIONES */}
+                    {/* LISTA DE REGISTROS (UNIFICADA DE TALLER Y CHATS) */}
                     <div className="flex-1 overflow-y-auto divide-y divide-zinc-900 hide-scrollbar pb-20">
-                        {conversacionesFiltradas.length === 0 ? (
+                        {itemsFiltrados.length === 0 ? (
                             <div className="text-center py-8 px-4 text-zinc-600 text-xs">
                                 No hay registros en esta sección.
                             </div>
                         ) : (
-                            conversacionesFiltradas.map((c) => {
-                                const esSeleccionado = telefonoRescate.endsWith(c.telefono.slice(-10))
-                                const ultimoMsg = c.mensajes?.[0]
+                            itemsFiltrados.map((item) => {
+                                const esSeleccionado = telefonoRescate.endsWith(item.telefono.slice(-10))
+                                const ultimoMsg = item.ultimoMensaje
                                 const esMensajeCliente = ultimoMsg?.origen === 'CLIENTE'
-                                const requiereAtencion = !c.atendidoPorBot && esMensajeCliente
-
-                                const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
-                                const esTallerReal = ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
+                                const requiereAtencion = !item.botActivo && esMensajeCliente
+                                const esTallerReal = item.tipo === 'taller'
 
                                 return (
                                     <div
-                                        key={c.id}
-                                        onClick={() => setTelefonoRescate(c.telefono)}
+                                        key={item.id}
+                                        onClick={() => setTelefonoRescate(item.telefono)}
                                         className={`p-3 cursor-pointer transition-colors space-y-1 ${esSeleccionado
                                             ? 'bg-indigo-950/60 border-l-4 border-l-indigo-500'
                                             : requiereAtencion
@@ -457,7 +513,7 @@ export default function AdminDashboard() {
                                     >
                                         <div className="flex justify-between items-start">
                                             <span className={`font-bold text-xs truncate max-w-[150px] ${requiereAtencion ? 'text-rose-200' : 'text-zinc-200'}`}>
-                                                {c.nombre !== 'Cliente WhatsApp' ? c.nombre : c.telefono}
+                                                {item.nombre}
                                             </span>
                                             {ultimoMsg && (
                                                 <span className="text-[10px] font-mono text-zinc-500">
@@ -467,37 +523,46 @@ export default function AdminDashboard() {
                                         </div>
 
                                         <div className="flex justify-between items-center text-[11px]">
-                                            <span className="text-zinc-500 font-mono">📱 {c.telefono}</span>
-                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${c.atendidoPorBot
+                                            <span className="text-zinc-500 font-mono">📱 {item.telefono}</span>
+                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${item.botActivo
                                                 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                                                 : requiereAtencion
                                                     ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
                                                     : 'bg-rose-950 text-rose-400 border border-rose-800'
                                                 }`}>
-                                                {c.atendidoPorBot ? '🤖 IA' : requiereAtencion ? '🚨 RESPUESTA' : '🚨 MAN'}
+                                                {item.botActivo ? '🤖 IA' : requiereAtencion ? '🚨 RESPUESTA' : '🚨 MAN'}
                                             </span>
                                         </div>
 
-                                        {ultimoMsg && (
+                                        {ultimoMsg ? (
                                             <p className={`text-xs truncate ${requiereAtencion ? 'text-rose-300 font-medium' : 'text-zinc-400'}`}>
                                                 <span className="opacity-60">{esMensajeCliente ? '👤 ' : '🛠️ '}</span>
                                                 {ultimoMsg.texto}
                                             </p>
+                                        ) : (
+                                            <p className="text-xs text-zinc-500 truncate italic">
+                                                Falla: {item.falla}
+                                            </p>
                                         )}
 
-                                        {ticketAsociado && (
-                                            <div className="flex items-center gap-2 pt-1">
+                                        <div className="flex items-center justify-between pt-1">
+                                            <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${esTallerReal
                                                     ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800 font-bold'
                                                     : 'bg-amber-950/40 text-amber-400 border-amber-900'
                                                     }`}>
-                                                    {ticketAsociado.numeroOrden}
+                                                    {item.folio}
                                                 </span>
-                                                <span className="text-[10px] text-zinc-400 truncate max-w-[180px]">
-                                                    {ticketAsociado.equipo}
+                                                <span className="text-[10px] text-zinc-400 truncate max-w-[150px]">
+                                                    {item.equipo}
                                                 </span>
                                             </div>
-                                        )}
+                                            {item.costo && (
+                                                <span className="text-[10px] font-mono font-bold text-amber-500">
+                                                    ${item.costo}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 )
                             })
@@ -511,7 +576,7 @@ export default function AdminDashboard() {
                     {telefonoRescate.length < 10 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-600 space-y-2">
                             <span className="text-4xl">💬</span>
-                            <p className="text-xs">Selecciona un chat de la lista izquierda para comenzar a chatear.</p>
+                            <p className="text-xs">Selecciona un equipo u orden de la izquierda para comenzar a gestionar.</p>
                         </div>
                     ) : (
                         <>
