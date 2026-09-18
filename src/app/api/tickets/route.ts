@@ -5,12 +5,23 @@ import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleD
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
+// 🎨 Mapeo de estados de DB a texto estético para el cliente en WhatsApp
+const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
+    RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO',
+    EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO',
+    ESPERANDO_APROBACION: '⏳ PENDIENTE DE APROBACIÓN',
+    EN_REPARACION: '🛠️ EN PROCESO DE REPARACIÓN',
+    LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER',
+    ENTREGADO: '📦 ENTREGADO CON ÉXITO',
+    RECHAZADO: '❌ REPARACIÓN CANCELADA'
+}
+
 // 🚀 FUNCIÓN 1: ENVÍO DE TEXTO LIBRE (DENTRO DE LA VENTANA DE 24 HORAS)
 async function enviarMensajeMeta(to: string, texto: string) {
     if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
 
     const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
-    const toMeta = `52${cleanPhone}` // Prefijo de México obligatorio por Meta
+    const toMeta = `52${cleanPhone}`
 
     try {
         const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
@@ -45,25 +56,22 @@ async function enviarPlantillaMeta(
     estatusFormateado: string
 ) {
     if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
-        console.error('🔴 [META CONFIG ERROR]: Falta WHATSAPP_TOKEN o PHONE_NUMBER_ID en las variables de entorno.')
+        console.error('🔴 [META CONFIG ERROR]: Falta WHATSAPP_TOKEN o PHONE_NUMBER_ID.')
         return false
     }
 
-    // 1. Sanitización de teléfono a 10 dígitos con LADA 52
     const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
     if (cleanPhone.length < 10) {
-        console.error('🔴 [META PHONE ERROR]: El número ingresado es inválido:', to)
+        console.error('🔴 [META PHONE ERROR]: Número inválido:', to)
         return false
     }
     const toMeta = `52${cleanPhone}`
 
-    // 2. Protege los parámetros contra valores nulos o vacíos que rechaza Meta
     const paramNombre = String(nombreCliente || 'Cliente').trim()
     const paramEquipo = String(equipo || 'Dispositivo').trim()
     const paramFolio = String(folio || 'Sin Folio').trim()
-    const paramEstatus = String(estatusFormateado || 'ACTUALIZADO').trim()
+    const paramEstatus = MAPEO_ESTATUS_HUMANO[estatusFormateado] || String(estatusFormateado || 'ACTUALIZADO').trim()
 
-    // 3. Intenta enviar en es_MX y si Meta rechaza por código de idioma, reintenta en es
     const idiomasATrobar = ['es_MX', 'es']
 
     for (const codigoIdioma of idiomasATrobar) {
@@ -100,17 +108,16 @@ async function enviarPlantillaMeta(
             const dataMeta = await respuesta.json()
 
             if (respuesta.ok) {
-                console.log(`✅ [META SUCCESS]: Plantilla enviada con éxito a ${toMeta} en idioma (${codigoIdioma})`)
+                console.log(`✅ [META SUCCESS]: Plantilla 'soltecot_seguimiento' entregada a ${toMeta} (${codigoIdioma})`)
                 return true
             }
 
-            console.warn(`⚠️ [META WARN]: Intento fallido con idioma ${codigoIdioma}:`, dataMeta.error?.message || dataMeta)
+            console.warn(`⚠️ [META WARN]: Intento fallido (${codigoIdioma}):`, dataMeta.error?.message || dataMeta)
         } catch (err: any) {
-            console.error(`🔴 [META TEMPLATE ERROR]: Excepción en intento con ${codigoIdioma}:`, err.message)
+            console.error(`🔴 [META TEMPLATE ERROR]: Excepción en idioma ${codigoIdioma}:`, err.message)
         }
     }
 
-    console.error('🔴 [META FATAL]: No se pudo entregar la plantilla tras probar es_MX y es.')
     return false
 }
 
@@ -197,6 +204,7 @@ export async function POST(request: Request) {
             folioAsignado = await obtenerSiguienteFolioOficial()
         }
 
+        // Subida de evidencias a Google Drive
         let fileIds: string[] = []
         if (files && files.length > 0) {
             const targetFolderId = await obtenerOCrearCarpetaFolio(folioAsignado)
@@ -246,18 +254,18 @@ export async function POST(request: Request) {
             })
         }
 
-        // Intenta enviar mediante Plantilla garantizada; si falla por no estar aprobada aún, manda texto libre
+        // Envío de plantilla de ingreso por WhatsApp
         const nombreEstetico = cliente.nombre || 'amigo'
         const exitoPlantilla = await enviarPlantillaMeta(
             cliente.telefono,
             nombreEstetico,
             ticketFinal.equipo,
             ticketFinal.numeroOrden,
-            '⚙️ RECIBIDO EN LABORATORIO'
+            'RECIBIDO'
         )
 
         if (!exitoPlantilla) {
-            const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
+            const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO EN TALLER\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
             await enviarMensajeMeta(cliente.telefono, textoMensaje)
         }
 
@@ -302,7 +310,7 @@ export async function PATCH(request: Request) {
 
         if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 })
 
-        // 2. Si se solicitó corregir el teléfono
+        // 2. Corrección opcional de número telefónico
         let telefonoFinal = ticket.cliente.telefono
         if (telefonoNuevo) {
             const cleanPhone = telefonoNuevo.replace(/[^0-9]/g, '').slice(-10)
@@ -315,7 +323,7 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // 3. Actualizar datos del ticket
+        // 3. Actualizar datos en DB
         const ticketActualizado = await prisma.ticket.update({
             where: { id: ticketId },
             data: {
@@ -327,17 +335,17 @@ export async function PATCH(request: Request) {
             include: { cliente: true }
         })
 
-        // 4. Reenviar mensaje de recepción si se solicitó o si cambió el teléfono
-        if (reenviarNotificacion || telefonoNuevo) {
-            const estatusTexto = ticketActualizado.estado === 'RECIBIDO' ? 'RECIBIDO EN TALLER' : ticketActualizado.estado
+        // 4. Notificar automáticamente al cliente si cambió el estatus o se pidió reenvío
+        const huboCambioEstatus = nuevoEstado && nuevoEstado !== ticket.estado
+        if (huboCambioEstatus || reenviarNotificacion || telefonoNuevo) {
+            const estatusTarget = nuevoEstado || ticketActualizado.estado
 
-            // Dispara la plantilla oficial soltecot_seguimiento al nuevo número
             await enviarPlantillaMeta(
                 telefonoFinal,
                 ticketActualizado.cliente.nombre || 'Cliente',
                 ticketActualizado.equipo,
                 ticketActualizado.numeroOrden,
-                estatusTexto
+                estatusTarget
             )
         }
 
@@ -348,7 +356,7 @@ export async function PATCH(request: Request) {
     }
 }
 
-// 🗑️ 4. BANDEJA DE LEADS GARBAGE COLLECTOR (DELETE)
+// 🗑️ 4. PURGADOR DE PROSPECTOS DE DB (DELETE)
 export async function DELETE(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
@@ -364,7 +372,7 @@ export async function DELETE(request: Request) {
             prisma.cliente.delete({ where: { id: clienteId } })
         ])
 
-        return NextResponse.json({ success: true, message: 'Prospecto purgado de Neon DB.' }, { status: 200 })
+        return NextResponse.json({ success: true, message: 'Prospecto e historial purgados con éxito.' }, { status: 200 })
 
     } catch (error: any) {
         console.error("🔴 [DELETE TICKETS ERROR]:", error.message)

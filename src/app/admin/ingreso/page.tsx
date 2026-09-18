@@ -81,6 +81,12 @@ export default function RegistroOrdenAdmin() {
         setMensajeExito('')
 
         try {
+            // Limpieza de teléfono a 10 dígitos
+            const telefonoLimpio = form.telefono.replace(/[^0-9]/g, '').slice(-10)
+            if (telefonoLimpio.length < 10) {
+                throw new Error('El número de teléfono debe contener al menos 10 dígitos válidos.')
+            }
+
             // 1️⃣ Comprimir todas las fotos seleccionadas en el navegador
             const fotosComprimidas = await Promise.all(
                 fotos.map((f) => comprimirImagen(f))
@@ -88,7 +94,7 @@ export default function RegistroOrdenAdmin() {
 
             // 2️⃣ Construir un solo paquete FormData con los datos y las imágenes
             const formData = new FormData()
-            formData.append('telefono', form.telefono)
+            formData.append('telefono', telefonoLimpio)
             formData.append('nombre', form.nombre)
             formData.append('equipo', form.equipo)
             formData.append('fallaReportada', form.fallaReportada)
@@ -102,14 +108,14 @@ export default function RegistroOrdenAdmin() {
             // 3️⃣ Enviar todo en una sola petición atómica
             const res = await fetch('/api/tickets', {
                 method: 'POST',
-                body: formData, // El navegador asignará automáticamente el boundary multipart
+                body: formData,
             })
 
             const data = await res.json()
 
             if (!res.ok) throw new Error(data.error || 'Error al procesar el ingreso')
 
-            setMensajeExito(`¡Orden generada con éxito! Folio asignado: ${data.ticket.numeroOrden}`)
+            setMensajeExito(`¡Orden generada con éxito y notificación enviada por WhatsApp! Folio: ${data.ticket.numeroOrden}`)
             setForm({
                 telefono: '',
                 nombre: '',
@@ -128,8 +134,8 @@ export default function RegistroOrdenAdmin() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-8 flex flex-col items-center justify-center">
-            <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-xl p-8 shadow-2xl">
+        <div className="min-h-screen bg-black text-white p-4 md:p-8 flex flex-col items-center justify-center">
+            <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-xl p-6 md:p-8 shadow-2xl">
                 {/* ENCABEZADO */}
                 <div className="flex justify-between items-start border-b border-zinc-900 pb-4 mb-6">
                     <div>
@@ -154,7 +160,7 @@ export default function RegistroOrdenAdmin() {
                             placeholder="Ej: 5510203040"
                             value={form.telefono}
                             onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors font-mono"
                         />
                     </div>
 
@@ -198,11 +204,11 @@ export default function RegistroOrdenAdmin() {
                             <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Costo Estimado ($)</label>
                             <input
                                 type="number"
-                                inputMode="decimal" // O "numeric" para sin decimales
+                                inputMode="decimal"
                                 placeholder="Ej: 1200"
                                 value={form.costoEstimado}
                                 onChange={(e) => setForm({ ...form, costoEstimado: e.target.value })}
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors"
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors font-mono"
                             />
                         </div>
                         <div>
@@ -254,6 +260,7 @@ export default function RegistroOrdenAdmin() {
                                             src={URL.createObjectURL(foto)}
                                             alt={`Evidencia ${index}`}
                                             fill
+                                            unoptimized
                                             className="object-cover"
                                         />
                                         <button
@@ -274,7 +281,7 @@ export default function RegistroOrdenAdmin() {
                         disabled={cargando}
                         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded text-sm transition-colors mt-4 disabled:opacity-50"
                     >
-                        {cargando ? 'Guardando Orden y Subiendo Fotos...' : '🚀 Dar Entrada e Imprimir Orden'}
+                        {cargando ? 'Guardando Orden y Subiendo Fotos...' : '🚀 Dar Entrada e Iniciar Orden'}
                     </button>
                 </form>
 
