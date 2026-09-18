@@ -34,7 +34,11 @@ export default function AdminDashboard() {
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
 
+    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING
     const chatEndRef = useRef<HTMLDivElement | null>(null)
+    const historialRef = useRef<any[]>([])
+    historialRef.current = historialDirecto
+    const esPrimeraCargaChat = useRef(true)
 
     // 📜 CARGAR ÓRDENES DE TALLER Y LEADS
     const cargarTickets = async () => {
@@ -65,7 +69,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO
+    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO (SILENCIOSO)
     const consultarHistorialTelefono = async (num: string, silenciarCarga = false) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -78,11 +82,19 @@ export default function AdminDashboard() {
             const res = await fetch(`/api/admin/mensajes?telefono=${cleanNum}`)
             const data = await res.json()
             if (res.ok) {
-                setHistorialDirecto(data.mensajes || [])
+                const nuevosMsgs = data.mensajes || []
+
+                // 🤐 COMPARA SI REALMENTE CAMBIARON LOS MENSAJES PARA EVITAR RE-RENDERS QUE MUEVAN LA PANTALLA
+                const esDiferente = JSON.stringify(nuevosMsgs) !== JSON.stringify(historialRef.current)
+                if (esDiferente) {
+                    setHistorialDirecto(nuevosMsgs)
+                }
                 setEstadoBotDirecto(data.cliente ? data.cliente.atendidoPorBot : true)
             } else {
-                setHistorialDirecto([])
-                setEstadoBotDirecto(null)
+                if (!silenciarCarga) {
+                    setHistorialDirecto([])
+                    setEstadoBotDirecto(null)
+                }
             }
         } catch (err) {
             console.error("Error al cargar chat", err)
@@ -105,6 +117,7 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         if (telefonoRescate) {
+            esPrimeraCargaChat.current = true // Restablece candado de scroll al cambiar de cliente
             consultarHistorialTelefono(telefonoRescate)
             const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10)))
             setTicketSeleccionado(ticketAsociado || null)
@@ -114,6 +127,7 @@ export default function AdminDashboard() {
                 setCostoReparacion('')
             }
 
+            // 🔄 Polling silencioso
             const intervaloChat = setInterval(() => {
                 consultarHistorialTelefono(telefonoRescate, true)
             }, 5000)
@@ -121,8 +135,12 @@ export default function AdminDashboard() {
         }
     }, [telefonoRescate, tickets])
 
+    // 🔒 DESPLAZAMIENTO INTELIGENTE: SÓLO AL ABRIR CHAT O AL ENVIAR UN MENSAJE
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        if (esPrimeraCargaChat.current && historialDirecto.length > 0) {
+            chatEndRef.current?.scrollIntoView({ behavior: 'auto' })
+            esPrimeraCargaChat.current = false
+        }
     }, [historialDirecto])
 
     // ⚡ UNIFICACIÓN ATÓMICA DE TICKETS + CONVERSACIONES DE WHATSAPP
@@ -229,6 +247,9 @@ export default function AdminDashboard() {
             if (res.ok) {
                 setMensajeRescate('')
                 setArchivoAdjunto(null)
+
+                // Mueve la vista al fondo cuando TÚ envías un mensaje
+                esPrimeraCargaChat.current = true
                 consultarHistorialTelefono(telefonoRescate, true)
                 cargarListaConversaciones()
                 setEstadoBotDirecto(false)
@@ -274,6 +295,7 @@ export default function AdminDashboard() {
 
             if (res.ok) {
                 alert('🚀 Plantilla enviada. El canal de chat directo ha quedado abierto.')
+                esPrimeraCargaChat.current = true
                 consultarHistorialTelefono(telefono, true)
                 cargarListaConversaciones()
                 setEstadoBotDirecto(false)
@@ -395,47 +417,55 @@ export default function AdminDashboard() {
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
 
-            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN */}
-            <header className="h-14 bg-zinc-950 border-b border-zinc-900 px-4 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <h1 className="text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
+            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN TOTALMENTE RESPONSIVA EN CELULAR */}
+            <header className="h-auto min-h-[3.5rem] py-2 bg-zinc-950 border-b border-zinc-900 px-3 sm:px-4 flex items-center justify-between shrink-0 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                    <h1 className="text-base sm:text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
                     <span className="hidden sm:inline bg-zinc-900 text-zinc-400 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded border border-zinc-800">
-                        Panel Híbrido WhatsApp
+                        Panel Híbrido
                     </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* BOTONES DE ENCABEZADO: RECIBIR EQUIPO VISIBLE SIEMPRE EN MÓVIL */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <Link
+                        href="/admin/ingreso"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1.5 rounded transition-colors flex items-center gap-1 shadow-sm"
+                        title="Recibir Equipo en Mostrador"
+                    >
+                        <span>➕</span>
+                        <span className="text-[11px] sm:text-xs">Recibir Equipo</span>
+                    </Link>
+
+                    <Link href="/admin/tester" className="bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800/60 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1" title="Gamepad Tester">
+                        <span>🎮</span>
+                        <span className="hidden sm:inline">Tester</span>
+                    </Link>
+
+                    <Link href="/admin/historial" className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1" title="Historial">
+                        <span>📜</span>
+                        <span className="hidden sm:inline">Historial</span>
+                    </Link>
+
                     <button
                         onClick={dispararRecordatoriosManual}
-                        className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1"
+                        className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1"
                         title="Procesar cola de recordatorios"
                     >
-                        <span className="hidden md:inline">🔔 Recordatorios</span>
-                        <span className="md:hidden">🔔</span>
+                        <span>🔔</span>
+                        <span className="hidden sm:inline">Recordatorios</span>
                     </button>
 
                     <button
                         onClick={() => setModalInactividadAbierto(true)}
-                        className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1"
+                        className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1"
                         title="Programar vacaciones o inactividad"
                     >
-                        <span className="hidden md:inline">🌴 Vacaciones</span>
-                        <span className="md:hidden">🌴</span>
+                        <span>🌴</span>
+                        <span className="hidden sm:inline">Vacaciones</span>
                     </button>
 
-                    <Link href="/admin/historial" className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-3 py-1.5 rounded transition-colors hidden md:block">
-                        📜 Historial
-                    </Link>
-
-                    <Link href="/admin/ingreso" className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors hidden md:block">
-                        ➕ Recibir Equipo
-                    </Link>
-
-                    <Link href="/admin/tester" className="bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800 text-xs font-bold px-3 py-1.5 rounded transition-colors hidden md:block">
-                        🎮 Tester
-                    </Link>
-
-                    <button onClick={ejecutarLogout} className="bg-zinc-900 hover:bg-zinc-800 text-rose-500 border border-zinc-800 text-xs px-2.5 py-1.5 rounded font-bold transition-colors">
+                    <button onClick={ejecutarLogout} className="bg-zinc-900 hover:bg-zinc-800 text-rose-500 border border-zinc-800 text-xs px-2 py-1.5 rounded font-bold transition-colors">
                         🚪
                     </button>
                 </div>
