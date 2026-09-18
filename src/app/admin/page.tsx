@@ -20,7 +20,6 @@ export default function AdminDashboard() {
 
     // 💬 CENTRO DE CHATS Y MULTIMEDIA NATIVO
     const [conversaciones, setConversaciones] = useState<any[]>([])
-    const [cargandoListaChats, setCargandoListaChats] = useState(false)
     const [telefonoRescate, setTelefonoRescate] = useState('')
     const [mensajeRescate, setMensajeRescate] = useState('')
     const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null)
@@ -66,7 +65,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO (Y Auto-refresco)
+    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO
     const consultarHistorialTelefono = async (num: string, silenciarCarga = false) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -97,7 +96,6 @@ export default function AdminDashboard() {
         cargarTickets()
         cargarListaConversaciones()
 
-        // 🔄 Polling silencioso para refrescar lista de chats
         const intervaloGlobal = setInterval(() => {
             cargarListaConversaciones()
         }, 10000)
@@ -115,7 +113,6 @@ export default function AdminDashboard() {
                 setCostoReparacion('')
             }
 
-            // 🔄 Polling silencioso para el chat activo (modo WhatsApp Web)
             const intervaloChat = setInterval(() => {
                 consultarHistorialTelefono(telefonoRescate, true)
             }, 5000)
@@ -213,7 +210,7 @@ export default function AdminDashboard() {
         try {
             const res = await fetch(`/api/tickets?clienteId=${clienteId}`, { method: 'DELETE' })
             if (res.ok) {
-                alert("🧼 Prospecto e historial purgados de Neon con éxito.")
+                alert("Prospecto e historial purgados de Neon con éxito.")
                 setTelefonoRescate('')
                 cargarTickets()
                 cargarListaConversaciones()
@@ -311,18 +308,29 @@ export default function AdminDashboard() {
         if (res.ok) router.push('/admin/login')
     }
 
-    // 🎯 FILTRADO UNIFICADO PARA LA COLUMNA IZQUIERDA
+    // 🎯 FILTRADO UNIFICADO Y Detección de Orden Oficial (SOL-XXXX)
     const conversacionesFiltradas = conversaciones.filter((c) => {
         const term = busqueda.toLowerCase().trim()
         const coincideBusqueda = c.telefono.includes(term) || (c.nombre || '').toLowerCase().includes(term)
 
         if (!coincideBusqueda) return false
 
+        const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
+        const tieneOrdenTallerOficial = ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
+
         if (filtroPestana === 'manual') return !c.atendidoPorBot
-        if (filtroPestana === 'leads') return c.mensajes?.[0]?.texto?.includes('LEAD-') || c.nombre === 'Prospecto WhatsApp'
-        if (filtroPestana === 'taller') return c.atendidoPorBot
+        if (filtroPestana === 'leads') return !tieneOrdenTallerOficial
+        if (filtroPestana === 'taller') return tieneOrdenTallerOficial
         return true
     })
+
+    // 📊 CONTEOS EXACTOS BASADOS EN CONVERSACIONES ACTIVAS
+    const conteoManual = conversaciones.filter(c => !c.atendidoPorBot).length
+    const conteoTaller = conversaciones.filter(c => {
+        const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
+        return ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
+    }).length
+    const conteoLeads = conversaciones.length - conteoTaller
 
     if (cargando) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono">Iniciando SO Soltecot_...</div>
 
@@ -398,25 +406,25 @@ export default function AdminDashboard() {
                             onClick={() => setFiltroPestana('todos')}
                             className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'todos' ? 'border-emerald-500 text-emerald-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
-                            Todos
+                            Todos ({conversaciones.length})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('manual')}
                             className={`flex-1 py-2.5 text-center border-b-2 flex items-center justify-center gap-1 ${filtroPestana === 'manual' ? 'border-rose-500 text-rose-400 bg-rose-950/20' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
-                            🚨 Manual
+                            🚨 Manual ({conteoManual})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('leads')}
                             className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'leads' ? 'border-amber-500 text-amber-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
-                            🎯 Leads
+                            🎯 Leads ({conteoLeads})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('taller')}
                             className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'taller' ? 'border-indigo-500 text-indigo-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
-                            🛠️ Taller
+                            🛠️ Taller ({conteoTaller})
                         </button>
                     </div>
 
@@ -424,7 +432,7 @@ export default function AdminDashboard() {
                     <div className="flex-1 overflow-y-auto divide-y divide-zinc-900 hide-scrollbar pb-20">
                         {conversacionesFiltradas.length === 0 ? (
                             <div className="text-center py-8 px-4 text-zinc-600 text-xs">
-                                No se encontraron chats.
+                                No hay registros en esta sección.
                             </div>
                         ) : (
                             conversacionesFiltradas.map((c) => {
@@ -434,16 +442,17 @@ export default function AdminDashboard() {
                                 const requiereAtencion = !c.atendidoPorBot && esMensajeCliente
 
                                 const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(c.telefono.slice(-10)))
+                                const esTallerReal = ticketAsociado && ticketAsociado.numeroOrden && !ticketAsociado.numeroOrden.startsWith('LEAD-')
 
                                 return (
                                     <div
                                         key={c.id}
                                         onClick={() => setTelefonoRescate(c.telefono)}
                                         className={`p-3 cursor-pointer transition-colors space-y-1 ${esSeleccionado
-                                                ? 'bg-indigo-950/60 border-l-4 border-l-indigo-500'
-                                                : requiereAtencion
-                                                    ? 'bg-rose-950/20 border-l-4 border-l-rose-500 hover:bg-rose-950/30'
-                                                    : 'bg-zinc-950 hover:bg-zinc-900/60 border-l-4 border-l-transparent'
+                                            ? 'bg-indigo-950/60 border-l-4 border-l-indigo-500'
+                                            : requiereAtencion
+                                                ? 'bg-rose-950/20 border-l-4 border-l-rose-500 hover:bg-rose-950/30'
+                                                : 'bg-zinc-950 hover:bg-zinc-900/60 border-l-4 border-l-transparent'
                                             }`}
                                     >
                                         <div className="flex justify-between items-start">
@@ -460,10 +469,10 @@ export default function AdminDashboard() {
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-zinc-500 font-mono">📱 {c.telefono}</span>
                                             <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${c.atendidoPorBot
-                                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                                    : requiereAtencion
-                                                        ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
-                                                        : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                                : requiereAtencion
+                                                    ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
+                                                    : 'bg-rose-950 text-rose-400 border border-rose-800'
                                                 }`}>
                                                 {c.atendidoPorBot ? '🤖 IA' : requiereAtencion ? '🚨 RESPUESTA' : '🚨 MAN'}
                                             </span>
@@ -478,13 +487,13 @@ export default function AdminDashboard() {
 
                                         {ticketAsociado && (
                                             <div className="flex items-center gap-2 pt-1">
-                                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${ticketAsociado.numeroOrden.includes('LEAD-')
-                                                        ? 'bg-amber-950/40 text-amber-400 border-amber-900'
-                                                        : 'bg-zinc-900 text-zinc-300 border-zinc-800'
+                                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${esTallerReal
+                                                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800 font-bold'
+                                                    : 'bg-amber-950/40 text-amber-400 border-amber-900'
                                                     }`}>
                                                     {ticketAsociado.numeroOrden}
                                                 </span>
-                                                <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">
+                                                <span className="text-[10px] text-zinc-400 truncate max-w-[180px]">
                                                     {ticketAsociado.equipo}
                                                 </span>
                                             </div>
@@ -524,7 +533,10 @@ export default function AdminDashboard() {
                                                 {ticketSeleccionado?.cliente?.nombre || 'Cliente WhatsApp'}
                                             </h2>
                                             {ticketSeleccionado && (
-                                                <span className="bg-amber-950 text-amber-400 border border-amber-800/60 text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded font-bold hidden sm:inline-block">
+                                                <span className={`border text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded font-bold hidden sm:inline-block ${!ticketSeleccionado.numeroOrden.startsWith('LEAD-')
+                                                    ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                                                    : 'bg-amber-950 text-amber-400 border-amber-800/60'
+                                                    }`}>
                                                     {ticketSeleccionado.numeroOrden}
                                                 </span>
                                             )}
@@ -556,8 +568,8 @@ export default function AdminDashboard() {
                                     <button
                                         onClick={toggleBotActual}
                                         className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-lg border transition-all ${estadoBotDirecto
-                                                ? 'bg-emerald-950 text-emerald-400 border-emerald-800 hover:bg-emerald-900'
-                                                : 'bg-rose-950 text-rose-400 border-rose-800 animate-pulse hover:bg-rose-900'
+                                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800 hover:bg-emerald-900'
+                                            : 'bg-rose-950 text-rose-400 border-rose-800 animate-pulse hover:bg-rose-900'
                                             }`}
                                     >
                                         {estadoBotDirecto ? '🤖 IA Activa' : '🚨 Manual'}
@@ -624,8 +636,8 @@ export default function AdminDashboard() {
                                             >
                                                 <div
                                                     className={`p-2.5 sm:p-3 rounded-2xl border whitespace-pre-wrap ${esCliente
-                                                            ? 'bg-zinc-800 text-zinc-100 rounded-tl-none border-zinc-700/50 shadow-md'
-                                                            : 'bg-[#18332f] text-emerald-50 rounded-tr-none border-[#224b45] shadow-md'
+                                                        ? 'bg-zinc-800 text-zinc-100 rounded-tl-none border-zinc-700/50 shadow-md'
+                                                        : 'bg-[#18332f] text-emerald-50 rounded-tr-none border-[#224b45] shadow-md'
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-center gap-3 mb-1 text-[9px] opacity-60">
