@@ -323,9 +323,7 @@ async function calcularDistanciaKm(direccionDestino: string, apiKey: string): Pr
 // =========================================================================
 async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const textoNormalizado = mensajeCliente.trim().toLowerCase()
-
     const textoSinAcentos = textoNormalizado.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-
     const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
     const telefono10Digitos = telefonoLimpio.slice(-10)
 
@@ -347,10 +345,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             const aiB2B = new GoogleGenAI({ apiKey });
             const fechaHoyB2B = new Date().toLocaleDateString('es-MX', {
                 timeZone: 'America/Mexico_City',
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
 
             const responseB2B = await aiB2B.models.generateContent({
@@ -360,8 +355,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     systemInstruction: `Eres el Asistente Comercial de IA de Soltec B2B en WhatsApp. Tu único objetivo es calificar de manera ejecutiva a encargados de PYMEs para agendar una sesión de consultoría técnica en Google Meet con el Ingeniero Julio. 
                     📅 HOY ES: ${fechaHoyB2B}.
                     Recopila con mucha amabilidad pero de forma directa: Nombre Completo del contacto, Nombre de la Empresa y la Cantidad aproximada de equipos informáticos a cubrir.
-                    Enlace oficial de la agenda corporativa: https://calendar.app.google/fWjMnrSUUC5cB3BJA
-(Proporciona el enlace de citas del Ingeniero Julio).
+                    Enlace oficial de la agenda corporativa: https://calendar.app.google/fWjMnrSUUC5cB3BJA (Proporciona el enlace de citas del Ingeniero Julio).
                     ⚠️ OBLIGATORIO: En el preciso instante en que le proporciones el link de la agenda, DEBES concatenar al final del mensaje de forma estricta y literal la siguiente etiqueta estructurada de datos en una sola línea sin espacios extras: [DATA_LEAD_B2B]:Nombre Completo|Nombre Empresa|CantidadEquipos`
                 }
             });
@@ -375,7 +369,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 const nombreB2B = camposB2B[0]?.trim() || 'Contacto PYME';
                 const empresaB2B = camposB2B[1]?.trim() || 'Empresa';
                 const equiposB2B = camposB2B[2]?.trim() || 'No especificado';
-
                 const servicioDetectado = calcularServicioDeMensaje(textoSinAcentos);
 
                 await registrarAnaliticaB2BEnSheets(telefono10Digitos, nombreB2B, empresaB2B, equiposB2B, servicioDetectado, 'NUEVO');
@@ -592,18 +585,10 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         if (bloqueos.length > 0) {
             const listaFechas = bloqueos.map((b: any) => {
                 const inicio = new Date(b.fechaInicio).toLocaleDateString('es-MX', {
-                    timeZone: 'UTC',
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
+                    timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
                 });
                 const fin = new Date(b.fechaFin).toLocaleDateString('es-MX', {
-                    timeZone: 'UTC',
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
+                    timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
                 });
                 return `• Del ${inicio} al ${fin} (Motivo: ${b.motivo || 'Fuera de laboratorio / Actividades externas'})`;
             }).join('\n');
@@ -631,13 +616,21 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
     for (let intento = 1; intento <= MAX_REINTENTOS; intento++) {
         try {
             const ai = new GoogleGenAI({ apiKey })
-            const fechaHoyString = new Date().toLocaleDateString('es-MX', {
+
+            // CÁLCULO EXACTO DE FECHAS DE FIN DE SEMANA
+            const hoyCalc = new Date();
+            const fechaHoyString = hoyCalc.toLocaleDateString('es-MX', {
                 timeZone: 'America/Mexico_City',
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
             });
+
+            const sabadoCalc = new Date(hoyCalc);
+            sabadoCalc.setDate(hoyCalc.getDate() + ((6 - hoyCalc.getDay() + 7) % 7));
+            const fechaSabadoISO = sabadoCalc.toISOString().split('T')[0];
+
+            const domingoCalc = new Date(hoyCalc);
+            domingoCalc.setDate(hoyCalc.getDate() + ((0 - hoyCalc.getDay() + 7) % 7));
+            const fechaDomingoISO = domingoCalc.toISOString().split('T')[0];
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -651,6 +644,8 @@ Tono: Cordial, profesional, empático, seguro y muy directo.
 📅 CONTEXTO EN TIEMPO REAL Y SISTEMA
 --------------------------------------------------
 - HOY ES: ${fechaHoyString}
+- PRÓXIMO SÁBADO (FECHA EXACTA): ${fechaSabadoISO}
+- PRÓXIMO DOMINGO (FECHA EXACTA): ${fechaDomingoISO}
 - DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
 - GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
@@ -767,7 +762,7 @@ REGLAS DE RECOPILACIÓN Y OCULTACIÓN DE DIRECCIÓN:
 
 Sigue estos 3 rápidos pasos:
 1. Desde la computadora con el problema, abre Chrome e ingresa a: **remotedesktop.google.com/support**
-2. En la sección 'Recibir asistencia', haz clic en el botón azul para descargar y acepta los permisos de instalación.
+2. En la sección 'Recibir asistencia', haz clic en el botón azul para descargar y acepta los permisos de installation.
 3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un número de 12 dígitos.
 
 Escríbeme o pega ese código aquí abajo para iniciar la sesión de inmediato."
@@ -777,9 +772,23 @@ Escríbeme o pega ese código aquí abajo para iniciar la sesión de inmediato."
 --------------------------------------------------
 7. ESTRUCTURA Y ETIQUETAS DE SALIDA (OBLIGATORIAS AL CONFIRMAR)
 --------------------------------------------------
-Al emitir el mensaje final de confirmación de cita (o soporte remoto), debes concatenar textualmente las siguientes etiquetas al final del mensaje:
+REGLAS DE CALENDARIO Y FECHAS:
+- Próximo Sábado: Usar la fecha exactísima ${fechaSabadoISO}
+- Próximo Domingo: Usar la fecha exactísima ${fechaDomingoISO}
+- Regla de Zona Horaria: Formato ISO con hora local de México en 24h (Ej: 2:00 PM = T14:00:00). NO convertir a UTC.
 
-REGLA DE ZONA HORARIA: Usa la hora local de México en formato de 24 horas (Ej: 2:00 PM = T14:00:00). NO conviertas a UTC.
+Al emitir el mensaje final de confirmación de cita (Visita o Recolección), DEBES concatenar al FINAL del mensaje de forma estricta las siguientes etiquetas:
+
+Para Visita en Laboratorio:
+__AGENDAR_VISITA__: YYYY-MM-DDTHH:mm:ss
+
+Para Recolección a Domicilio:
+__AGENDAR_RECOLECCION__: YYYY-MM-DDTHH:mm:ss
+__DIRECCION_CLIENTE__: <Dirección completa>
+
+Etiquetas complementarias obligatorias:
+[DATA_CRM]: <Nombre Completo> | <Equipo> | <Falla>
+[DATA_FISCAL]: <SI/NO> | <RFC> | <Razón Social> | <CP> | <Régimen> | <Uso CFDI> | <Correo>
 `
                 }
             })
@@ -805,19 +814,29 @@ REGLA DE ZONA HORARIA: Usa la hora local de México en formato de 24 horas (Ej: 
         const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
         const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
 
-        const matchVisita = respuestaRaw.match(/__AGENDAR_VISITA__:\s*([^\n\r]+)/i)
-        const matchRecoleccion = respuestaRaw.match(/__AGENDAR_RECOLECCION__:\s*([^\n\r]+)/i)
+        // PARSER MEJORADO Y FLEXIBLE PARA ETIQUETAS DE CITA
+        const matchVisita = respuestaRaw.match(/_?_?AGENDAR_VISITA_?_?:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?FECHA_CITA_?_?:\s*([^\n\r]+)/i)
+        const matchRecoleccion = respuestaRaw.match(/_?_?AGENDAR_RECOLECCION_?_?:\s*([^\n\r]+)/i)
         const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:\s*([^\n\r]+)/i)
 
-        const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/__DATOS_CRM__:\s*([^\n\r]+)/i)
+        const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?DATOS_CRM_?_?:\s*([^\n\r]+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:\s*([^\n\r]+)/i)
 
         let respuestaWhatsApp = respuestaRaw
-            .replace(/__AGENDAR_VISITA__:[^\n]*/gi, '')
-            .replace(/__AGENDAR_RECOLECCION__:[^\n]*/gi, '')
+            .replace(/_?_?AGENDAR_VISITA_?_?:[^\n]*/gi, '')
+            .replace(/_?_?AGENDAR_RECOLECCION_?_?:[^\n]*/gi, '')
+            .replace(/_?_?FECHA_CITA_?_?:[^\n]*/gi, '')
+            .replace(/_?_?HORA_CITA_?_?:[^\n]*/gi, '')
+            .replace(/_?_?MODALIDAD_?_?:[^\n]*/gi, '')
+            .replace(/_?_?NOMBRE_CLIENTE_?_?:[^\n]*/gi, '')
+            .replace(/_?_?TIPO_SERVICIO_?_?:[^\n]*/gi, '')
+            .replace(/_?_?FACTURA_?_?:[^\n]*/gi, '')
+            .replace(/_?_?FOLIO_ORDEN_?_?:[^\n]*/gi, '')
+            .replace(/_?_?COSTO_PACTADO_?_?:[^\n]*/gi, '')
+            .replace(/_?_?ESTADO_ORDEN_?_?:[^\n]*/gi, '')
             .replace(/_?_?DIRECCION_CLIENTE_?_?:[^\n]*/gi, '')
             .replace(/\[DATA_CRM\]:[^\n]*/gi, '')
-            .replace(/__DATOS_CRM__:[^\n]*/gi, '')
+            .replace(/_?_?DATOS_CRM_?_?:[^\n]*/gi, '')
             .replace(/\[DATA_FISCAL\]:[^\n]*/gi, '')
             .replace(/_*DATOS_FISCAL(ES)?_*:[^\n]*/gi, '')
             .replace(/__TRANSFERIR_HUMANO__/gi, '')
@@ -949,7 +968,7 @@ REGLA DE ZONA HORARIA: Usa la hora local de México en formato de 24 horas (Ej: 
                             }
                         });
 
-                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial`)
+                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial para el ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`)
                     }
                     estatusLead = 'AGENDADO'
                 } else {
