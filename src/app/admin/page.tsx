@@ -34,7 +34,7 @@ export default function AdminDashboard() {
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
 
-    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING
+    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING SIN PARPADEO
     const chatEndRef = useRef<HTMLDivElement | null>(null)
     const historialRef = useRef<any[]>([])
     historialRef.current = historialDirecto
@@ -69,7 +69,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO (SILENCIOSO)
+    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO (COMPLETAMENTE SILENCIOSO)
     const consultarHistorialTelefono = async (num: string, silenciarCarga = false) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -82,23 +82,19 @@ export default function AdminDashboard() {
             const res = await fetch(`/api/admin/mensajes?telefono=${cleanNum}`)
             const data = await res.json()
             if (res.ok) {
-                const nuevosMsgs = data.mensajes || []
+                const nuevosMsgs = data.comparableMensajes || data.mensajes || []
 
-                // 🤐 COMPARA SI REALMENTE CAMBIARON LOS MENSAJES PARA EVITAR RE-RENDERS QUE MUEVAN LA PANTALLA
+                // 🤐 COMPARA SI REALMENTE CAMBIARON LOS MENSAJES PARA EVITAR RE-RENDERS Y PARPADEO
                 const esDiferente = JSON.stringify(nuevosMsgs) !== JSON.stringify(historialRef.current)
                 if (esDiferente) {
                     setHistorialDirecto(nuevosMsgs)
                 }
-                setEstadoBotDirecto(data.cliente ? data.cliente.atendidoPorBot : true)
-            } else {
-                if (!silenciarCarga) {
-                    setHistorialDirecto([])
-                    setEstadoBotDirecto(null)
-                }
+
+                const botActivoReal = data.cliente ? data.cliente.atendidoPorBot : true
+                setEstadoBotDirecto(botActivoReal)
             }
         } catch (err) {
             console.error("Error al cargar chat", err)
-            if (!silenciarCarga) setHistorialDirecto([])
         } finally {
             if (!silenciarCarga) setCargandoHistorial(false)
         }
@@ -115,10 +111,12 @@ export default function AdminDashboard() {
         return () => clearInterval(intervaloGlobal)
     }, [])
 
+    // 🎯 CARGA DE CHAT SELECCIONADO (SIN VINCULAR A LA LISTA COMPLETA DE TICKETS PARA EVITAR RE-EJECUCIONES)
     useEffect(() => {
         if (telefonoRescate) {
-            esPrimeraCargaChat.current = true // Restablece candado de scroll al cambiar de cliente
-            consultarHistorialTelefono(telefonoRescate)
+            esPrimeraCargaChat.current = true
+            consultarHistorialTelefono(telefonoRescate, false)
+
             const ticketAsociado = tickets.find(t => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10)))
             setTicketSeleccionado(ticketAsociado || null)
             if (ticketAsociado?.costoReparacion) {
@@ -127,15 +125,14 @@ export default function AdminDashboard() {
                 setCostoReparacion('')
             }
 
-            // 🔄 Polling silencioso
             const intervaloChat = setInterval(() => {
                 consultarHistorialTelefono(telefonoRescate, true)
             }, 5000)
             return () => clearInterval(intervaloChat)
         }
-    }, [telefonoRescate, tickets])
+    }, [telefonoRescate])
 
-    // 🔒 DESPLAZAMIENTO INTELIGENTE: SÓLO AL ABRIR CHAT O AL ENVIAR UN MENSAJE
+    // 🔒 SCROLL INTELIGENTE: SÓLO AL ABRIR CHAT O AL MANDAR UN MENSAJE
     useEffect(() => {
         if (esPrimeraCargaChat.current && historialDirecto.length > 0) {
             chatEndRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -143,7 +140,7 @@ export default function AdminDashboard() {
         }
     }, [historialDirecto])
 
-    // ⚡ UNIFICACIÓN ATÓMICA DE TICKETS + CONVERSACIONES DE WHATSAPP
+    // ⚡ UNIFICACIÓN ATÓMICA DE TICKETS + CONVERSACIONES
     const listaUnificada = (() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
@@ -156,6 +153,11 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
+            // Prioridad absoluta al estado manual del cliente
+            const botActivoCalculado = convAsociada?.atendidoPorBot === false
+                ? false
+                : (ticket.botActivo ?? convAsociada?.atendidoPorBot ?? true)
+
             items.push({
                 id: ticket.id,
                 tipo: esTallerOficial ? 'taller' : 'lead',
@@ -166,14 +168,14 @@ export default function AdminDashboard() {
                 falla: ticket.fallaReportada,
                 costo: ticket.costoReparacion || ticket.costoEstimado || '',
                 estadoTaller: ticket.estado,
-                botActivo: ticket.botActivo ?? convAsociada?.atendidoPorBot ?? true,
+                botActivo: botActivoCalculado,
                 ultimoMensaje: convAsociada?.mensajes?.[0] || null,
                 ticketOriginal: ticket,
                 clienteId: ticket.clienteId
             })
         })
 
-        // 2️⃣ Añadir conversaciones sueltas de WhatsApp que no tengan ticket registrado aún
+        // 2️⃣ Añadir conversaciones sueltas de WhatsApp
         conversaciones.forEach(conv => {
             const tel10 = conv.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (!telefonosProcesados.has(tel10)) {
@@ -201,7 +203,7 @@ export default function AdminDashboard() {
         return items
     })()
 
-    // 🎯 FILTRADO POR BÚSQUEDA Y PESTAÑA
+    // 🎯 FILTRADO UNIFICADO POR BÚSQUEDA Y PESTAÑA
     const itemsFiltrados = listaUnificada.filter((item) => {
         const term = busqueda.toLowerCase().trim()
         const coincideBusqueda =
@@ -248,8 +250,7 @@ export default function AdminDashboard() {
                 setMensajeRescate('')
                 setArchivoAdjunto(null)
 
-                // Mueve la vista al fondo cuando TÚ envías un mensaje
-                esPrimeraCargaChat.current = true
+                esPrimeraCargaChat.current = true // Fuerza el scroll al fondo al enviar mensaje propio
                 consultarHistorialTelefono(telefonoRescate, true)
                 cargarListaConversaciones()
                 setEstadoBotDirecto(false)
@@ -417,7 +418,7 @@ export default function AdminDashboard() {
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
 
-            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN TOTALMENTE RESPONSIVA EN CELULAR */}
+            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN RESPONSIVA */}
             <header className="h-auto min-h-[3.5rem] py-2 bg-zinc-950 border-b border-zinc-900 px-3 sm:px-4 flex items-center justify-between shrink-0 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <h1 className="text-base sm:text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
@@ -426,7 +427,6 @@ export default function AdminDashboard() {
                     </span>
                 </div>
 
-                {/* BOTONES DE ENCABEZADO: RECIBIR EQUIPO VISIBLE SIEMPRE EN MÓVIL */}
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                     <Link
                         href="/admin/ingreso"
@@ -664,10 +664,10 @@ export default function AdminDashboard() {
                                         onClick={toggleBotActual}
                                         className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-lg border transition-all ${estadoBotDirecto
                                             ? 'bg-emerald-950 text-emerald-400 border-emerald-800 hover:bg-emerald-900'
-                                            : 'bg-rose-950 text-rose-400 border-rose-800 animate-pulse hover:bg-rose-900'
+                                            : 'bg-rose-950 text-rose-400 border-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.4)] animate-pulse hover:bg-rose-900'
                                             }`}
                                     >
-                                        {estadoBotDirecto ? '🤖 IA Activa' : '🚨 Manual'}
+                                        {estadoBotDirecto ? '🤖 IA Activa' : '🚨 MODO MANUAL ACTIVO'}
                                     </button>
                                 </div>
                             </div>
@@ -739,8 +739,9 @@ export default function AdminDashboard() {
                                                         <span className="font-bold">{esCliente ? '👤 Cliente' : '🛠️ Taller'}</span>
                                                     </div>
                                                     <p className="text-xs">{m.texto}</p>
-                                                    <div className="text-[9px] font-mono text-right mt-1 opacity-50">
-                                                        {new Date(m.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                                    <div className="flex items-center justify-end gap-1 text-[9px] font-mono mt-1 opacity-60">
+                                                        <span>{new Date(m.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        {!esCliente && <span className="text-emerald-400 font-bold" title="Mensaje enviado vía Meta Cloud API">✓✓</span>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -997,4 +998,3 @@ export default function AdminDashboard() {
         </div>
     )
 }
-/*vercel contesta*/
