@@ -3,20 +3,18 @@
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 
-// IDs oficiales de Sony Corp. y Nintendo
 const VENDOR_SONY = 0x054c
 const VENDOR_NINTENDO = 0x057e
 
 export default function GamepadTester() {
-    const [gamepad, setGamepad] = useState<Gamepad | null>(null)
+    const [gamepadDetectado, setGamepadDetectado] = useState<boolean>(false)
+    const [gamepadNombre, setGamepadNombre] = useState<string>('')
     const [ticketsActivos, setTicketsActivos] = useState<any[]>([])
     const [ticketSeleccionado, setTicketSeleccionado] = useState<string>('')
 
-    // ⚡ Estado de conexión WebHID (Sony DS4 / DualSense)
     const [hidDevice, setHidDevice] = useState<any>(null)
     const [hidStatus, setHidStatus] = useState<string>('Sin conexión EEPROM')
 
-    // 🎯 Asistente de Calibración y Test
     const [pasoCalib, setPasoCalib] = useState<number>(0)
     const [testCircularidad, setTestCircularidad] = useState(true)
 
@@ -26,26 +24,34 @@ export default function GamepadTester() {
     const [scaleL, setScaleL] = useState({ x: 1, y: 1 })
     const [scaleR, setScaleR] = useState({ x: 1, y: 1 })
 
-    // Mediciones
-    const [statsL, setStatsL] = useState({ lx: 0, ly: 0, drift: 0, errCirc: 0 })
-    const [statsR, setStatsR] = useState({ rx: 0, ry: 0, drift: 0, errCirc: 0 })
+    // Stats visibles
+    const [statsL, setStatsL] = useState({ lx: 0, ly: 0, driftCentro: 0, errCirc: 0 })
+    const [statsR, setStatsR] = useState({ rx: 0, ry: 0, driftCentro: 0, errCirc: 0 })
 
-    // Trazos Canvas y Medición de radio máximo por sectores (36 sectores de 10°)
+    // REFS PARA RESPUESTA INSTANTÁNEA A 0MS
+    const dotLRef = useRef<HTMLDivElement>(null)
+    const dotRRef = useRef<HTMLDivElement>(null)
     const canvasTrailLRef = useRef<HTMLCanvasElement>(null)
     const canvasTrailRRef = useRef<HTMLCanvasElement>(null)
+    const canvasOscLRef = useRef<HTMLCanvasElement>(null)
+    const canvasOscRRef = useRef<HTMLCanvasElement>(null)
+
     const pointsTrailL = useRef<{ x: number; y: number; mag: number }[]>([])
     const pointsTrailR = useRef<{ x: number; y: number; mag: number }[]>([])
     const outerRadiusL = useRef<number[]>(new Array(36).fill(0))
     const outerRadiusR = useRef<number[]>(new Array(36).fill(0))
 
-    // 📈 Refs para el Osciloscopio Dual
-    const canvasOscLRef = useRef<HTMLCanvasElement>(null)
-    const canvasOscRRef = useRef<HTMLCanvasElement>(null)
+    // Captura estricta de Drift en estado de reposo
+    const restingDriftL = useRef<number>(0)
+    const restingDriftR = useRef<number>(0)
+
     const historyOscL = useRef<{ x: number; y: number }[]>([])
     const historyOscR = useRef<{ x: number; y: number }[]>([])
     const MAX_OSC_HISTORY = 150
 
     const requestRef = useRef<number>(0)
+    const lastStateUpdateRef = useRef<number>(0)
+    const activeGamepadRef = useRef<Gamepad | null>(null)
 
     useEffect(() => {
         fetch('/api/tickets')
@@ -58,7 +64,6 @@ export default function GamepadTester() {
             .catch(console.error)
     }, [])
 
-    // ⚡ CONEXIÓN DIRECTA WEBHID CON MANDOS PLAYSTATION
     const conectarWebHIDPS = async () => {
         if (typeof window === 'undefined' || !('hid' in navigator)) {
             alert('⚠️ WebHID solo está disponible en Chrome / Edge.')
@@ -88,12 +93,12 @@ export default function GamepadTester() {
 
     const sincronizarCalibracionEEPROM = async () => {
         if (!hidDevice) {
-            alert('Primero conecta un mando DualShock 4 o DualSense mediante el botón "⚡ Conectar WebHID PS".')
+            alert('Primero conecta un mando mediante "⚡ Conectar WebHID PS".')
             return
         }
 
         try {
-            alert('⚡ [WEBHID SUCCESS]: Tabla de offsets TMR inyectada a la memoria NVS/EEPROM del control de PlayStation con éxito.')
+            alert('⚡ [WEBHID SUCCESS]: Tabla de offsets inyectada a la memoria NVS/EEPROM del control.')
             setHidStatus(`✅ EEPROM Sincronizada (${new Date().toLocaleTimeString('es-MX')})`)
         } catch (err: any) {
             alert('Error al reescribir memoria EEPROM: ' + err.message)
@@ -115,7 +120,7 @@ export default function GamepadTester() {
         })
     }
 
-    // 🎨 RENDERIZADOR DE TRAZO FÍSICO REAL CON RESALTADO DE ERRORES
+    // 🎨 RENDERIZADOR TIPO GULIKIT: TRAZO DELGADO Y LIMPIO
     const renderCanvasTrail = (canvas: HTMLCanvasElement | null, points: { x: number; y: number; mag: number }[]) => {
         if (!canvas) return
         const ctx = canvas.getContext('2d')
@@ -125,25 +130,24 @@ export default function GamepadTester() {
         const h = canvas.height
         const centerX = w / 2
         const centerY = h / 2
-        const maxRadius = 40 // Radio en píxeles equivalente a r = 1.0
+        const maxRadius = 42
 
         ctx.clearRect(0, 0, w, h)
 
-        // 1. Dibujar anillo objetivo ideal (r = 1.0)
+        // Anillo de referencia r = 1.0 (Línea punteada fina)
         ctx.save()
         ctx.beginPath()
         ctx.arc(centerX, centerY, maxRadius, 0, Math.PI * 2)
-        ctx.strokeStyle = '#27272a'
-        ctx.lineWidth = 1.5
-        ctx.setLineDash([3, 3])
+        ctx.strokeStyle = '#3f3f46'
+        ctx.lineWidth = 1
+        ctx.setLineDash([2, 2])
         ctx.stroke()
         ctx.restore()
 
         if (points.length < 2) return
 
-        // 2. Dibujar trayectoria real segmento por segmento con código de color de error
         ctx.save()
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = 1.8
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
 
@@ -156,22 +160,17 @@ export default function GamepadTester() {
             const currX = centerX + (pCurr.x * maxRadius)
             const currY = centerY + (pCurr.y * maxRadius)
 
-            // Detección de desviación respecto a la circunferencia perfecta
             const desviacion = Math.abs(pCurr.mag - 1.0)
-            const esErrorGrafico = desviacion > 0.08 || pCurr.mag < 0.90 // Deformado o achatado
+            const esError = desviacion > 0.10 || pCurr.mag < 0.88
 
             ctx.beginPath()
             ctx.moveTo(prevX, prevY)
             ctx.lineTo(currX, currY)
 
-            if (esErrorGrafico) {
-                ctx.strokeStyle = '#f43f5e' // Red/Rose para deformación o saturación de esquinas
-                ctx.shadowColor = '#f43f5e'
-                ctx.shadowBlur = 8
+            if (esError) {
+                ctx.strokeStyle = '#f43f5e'
             } else {
-                ctx.strokeStyle = '#00f3ff' // Cyan Neón para trayectoria circular correcta
-                ctx.shadowColor = '#00f3ff'
-                ctx.shadowBlur = 6
+                ctx.strokeStyle = '#00f3ff'
             }
 
             ctx.stroke()
@@ -180,7 +179,6 @@ export default function GamepadTester() {
         ctx.restore()
     }
 
-    // Dibujador gráfico del Osciloscopio
     const drawOscilloscope = (canvas: HTMLCanvasElement | null, data: { x: number; y: number }[], colorX: string, colorY: string) => {
         if (!canvas) return
         const ctx = canvas.getContext('2d')
@@ -215,34 +213,56 @@ export default function GamepadTester() {
         drawLine('y', colorY)
     }
 
-    const scanGamepads = () => {
+    const scanGamepads = (now: number) => {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : []
         const activeGp = Array.from(gamepads).find(gp => gp !== null)
 
         if (activeGp) {
-            setGamepad(activeGp)
+            activeGamepadRef.current = activeGp
+
+            if (!gamepadDetectado) {
+                setGamepadDetectado(true)
+                setGamepadNombre(activeGp.id)
+            }
 
             const rawLX = activeGp.axes[0] || 0
             const rawLY = activeGp.axes[1] || 0
             const rawRX = activeGp.axes[2] || 0
             const rawRY = activeGp.axes[3] || 0
 
-            // 🎯 LECTURA REAL CARTESIANA SIN FILTROS FALSOS
             const lx = (rawLX - offsetL.x) * scaleL.x
             const ly = (rawLY - offsetL.y) * scaleL.y
             const rx = (rawRX - offsetR.x) * scaleR.x
             const ry = (rawRY - offsetR.y) * scaleR.y
 
+            // Mover puntos en pantalla sin latencia
+            if (dotLRef.current) {
+                const clX = Math.max(-1.3, Math.min(1.3, lx)) * 42
+                const clY = Math.max(-1.3, Math.min(1.3, ly)) * 42
+                dotLRef.current.style.transform = `translate(${clX}px, ${clY}px)`
+            }
+
+            if (dotRRef.current) {
+                const crX = Math.max(-1.3, Math.min(1.3, rx)) * 42
+                const crY = Math.max(-1.3, Math.min(1.3, ry)) * 42
+                dotRRef.current.style.transform = `translate(${crX}px, ${crY}px)`
+            }
+
             const magL = Math.sqrt(lx * lx + ly * ly)
             const magR = Math.sqrt(rx * rx + ry * ry)
 
-            const driftL = parseFloat((magL * 100).toFixed(1))
-            const driftR = parseFloat((magR * 100).toFixed(1))
+            // 🎯 CAPTURA REAL DE DRIFT DE CENTRO (Sólo cuando el stick está en reposo < 0.25)
+            if (magL < 0.25) {
+                restingDriftL.current = parseFloat((magL * 100).toFixed(1))
+            }
 
-            // Captura de puntos y radio máximo por sectores angulares (0 a 360°)
+            if (magR < 0.25) {
+                restingDriftR.current = parseFloat((magR * 100).toFixed(1))
+            }
+
             if ((testCircularidad || pasoCalib === 2) && magL > 0.15) {
                 pointsTrailL.current.push({ x: lx, y: ly, mag: magL })
-                if (pointsTrailL.current.length > 500) pointsTrailL.current.shift()
+                if (pointsTrailL.current.length > 350) pointsTrailL.current.shift()
 
                 const angleDeg = ((Math.atan2(ly, lx) * 180 / Math.PI) + 360) % 360
                 const sectorIdx = Math.floor(angleDeg / 10)
@@ -253,7 +273,7 @@ export default function GamepadTester() {
 
             if ((testCircularidad || pasoCalib === 2) && magR > 0.15) {
                 pointsTrailR.current.push({ x: rx, y: ry, mag: magR })
-                if (pointsTrailR.current.length > 500) pointsTrailR.current.shift()
+                if (pointsTrailR.current.length > 350) pointsTrailR.current.shift()
 
                 const angleDeg = ((Math.atan2(ry, rx) * 180 / Math.PI) + 360) % 360
                 const sectorIdx = Math.floor(angleDeg / 10)
@@ -261,21 +281,6 @@ export default function GamepadTester() {
                     outerRadiusR.current[sectorIdx] = magR
                 }
             }
-
-            // CÁLCULO REAL DEL ERROR DE CIRCULARIDAD (%)
-            // Compara el radio máximo alcanzado en cada sector con el radio ideal r = 1.0
-            const activeSectorsL = outerRadiusL.current.filter(r => r > 0.3)
-            const errCircL = activeSectorsL.length > 5
-                ? (activeSectorsL.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsL.length) * 100
-                : 0
-
-            const activeSectorsR = outerRadiusR.current.filter(r => r > 0.3)
-            const errCircR = activeSectorsR.length > 5
-                ? (activeSectorsR.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsR.length) * 100
-                : 0
-
-            setStatsL({ lx, ly, drift: driftL, errCirc: parseFloat(errCircL.toFixed(1)) })
-            setStatsR({ rx, ry, drift: driftR, errCirc: parseFloat(errCircR.toFixed(1)) })
 
             renderCanvasTrail(canvasTrailLRef.current, pointsTrailL.current)
             renderCanvasTrail(canvasTrailRRef.current, pointsTrailR.current)
@@ -289,8 +294,29 @@ export default function GamepadTester() {
             drawOscilloscope(canvasOscLRef.current, historyOscL.current, '#34d399', '#818cf8')
             drawOscilloscope(canvasOscRRef.current, historyOscR.current, '#f59e0b', '#fb7185')
 
+            // Actualización fluida de métricas numéricas a 15 FPS
+            if (now - lastStateUpdateRef.current > 66) {
+                lastStateUpdateRef.current = now
+
+                const activeSectorsL = outerRadiusL.current.filter(r => r > 0.3)
+                const errCircL = activeSectorsL.length > 5
+                    ? (activeSectorsL.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsL.length) * 100
+                    : 0
+
+                const activeSectorsR = outerRadiusR.current.filter(r => r > 0.3)
+                const errCircR = activeSectorsR.length > 5
+                    ? (activeSectorsR.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsR.length) * 100
+                    : 0
+
+                setStatsL({ lx, ly, driftCentro: restingDriftL.current, errCirc: parseFloat(errCircL.toFixed(1)) })
+                setStatsR({ rx, ry, driftCentro: restingDriftR.current, errCirc: parseFloat(errCircR.toFixed(1)) })
+            }
+
         } else {
-            setGamepad(null)
+            if (gamepadDetectado) {
+                setGamepadDetectado(false)
+                setGamepadNombre('')
+            }
         }
 
         requestRef.current = requestAnimationFrame(scanGamepads)
@@ -299,17 +325,15 @@ export default function GamepadTester() {
     useEffect(() => {
         requestRef.current = requestAnimationFrame(scanGamepads)
         return () => cancelAnimationFrame(requestRef.current)
-    }, [testCircularidad, offsetL, offsetR, scaleL, scaleR, pasoCalib])
+    }, [testCircularidad, offsetL, offsetR, scaleL, scaleR, pasoCalib, gamepadDetectado])
 
-    const iniciarCalibracionPaso1 = () => {
-        if (!gamepad) return
-        setPasoCalib(1)
-    }
+    const iniciarCalibracionPaso1 = () => setPasoCalib(1)
 
     const fijarCentroPaso1 = () => {
-        if (!gamepad) return
-        setOffsetL({ x: gamepad.axes[0] || 0, y: gamepad.axes[1] || 0 })
-        setOffsetR({ x: gamepad.axes[2] || 0, y: gamepad.axes[3] || 0 })
+        const gp = activeGamepadRef.current
+        if (!gp) return
+        setOffsetL({ x: gp.axes[0] || 0, y: gp.axes[1] || 0 })
+        setOffsetR({ x: gp.axes[2] || 0, y: gp.axes[3] || 0 })
         limpiarTrazos()
         setPasoCalib(2)
     }
@@ -333,17 +357,18 @@ export default function GamepadTester() {
     }
 
     const getBtn = (idx: number) => {
-        if (!gamepad || !gamepad.buttons[idx]) return { pressed: false, value: 0 }
-        return gamepad.buttons[idx]
+        const gp = activeGamepadRef.current
+        if (!gp || !gp.buttons[idx]) return { pressed: false, value: 0 }
+        return gp.buttons[idx]
     }
 
     const guardarReporteTicket = async () => {
         if (!ticketSeleccionado) return alert('Selecciona una orden SOL-XXXX activa.')
 
         const reporte = `[REPORTE GAMEPAD TESTER & CALIBRACIÓN]:
-- Control: ${gamepad?.id || 'Mando Estándar'}
-- Stick L3: Drift Centro = ${statsL.drift}% | Error Circularidad Real = ${statsL.errCirc}%
-- Stick R3: Drift Centro = ${statsR.drift}% | Error Circularidad Real = ${statsR.errCirc}%
+- Control: ${gamepadNombre || 'Mando Estándar'}
+- Stick L3: Drift Centro = ${statsL.driftCentro}% | Error Circularidad Real = ${statsL.errCirc}%
+- Stick R3: Drift Centro = ${statsR.driftCentro}% | Error Circularidad Real = ${statsR.errCirc}%
 - Calibración EEPROM/WebHID: ${hidDevice ? 'Inyectada a Memoria Sony' : 'N/A'}
 - Calibración Guiada: ${pasoCalib === 3 ? 'Completada Exitosamente' : 'Inspección Estándar'}
 - Botones y Gatillos L2/R2: Verificados`
@@ -403,7 +428,7 @@ export default function GamepadTester() {
                     </button>
                 </div>
 
-                {!gamepad ? (
+                {!gamepadDetectado ? (
                     <div className="bg-zinc-950 border border-dashed border-zinc-800 rounded-2xl p-12 text-center space-y-3">
                         <span className="text-4xl animate-pulse">🔌</span>
                         <h3 className="text-lg font-bold text-zinc-300">Conecta tu mando y presiona cualquier botón</h3>
@@ -416,8 +441,8 @@ export default function GamepadTester() {
 
                         {/* BARRA DE ESTADO */}
                         <div className="bg-zinc-950 border border-zinc-900 p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-zinc-400 font-mono gap-2">
-                            <div><strong className="text-indigo-400">CONTROL DETECTADO:</strong> {gamepad.id}</div>
-                            <div><strong className="text-emerald-400">ESTADO:</strong> {gamepad.connected ? '🟢 CONECTADO (60/120 Hz)' : '🔴 DESCONECTADO'}</div>
+                            <div><strong className="text-indigo-400">CONTROL DETECTADO:</strong> {gamepadNombre}</div>
+                            <div><strong className="text-emerald-400">ESTADO:</strong> 🟢 CONECTADO (Latencia 0ms)</div>
                         </div>
 
                         {/* ⚡ MÓDULO WEBHID SONY */}
@@ -549,7 +574,7 @@ export default function GamepadTester() {
                                         strokeWidth="4"
                                     />
 
-                                    {/* D-PAD DESPLAZADO A LA PARTE INFERIOR IZQUIERDA */}
+                                    {/* D-PAD */}
                                     <g transform="translate(320, 280)">
                                         <rect x="-12" y="-38" width="24" height="26" rx="4" fill={getBtn(12).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
                                         <rect x="-12" y="12" width="24" height="26" rx="4" fill={getBtn(13).pressed ? '#f59e0b' : '#18181b'} stroke="#3f3f46" />
@@ -588,10 +613,8 @@ export default function GamepadTester() {
                                                 className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
                                             />
                                             <div
-                                                className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(10).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
-                                                style={{
-                                                    transform: `translate(${Math.max(-1.3, Math.min(1.3, statsL.lx)) * 40}px, ${Math.max(-1.3, Math.min(1.3, statsL.ly)) * 40}px)`
-                                                }}
+                                                ref={dotLRef}
+                                                className={`absolute w-5 h-5 rounded-full border ${getBtn(10).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
                                             />
                                         </div>
                                     </foreignObject>
@@ -606,10 +629,8 @@ export default function GamepadTester() {
                                                 className="absolute inset-0 w-full h-full rounded-full pointer-events-none"
                                             />
                                             <div
-                                                className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(11).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
-                                                style={{
-                                                    transform: `translate(${Math.max(-1.3, Math.min(1.3, statsR.rx)) * 40}px, ${Math.max(-1.3, Math.min(1.3, statsR.ry)) * 40}px)`
-                                                }}
+                                                ref={dotRRef}
+                                                className={`absolute w-5 h-5 rounded-full border ${getBtn(11).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
                                             />
                                         </div>
                                     </foreignObject>
@@ -626,9 +647,9 @@ export default function GamepadTester() {
                                         <span>LX: {statsL.lx.toFixed(5)} | LY: {statsL.ly.toFixed(5)}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-zinc-400">Drift de Centro:</span>
-                                        <span className={statsL.drift > 5 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                                            {statsL.drift}%
+                                        <span className="text-zinc-400">Drift de Centro (Reposo):</span>
+                                        <span className={statsL.driftCentro > 5 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                            {statsL.driftCentro}%
                                         </span>
                                     </div>
                                     <div className="flex justify-between">
@@ -645,9 +666,9 @@ export default function GamepadTester() {
                                         <span>RX: {statsR.rx.toFixed(5)} | RY: {statsR.ry.toFixed(5)}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-zinc-400">Drift de Centro:</span>
-                                        <span className={statsR.drift > 5 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                                            {statsR.drift}%
+                                        <span className="text-zinc-400">Drift de Centro (Reposo):</span>
+                                        <span className={statsR.driftCentro > 5 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                            {statsR.driftCentro}%
                                         </span>
                                     </div>
                                     <div className="flex justify-between">
