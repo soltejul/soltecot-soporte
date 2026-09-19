@@ -16,10 +16,9 @@ export default function GamepadTester() {
     const [hidDevice, setHidDevice] = useState<any>(null)
     const [hidStatus, setHidStatus] = useState<string>('Sin conexión EEPROM')
 
-    // 🎯 Asistente de Calibración Guiada (Estilo Xbox / PS)
+    // 🎯 Asistente de Calibración y Test
     const [pasoCalib, setPasoCalib] = useState<number>(0)
     const [testCircularidad, setTestCircularidad] = useState(true)
-    const [mapeoCircular, setMapeoCircular] = useState(true) // ⭕ Activa normalización geométrica
 
     // Offsets y Escalas
     const [offsetL, setOffsetL] = useState({ x: 0, y: 0 })
@@ -31,11 +30,11 @@ export default function GamepadTester() {
     const [statsL, setStatsL] = useState({ lx: 0, ly: 0, drift: 0, errCirc: 0 })
     const [statsR, setStatsR] = useState({ rx: 0, ry: 0, drift: 0, errCirc: 0 })
 
-    // Trazos Canvas y Medición de radio máximo
+    // Trazos Canvas y Medición de radio máximo por sectores (36 sectores de 10°)
     const canvasTrailLRef = useRef<HTMLCanvasElement>(null)
     const canvasTrailRRef = useRef<HTMLCanvasElement>(null)
-    const pointsTrailL = useRef<{ x: number; y: number }[]>([])
-    const pointsTrailR = useRef<{ x: number; y: number }[]>([])
+    const pointsTrailL = useRef<{ x: number; y: number; mag: number }[]>([])
+    const pointsTrailR = useRef<{ x: number; y: number; mag: number }[]>([])
     const outerRadiusL = useRef<number[]>(new Array(36).fill(0))
     const outerRadiusR = useRef<number[]>(new Array(36).fill(0))
 
@@ -47,16 +46,6 @@ export default function GamepadTester() {
     const MAX_OSC_HISTORY = 150
 
     const requestRef = useRef<number>(0)
-
-    // 📐 Helper Matemático: Normaliza ejes cartesianos cuadrados a círculo perfecto
-    const normalizarACirculo = (x: number, y: number) => {
-        const cx = Math.max(-1, Math.min(1, x))
-        const cy = Math.max(-1, Math.min(1, y))
-        return {
-            x: cx * Math.sqrt(Math.max(0, 1 - (cy * cy) / 2)),
-            y: cy * Math.sqrt(Math.max(0, 1 - (cx * cx) / 2))
-        }
-    }
 
     useEffect(() => {
         fetch('/api/tickets')
@@ -126,8 +115,8 @@ export default function GamepadTester() {
         })
     }
 
-    // Dibujo del trazo circular neón con resplandor cyan estilo GuliKit
-    const renderCanvasTrail = (canvas: HTMLCanvasElement | null, points: { x: number; y: number }[]) => {
+    // 🎨 RENDERIZADOR DE TRAZO FÍSICO REAL CON RESALTADO DE ERRORES
+    const renderCanvasTrail = (canvas: HTMLCanvasElement | null, points: { x: number; y: number; mag: number }[]) => {
         if (!canvas) return
         const ctx = canvas.getContext('2d')
         if (!ctx) return
@@ -136,31 +125,58 @@ export default function GamepadTester() {
         const h = canvas.height
         const centerX = w / 2
         const centerY = h / 2
-        const maxRadius = 42
+        const maxRadius = 40 // Radio en píxeles equivalente a r = 1.0
 
         ctx.clearRect(0, 0, w, h)
+
+        // 1. Dibujar anillo objetivo ideal (r = 1.0)
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, maxRadius, 0, Math.PI * 2)
+        ctx.strokeStyle = '#27272a'
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([3, 3])
+        ctx.stroke()
+        ctx.restore()
+
         if (points.length < 2) return
 
+        // 2. Dibujar trayectoria real segmento por segmento con código de color de error
         ctx.save()
-        ctx.shadowColor = '#00f3ff'
-        ctx.shadowBlur = 10
-        ctx.strokeStyle = '#00f3ff'
         ctx.lineWidth = 2.5
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
 
-        ctx.beginPath()
-        points.forEach((p, i) => {
-            const clampedX = Math.max(-1, Math.min(1, p.x))
-            const clampedY = Math.max(-1, Math.min(1, p.y))
+        for (let i = 1; i < points.length; i++) {
+            const pPrev = points[i - 1]
+            const pCurr = points[i]
 
-            const cx = centerX + (clampedX * maxRadius)
-            const cy = centerY + (clampedY * maxRadius)
+            const prevX = centerX + (pPrev.x * maxRadius)
+            const prevY = centerY + (pPrev.y * maxRadius)
+            const currX = centerX + (pCurr.x * maxRadius)
+            const currY = centerY + (pCurr.y * maxRadius)
 
-            if (i === 0) ctx.moveTo(cx, cy)
-            else ctx.lineTo(cx, cy)
-        })
-        ctx.stroke()
+            // Detección de desviación respecto a la circunferencia perfecta
+            const desviacion = Math.abs(pCurr.mag - 1.0)
+            const esErrorGrafico = desviacion > 0.08 || pCurr.mag < 0.90 // Deformado o achatado
+
+            ctx.beginPath()
+            ctx.moveTo(prevX, prevY)
+            ctx.lineTo(currX, currY)
+
+            if (esErrorGrafico) {
+                ctx.strokeStyle = '#f43f5e' // Red/Rose para deformación o saturación de esquinas
+                ctx.shadowColor = '#f43f5e'
+                ctx.shadowBlur = 8
+            } else {
+                ctx.strokeStyle = '#00f3ff' // Cyan Neón para trayectoria circular correcta
+                ctx.shadowColor = '#00f3ff'
+                ctx.shadowBlur = 6
+            }
+
+            ctx.stroke()
+        }
+
         ctx.restore()
     }
 
@@ -211,20 +227,11 @@ export default function GamepadTester() {
             const rawRX = activeGp.axes[2] || 0
             const rawRY = activeGp.axes[3] || 0
 
-            let lx = (rawLX - offsetL.x) * scaleL.x
-            let ly = (rawLY - offsetL.y) * scaleL.y
-            let rx = (rawRX - offsetR.x) * scaleR.x
-            let ry = (rawRY - offsetR.y) * scaleR.y
-
-            // ⭕ APLICA TRANSFORMACIÓN GEOMÉTRICA SI ESTÁ ACTIVO EL MAPEO CIRCULAR
-            if (mapeoCircular) {
-                const normL = normalizarACirculo(lx, ly)
-                const normR = normalizarACirculo(rx, ry)
-                lx = normL.x
-                ly = normL.y
-                rx = normR.x
-                ry = normR.y
-            }
+            // 🎯 LECTURA REAL CARTESIANA SIN FILTROS FALSOS
+            const lx = (rawLX - offsetL.x) * scaleL.x
+            const ly = (rawLY - offsetL.y) * scaleL.y
+            const rx = (rawRX - offsetR.x) * scaleR.x
+            const ry = (rawRY - offsetR.y) * scaleR.y
 
             const magL = Math.sqrt(lx * lx + ly * ly)
             const magR = Math.sqrt(rx * rx + ry * ry)
@@ -232,9 +239,10 @@ export default function GamepadTester() {
             const driftL = parseFloat((magL * 100).toFixed(1))
             const driftR = parseFloat((magR * 100).toFixed(1))
 
+            // Captura de puntos y radio máximo por sectores angulares (0 a 360°)
             if ((testCircularidad || pasoCalib === 2) && magL > 0.15) {
-                pointsTrailL.current.push({ x: lx, y: ly })
-                if (pointsTrailL.current.length > 600) pointsTrailL.current.shift()
+                pointsTrailL.current.push({ x: lx, y: ly, mag: magL })
+                if (pointsTrailL.current.length > 500) pointsTrailL.current.shift()
 
                 const angleDeg = ((Math.atan2(ly, lx) * 180 / Math.PI) + 360) % 360
                 const sectorIdx = Math.floor(angleDeg / 10)
@@ -244,8 +252,8 @@ export default function GamepadTester() {
             }
 
             if ((testCircularidad || pasoCalib === 2) && magR > 0.15) {
-                pointsTrailR.current.push({ x: rx, y: ry })
-                if (pointsTrailR.current.length > 600) pointsTrailR.current.shift()
+                pointsTrailR.current.push({ x: rx, y: ry, mag: magR })
+                if (pointsTrailR.current.length > 500) pointsTrailR.current.shift()
 
                 const angleDeg = ((Math.atan2(ry, rx) * 180 / Math.PI) + 360) % 360
                 const sectorIdx = Math.floor(angleDeg / 10)
@@ -254,14 +262,16 @@ export default function GamepadTester() {
                 }
             }
 
-            const activeSectorsL = outerRadiusL.current.filter(r => r > 0.4)
+            // CÁLCULO REAL DEL ERROR DE CIRCULARIDAD (%)
+            // Compara el radio máximo alcanzado en cada sector con el radio ideal r = 1.0
+            const activeSectorsL = outerRadiusL.current.filter(r => r > 0.3)
             const errCircL = activeSectorsL.length > 5
-                ? (activeSectorsL.reduce((sum, r) => sum + Math.abs(1.0 - r), 0) / activeSectorsL.length) * 100
+                ? (activeSectorsL.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsL.length) * 100
                 : 0
 
-            const activeSectorsR = outerRadiusR.current.filter(r => r > 0.4)
+            const activeSectorsR = outerRadiusR.current.filter(r => r > 0.3)
             const errCircR = activeSectorsR.length > 5
-                ? (activeSectorsR.reduce((sum, r) => sum + Math.abs(1.0 - r), 0) / activeSectorsR.length) * 100
+                ? (activeSectorsR.reduce((sum, r) => sum + Math.abs(r - 1.0), 0) / activeSectorsR.length) * 100
                 : 0
 
             setStatsL({ lx, ly, drift: driftL, errCirc: parseFloat(errCircL.toFixed(1)) })
@@ -289,7 +299,7 @@ export default function GamepadTester() {
     useEffect(() => {
         requestRef.current = requestAnimationFrame(scanGamepads)
         return () => cancelAnimationFrame(requestRef.current)
-    }, [testCircularidad, mapeoCircular, offsetL, offsetR, scaleL, scaleR, pasoCalib])
+    }, [testCircularidad, offsetL, offsetR, scaleL, scaleR, pasoCalib])
 
     const iniciarCalibracionPaso1 = () => {
         if (!gamepad) return
@@ -332,9 +342,8 @@ export default function GamepadTester() {
 
         const reporte = `[REPORTE GAMEPAD TESTER & CALIBRACIÓN]:
 - Control: ${gamepad?.id || 'Mando Estándar'}
-- Stick L3: Drift Centro = ${statsL.drift}% | Error Circularidad = ${statsL.errCirc}%
-- Stick R3: Drift Centro = ${statsR.drift}% | Error Circularidad = ${statsR.errCirc}%
-- Mapeo Circular Filtro: ${mapeoCircular ? 'Normalizado' : 'Cartesiano Directo'}
+- Stick L3: Drift Centro = ${statsL.drift}% | Error Circularidad Real = ${statsL.errCirc}%
+- Stick R3: Drift Centro = ${statsR.drift}% | Error Circularidad Real = ${statsR.errCirc}%
 - Calibración EEPROM/WebHID: ${hidDevice ? 'Inyectada a Memoria Sony' : 'N/A'}
 - Calibración Guiada: ${pasoCalib === 3 ? 'Completada Exitosamente' : 'Inspección Estándar'}
 - Botones y Gatillos L2/R2: Verificados`
@@ -487,29 +496,17 @@ export default function GamepadTester() {
                         {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL INTEGRADO */}
                         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 relative flex flex-col items-center">
 
-                            {/* BARRA DE HERRAMIENTAS DE TRAZO Y CÍRCULO */}
+                            {/* BARRA DE HERRAMIENTAS DE TRAZO */}
                             <div className="flex flex-wrap items-center justify-between w-full border-b border-zinc-900 pb-4 mb-6 gap-3 text-xs">
-                                <div className="flex flex-wrap items-center gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-300">
-                                        <input
-                                            type="checkbox"
-                                            checked={testCircularidad}
-                                            onChange={(e) => setTestCircularidad(e.target.checked)}
-                                            className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
-                                        />
-                                        <span>Trazar Trayectoria de Giro</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-400">
-                                        <input
-                                            type="checkbox"
-                                            checked={mapeoCircular}
-                                            onChange={(e) => setMapeoCircular(e.target.checked)}
-                                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
-                                        />
-                                        <span>⭕ Mapeo a Círculo Perfecto (Squircle Filter)</span>
-                                    </label>
-                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={testCircularidad}
+                                        onChange={(e) => setTestCircularidad(e.target.checked)}
+                                        className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                                    />
+                                    <span>Trazar Trayectoria Real (Detección de Deformación)</span>
+                                </label>
 
                                 <button
                                     onClick={limpiarTrazos}
@@ -593,7 +590,7 @@ export default function GamepadTester() {
                                             <div
                                                 className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(10).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
                                                 style={{
-                                                    transform: `translate(${Math.max(-1, Math.min(1, statsL.lx)) * 42}px, ${Math.max(-1, Math.min(1, statsL.ly)) * 42}px)`
+                                                    transform: `translate(${Math.max(-1.3, Math.min(1.3, statsL.lx)) * 40}px, ${Math.max(-1.3, Math.min(1.3, statsL.ly)) * 40}px)`
                                                 }}
                                             />
                                         </div>
@@ -611,7 +608,7 @@ export default function GamepadTester() {
                                             <div
                                                 className={`absolute w-5 h-5 rounded-full transition-transform duration-75 border ${getBtn(11).pressed ? 'bg-purple-500 border-white scale-125' : 'bg-sky-400 border-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.9)]'}`}
                                                 style={{
-                                                    transform: `translate(${Math.max(-1, Math.min(1, statsR.rx)) * 42}px, ${Math.max(-1, Math.min(1, statsR.ry)) * 42}px)`
+                                                    transform: `translate(${Math.max(-1.3, Math.min(1.3, statsR.rx)) * 40}px, ${Math.max(-1.3, Math.min(1.3, statsR.ry)) * 40}px)`
                                                 }}
                                             />
                                         </div>
@@ -635,7 +632,7 @@ export default function GamepadTester() {
                                         </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-zinc-400">Error de Circularidad:</span>
+                                        <span className="text-zinc-400">Error de Circularidad Real:</span>
                                         <span className={statsL.errCirc > 10 ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}>
                                             {statsL.errCirc}%
                                         </span>
@@ -654,7 +651,7 @@ export default function GamepadTester() {
                                         </span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-zinc-400">Error de Circularidad:</span>
+                                        <span className="text-zinc-400">Error de Circularidad Real:</span>
                                         <span className={statsR.errCirc > 10 ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}>
                                             {statsR.errCirc}%
                                         </span>
