@@ -3,10 +3,9 @@
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 
-// IDs oficiales de Sony Corp.
+// IDs oficiales de Sony Corp. y Nintendo
 const VENDOR_SONY = 0x054c
 const VENDOR_NINTENDO = 0x057e
-const PRODUCT_SWITCH_PRO = 0x2009
 
 export default function GamepadTester() {
     const [gamepad, setGamepad] = useState<Gamepad | null>(null)
@@ -20,6 +19,7 @@ export default function GamepadTester() {
     // 🎯 Asistente de Calibración Guiada (Estilo Xbox / PS)
     const [pasoCalib, setPasoCalib] = useState<number>(0)
     const [testCircularidad, setTestCircularidad] = useState(true)
+    const [mapeoCircular, setMapeoCircular] = useState(true) // ⭕ Activa normalización geométrica
 
     // Offsets y Escalas
     const [offsetL, setOffsetL] = useState({ x: 0, y: 0 })
@@ -48,6 +48,16 @@ export default function GamepadTester() {
 
     const requestRef = useRef<number>(0)
 
+    // 📐 Helper Matemático: Normaliza ejes cartesianos cuadrados a círculo perfecto
+    const normalizarACirculo = (x: number, y: number) => {
+        const cx = Math.max(-1, Math.min(1, x))
+        const cy = Math.max(-1, Math.min(1, y))
+        return {
+            x: cx * Math.sqrt(Math.max(0, 1 - (cy * cy) / 2)),
+            y: cy * Math.sqrt(Math.max(0, 1 - (cx * cx) / 2))
+        }
+    }
+
     useEffect(() => {
         fetch('/api/tickets')
             .then(res => res.json())
@@ -67,11 +77,10 @@ export default function GamepadTester() {
         }
 
         try {
-            // Permitir selección de controles Sony y Nintendo Switch Pro
             const devices = await (navigator as any).hid.requestDevice({
                 filters: [
-                    { vendorId: VENDOR_SONY },      // DualShock 4 / DualSense PS5
-                    { vendorId: VENDOR_NINTENDO }   // Switch Pro Controller
+                    { vendorId: VENDOR_SONY },
+                    { vendorId: VENDOR_NINTENDO }
                 ]
             })
 
@@ -127,7 +136,7 @@ export default function GamepadTester() {
         const h = canvas.height
         const centerX = w / 2
         const centerY = h / 2
-        const maxRadius = 42 // Sincronización exacta con el radio del Joystick
+        const maxRadius = 42
 
         ctx.clearRect(0, 0, w, h)
         if (points.length < 2) return
@@ -202,10 +211,20 @@ export default function GamepadTester() {
             const rawRX = activeGp.axes[2] || 0
             const rawRY = activeGp.axes[3] || 0
 
-            const lx = (rawLX - offsetL.x) * scaleL.x
-            const ly = (rawLY - offsetL.y) * scaleL.y
-            const rx = (rawRX - offsetR.x) * scaleR.x
-            const ry = (rawRY - offsetR.y) * scaleR.y
+            let lx = (rawLX - offsetL.x) * scaleL.x
+            let ly = (rawLY - offsetL.y) * scaleL.y
+            let rx = (rawRX - offsetR.x) * scaleR.x
+            let ry = (rawRY - offsetR.y) * scaleR.y
+
+            // ⭕ APLICA TRANSFORMACIÓN GEOMÉTRICA SI ESTÁ ACTIVO EL MAPEO CIRCULAR
+            if (mapeoCircular) {
+                const normL = normalizarACirculo(lx, ly)
+                const normR = normalizarACirculo(rx, ry)
+                lx = normL.x
+                ly = normL.y
+                rx = normR.x
+                ry = normR.y
+            }
 
             const magL = Math.sqrt(lx * lx + ly * ly)
             const magR = Math.sqrt(rx * rx + ry * ry)
@@ -270,7 +289,7 @@ export default function GamepadTester() {
     useEffect(() => {
         requestRef.current = requestAnimationFrame(scanGamepads)
         return () => cancelAnimationFrame(requestRef.current)
-    }, [testCircularidad, offsetL, offsetR, scaleL, scaleR, pasoCalib])
+    }, [testCircularidad, mapeoCircular, offsetL, offsetR, scaleL, scaleR, pasoCalib])
 
     const iniciarCalibracionPaso1 = () => {
         if (!gamepad) return
@@ -315,6 +334,7 @@ export default function GamepadTester() {
 - Control: ${gamepad?.id || 'Mando Estándar'}
 - Stick L3: Drift Centro = ${statsL.drift}% | Error Circularidad = ${statsL.errCirc}%
 - Stick R3: Drift Centro = ${statsR.drift}% | Error Circularidad = ${statsR.errCirc}%
+- Mapeo Circular Filtro: ${mapeoCircular ? 'Normalizado' : 'Cartesiano Directo'}
 - Calibración EEPROM/WebHID: ${hidDevice ? 'Inyectada a Memoria Sony' : 'N/A'}
 - Calibración Guiada: ${pasoCalib === 3 ? 'Completada Exitosamente' : 'Inspección Estándar'}
 - Botones y Gatillos L2/R2: Verificados`
@@ -467,17 +487,29 @@ export default function GamepadTester() {
                         {/* SECCIÓN INTERACTIVA CON CONTROL VECTORIAL INTEGRADO */}
                         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 relative flex flex-col items-center">
 
-                            {/* BARRA DE HERRAMIENTAS DE TRAZO */}
+                            {/* BARRA DE HERRAMIENTAS DE TRAZO Y CÍRCULO */}
                             <div className="flex flex-wrap items-center justify-between w-full border-b border-zinc-900 pb-4 mb-6 gap-3 text-xs">
-                                <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-300">
-                                    <input
-                                        type="checkbox"
-                                        checked={testCircularidad}
-                                        onChange={(e) => setTestCircularidad(e.target.checked)}
-                                        className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
-                                    />
-                                    <span>Trazar Trayectoria de Giro</span>
-                                </label>
+                                <div className="flex flex-wrap items-center gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-300">
+                                        <input
+                                            type="checkbox"
+                                            checked={testCircularidad}
+                                            onChange={(e) => setTestCircularidad(e.target.checked)}
+                                            className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                                        />
+                                        <span>Trazar Trayectoria de Giro</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-400">
+                                        <input
+                                            type="checkbox"
+                                            checked={mapeoCircular}
+                                            onChange={(e) => setMapeoCircular(e.target.checked)}
+                                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                                        />
+                                        <span>⭕ Mapeo a Círculo Perfecto (Squircle Filter)</span>
+                                    </label>
+                                </div>
 
                                 <button
                                     onClick={limpiarTrazos}
@@ -487,7 +519,7 @@ export default function GamepadTester() {
                                 </button>
                             </div>
 
-                            {/* ILUSTRACIÓN SVG DEL CONTROL CON JOYSTICKS INTEGRADOS (0 TRASLAPES) */}
+                            {/* ILUSTRACIÓN SVG DEL CONTROL CON JOYSTICKS INTEGRADOS */}
                             <div className="relative w-full max-w-3xl aspect-[1.8/1] bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-center overflow-hidden">
 
                                 <svg viewBox="0 0 800 450" className="w-full h-full select-none">
@@ -549,7 +581,7 @@ export default function GamepadTester() {
                                     <circle cx="440" cy="170" r="9" fill={getBtn(9).pressed ? '#e4e4e7' : '#18181b'} stroke="#3f3f46" />
                                     <circle cx="400" cy="140" r="16" fill={getBtn(16).pressed ? '#34d399' : '#18181b'} stroke="#3f3f46" strokeWidth="2" />
 
-                                    {/* 🎯 JOYSTICK IZQUIERDO (L3) DENTRO DE LA COORDENADA EXACTA SVG */}
+                                    {/* 🎯 JOYSTICK IZQUIERDO (L3) */}
                                     <foreignObject x="180" y="110" width="120" height="120">
                                         <div className="relative w-full h-full rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
                                             <canvas
@@ -567,7 +599,7 @@ export default function GamepadTester() {
                                         </div>
                                     </foreignObject>
 
-                                    {/* 🎯 JOYSTICK DERECHO (R3) DENTRO DE LA COORDENADA EXACTA SVG */}
+                                    {/* 🎯 JOYSTICK DERECHO (R3) */}
                                     <foreignObject x="420" y="220" width="120" height="120">
                                         <div className="relative w-full h-full rounded-full bg-zinc-950/90 border border-zinc-800 flex items-center justify-center">
                                             <canvas
@@ -604,7 +636,9 @@ export default function GamepadTester() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-zinc-400">Error de Circularidad:</span>
-                                        <span className="text-amber-400 font-bold">{statsL.errCirc}%</span>
+                                        <span className={statsL.errCirc > 10 ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}>
+                                            {statsL.errCirc}%
+                                        </span>
                                     </div>
                                 </div>
 
@@ -621,7 +655,9 @@ export default function GamepadTester() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-zinc-400">Error de Circularidad:</span>
-                                        <span className="text-amber-400 font-bold">{statsR.errCirc}%</span>
+                                        <span className={statsR.errCirc > 10 ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}>
+                                            {statsR.errCirc}%
+                                        </span>
                                     </div>
                                 </div>
                             </div>
