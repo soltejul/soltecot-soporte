@@ -11,7 +11,7 @@ export default function AdminDashboard() {
     const [cargando, setCargando] = useState(true)
     const router = useRouter()
 
-    // 📂 PESTAÑAS Y MODALES (NUEVA PESTAÑA AGENDADOS)
+    // 📂 PESTAÑAS Y MODALES
     const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'agendados' | 'leads' | 'taller'>('todos')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
@@ -137,7 +137,7 @@ export default function AdminDashboard() {
         }
     }, [historialDirecto])
 
-    // ⚡ UNIFICACIÓN Y DETECCIÓN AUTOMÁTICA DE CITAS AGENDADAS
+    // ⚡ UNIFICACIÓN Y DETECCIÓN PROFUNDA DE CITAS
     const listaUnificada = (() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
@@ -149,12 +149,14 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
-            // Detección de cita confirmada
-            const ultimoTexto = convAsociada?.mensajes?.[0]?.texto || ''
-            const esAgendado = ticket.estado === 'AGENDADO' ||
-                ultimoTexto.includes('Cita Confirmada') ||
-                ultimoTexto.includes('_FECHA_CITA:') ||
-                ultimoTexto.includes('reservado con éxito')
+            // Detección en historial completo de mensajes
+            const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) =>
+                m.texto?.includes('Cita Confirmada') ||
+                m.texto?.includes('_FECHA_CITA:') ||
+                m.texto?.includes('reservado con éxito')
+            )
+
+            const esAgendado = ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje)
 
             const botActivoCalculado = convAsociada?.atendidoPorBot === false
                 ? false
@@ -183,23 +185,24 @@ export default function AdminDashboard() {
             if (!telefonosProcesados.has(tel10)) {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
-                const ultimoTexto = ultimoMsg?.texto || ''
 
-                const esAgendado = ultimoTexto.includes('Cita Confirmada') ||
-                    ultimoTexto.includes('_FECHA_CITA:') ||
-                    ultimoTexto.includes('reservado con éxito')
+                const tieneConfirmacionMensaje = conv.mensajes?.some((m: any) =>
+                    m.texto?.includes('Cita Confirmada') ||
+                    m.texto?.includes('_FECHA_CITA:') ||
+                    m.texto?.includes('reservado con éxito')
+                )
 
                 items.push({
                     id: conv.id,
                     tipo: 'lead',
-                    esAgendado,
+                    esAgendado: Boolean(tieneConfirmacionMensaje),
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
                     telefono: conv.telefono,
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     costo: '',
-                    estadoTaller: esAgendado ? 'AGENDADO' : 'ESPERANDO_APROBACION',
+                    estadoTaller: tieneConfirmacionMensaje ? 'AGENDADO' : 'ESPERANDO_APROBACION',
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
@@ -367,11 +370,17 @@ export default function AdminDashboard() {
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticketId: ticketSeleccionado.id, nuevoEstado })
+                body: JSON.stringify({
+                    ticketId: ticketSeleccionado.id,
+                    nuevoEstado,
+                    // Si se marca como CITA AGENDADA, silencia la IA en automático
+                    botActivo: nuevoEstado === 'AGENDADO' ? false : undefined
+                })
             })
             if (res.ok) {
                 cargarTickets()
-                alert("Estatus actualizado con éxito 🚀")
+                cargarListaConversaciones()
+                alert(`Estatus actualizado a ${nuevoEstado} con éxito 🚀`)
             }
         } catch (err) {
             alert("Error al actualizar estatus")
@@ -428,7 +437,7 @@ export default function AdminDashboard() {
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
 
-            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN RESPONSIVA */}
+            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN */}
             <header className="h-auto min-h-[3.5rem] py-2 bg-zinc-950 border-b border-zinc-900 px-3 sm:px-4 flex items-center justify-between shrink-0 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <h1 className="text-base sm:text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
@@ -481,10 +490,10 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* 💬 CONTENEDOR PRINCIPAL TIPO WHATSAPP WEB (2 COLUMNAS) */}
+            {/* 💬 CONTENEDOR PRINCIPAL TIPO WHATSAPP WEB */}
             <div className="flex-1 flex overflow-hidden relative">
 
-                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR Y PESTAÑAS (INCLUYE AGENDADOS) */}
+                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR Y PESTAÑAS */}
                 <aside className={`absolute md:static w-full md:w-[380px] lg:w-[420px] h-full bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0 z-10 transition-transform duration-300 ${telefonoRescate.length >= 10 ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}`}>
 
                     {/* BUSCADOR */}
@@ -630,7 +639,7 @@ export default function AdminDashboard() {
                         </div>
                     ) : (
                         <>
-                            {/* HEADER DEL CHAT ACTIVO */}
+                            {/* HEADER DEL CHAT ACTIVO CON SELECTOR DE ESTADO EXPANDIDO */}
                             <div className="h-16 bg-zinc-950 border-b border-zinc-900 px-2 sm:px-4 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-2 sm:gap-3">
                                     <button
@@ -670,11 +679,12 @@ export default function AdminDashboard() {
                                             onChange={(e) => cambiarEstatusTaller(e.target.value)}
                                             className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold outline-none cursor-pointer focus:border-amber-500"
                                         >
-                                            <option value="RECIBIDO">🛠️ RECIBIDO</option>
-                                            <option value="EN_DIAGNOSTICO">🔬 DIAGNÓSTICO</option>
-                                            <option value="ESPERANDO_APROBACION">⏳ APROBACIÓN</option>
-                                            <option value="EN_REPARACION">⚙️ REPARACIÓN</option>
-                                            <option value="LISTO_PARA_ENTREGA">✅ LISTO</option>
+                                            <option value="AGENDADO">📅 CITA AGENDADA</option>
+                                            <option value="RECIBIDO">🛠️ RECIBIDO EN TALLER</option>
+                                            <option value="EN_DIAGNOSTICO">🔬 EN DIAGNÓSTICO</option>
+                                            <option value="ESPERANDO_APROBACION">⏳ APROBACIÓN PENDIENTE</option>
+                                            <option value="EN_REPARACION">⚙️ EN REPARACIÓN</option>
+                                            <option value="LISTO_PARA_ENTREGA">✅ LISTO PARA ENTREGAR</option>
                                             <option value="ENTREGADO">📦 ENTREGADO</option>
                                             <option value="RECHAZADO">❌ RECHAZADO</option>
                                         </select>
@@ -735,7 +745,7 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* VISOR DE CONVERSACIÓN (HISTORIAL DE CHAT) */}
+                            {/* VISOR DE CONVERSACIÓN */}
                             <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 text-xs bg-[url('/bg-chat.png')] bg-cover bg-center">
                                 {cargandoHistorial ? (
                                     <p className="text-zinc-500 text-center py-8">Sincronizando chat...</p>
@@ -771,7 +781,7 @@ export default function AdminDashboard() {
                                 <div ref={chatEndRef} />
                             </div>
 
-                            {/* CHIPS DE ACCIÓN RÁPIDA (PLANTILLAS Y SHORTCUTS) */}
+                            {/* CHIPS DE ACCIÓN RÁPIDA */}
                             <div className="bg-zinc-950 px-3 sm:px-4 pt-2 pb-1 flex items-center gap-2 overflow-x-auto text-[11px] hide-scrollbar border-t border-zinc-900 shrink-0">
                                 <button
                                     onClick={() => handleEnviarPlantillaCotizacion(telefonoRescate)}
@@ -793,7 +803,7 @@ export default function AdminDashboard() {
                                 </button>
                             </div>
 
-                            {/* FOOTER DE ENVIAR MENSAJE Y ADJUNTAR EVIDENCIA */}
+                            {/* FOOTER DE ENVIAR MENSAJE */}
                             <div className="p-2 sm:p-3 bg-zinc-950 flex flex-wrap items-center gap-2 border-t border-zinc-900 shrink-0">
                                 <label
                                     className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 p-2.5 sm:p-3 rounded-xl transition-colors flex items-center justify-center shrink-0"
@@ -839,7 +849,7 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* 📋 MODAL DETALLE DE FICHA TÉCNICA DE RECEPCIÓN */}
+            {/* 📋 MODAL DETALLE DE FICHA TÉCNICA */}
             {ticketDetalle && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
