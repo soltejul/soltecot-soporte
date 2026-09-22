@@ -16,7 +16,6 @@ const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     RECHAZADO: '❌ REPARACIÓN CANCELADA'
 }
 
-// 🚀 FUNCIÓN 1: ENVÍO DE TEXTO LIBRE
 async function enviarMensajeMeta(to: string, texto: string) {
     if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
 
@@ -47,7 +46,6 @@ async function enviarMensajeMeta(to: string, texto: string) {
     }
 }
 
-// ⚡ FUNCIÓN 2: ENVÍO DE PLANTILLA DE UTILIDAD
 async function enviarPlantillaMeta(
     to: string,
     nombreCliente: string,
@@ -108,7 +106,6 @@ async function enviarPlantillaMeta(
     return false
 }
 
-// 💾 1. CREAR O UNIFICAR TICKET DESDE PORTAL DE INGRESO (POST)
 export async function POST(request: Request) {
     try {
         const formData = await request.formData()
@@ -266,7 +263,6 @@ export async function POST(request: Request) {
     }
 }
 
-// 📊 2. TRAER TODOS LOS TICKETS (GET)
 export async function GET() {
     try {
         const tickets = await prisma.ticket.findMany({
@@ -279,7 +275,6 @@ export async function GET() {
     }
 }
 
-// 🔄 3. ACTUALIZAR TICKET DINÁMICO DESDE SELECTORES DEL PANEL (PATCH CORREGIDO)
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
@@ -306,11 +301,8 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // Manejo seguro de 'AGENDADO' sin romper el enum de Prisma
         const esCitaAgendada = nuevoEstado === 'AGENDADO'
         const estadoDbValido = esCitaAgendada ? 'ESPERANDO_APROBACION' : (nuevoEstado || undefined)
-
-        // Si se marca como CITA AGENDADA o manual, apaga la IA del cliente
         const botActivoFinal = esCitaAgendada ? false : (botActivo !== undefined ? botActivo : undefined)
 
         if (botActivoFinal !== undefined) {
@@ -320,10 +312,17 @@ export async function PATCH(request: Request) {
             })
         }
 
+        // Formatear notas internas para registrar el tag de agendado
+        let notasInternasActualizadas = ticket.notasInternas || ''
+        if (esCitaAgendada && !notasInternasActualizadas.includes('[AGENDADO]')) {
+            notasInternasActualizadas = `[AGENDADO] ${notasInternasActualizadas}`.trim()
+        }
+
         const ticketActualizado = await prisma.ticket.update({
             where: { id: ticketId },
             data: {
                 estado: estadoDbValido,
+                notasInternas: notasInternasActualizadas,
                 costoReparacion: costoReparacion !== undefined ? costoReparacion : undefined,
                 notasDiagnostico: notasDiagnostico !== undefined ? notasDiagnostico : undefined,
                 botActivo: botActivoFinal
@@ -348,7 +347,6 @@ export async function PATCH(request: Request) {
     }
 }
 
-// 🗑️ 4. PURGADOR DE PROSPECTOS DE DB (DELETE)
 export async function DELETE(request: Request) {
     try {
         const { searchParams } = new URL(request.url)

@@ -133,6 +133,16 @@ export default function AdminDashboard() {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
 
+        const esTextoAgendado = (m: any) => {
+            if (!m || !m.texto) return false
+            const t = m.texto.toLowerCase()
+            return t.includes('confirmad') ||
+                t.includes('reservad') ||
+                t.includes('te esperamos') ||
+                t.includes('registrado tu cita') ||
+                t.includes('agendad')
+        }
+
         tickets.forEach(ticket => {
             const tel10 = ticket.cliente?.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (tel10) telefonosProcesados.add(tel10)
@@ -140,13 +150,10 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
-            const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) =>
-                m.texto?.includes('Cita Confirmada') ||
-                m.texto?.includes('_FECHA_CITA:') ||
-                m.texto?.includes('reservado con éxito')
-            )
+            const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) => esTextoAgendado(m))
+            const tieneTagNotas = ticket.notasInternas?.includes('[AGENDADO]')
 
-            const esAgendado = ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje)
+            const esAgendado = ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje) || Boolean(tieneTagNotas)
 
             const botActivoCalculado = convAsociada?.atendidoPorBot === false
                 ? false
@@ -176,11 +183,7 @@ export default function AdminDashboard() {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
 
-                const tieneConfirmacionMensaje = conv.mensajes?.some((m: any) =>
-                    m.texto?.includes('Cita Confirmada') ||
-                    m.texto?.includes('_FECHA_CITA:') ||
-                    m.texto?.includes('reservado con éxito')
-                )
+                const tieneConfirmacionMensaje = conv.mensajes?.some((m: any) => esTextoAgendado(m))
 
                 items.push({
                     id: conv.id,
@@ -354,13 +357,12 @@ export default function AdminDashboard() {
         }
 
         try {
-            // Si el cliente no tiene un Ticket aún, creamos uno de tipo LEAD antes de cambiar su estatus
             let targetTicketId = ticketSeleccionado?.id
 
             if (!targetTicketId && telefonoRescate) {
                 const formData = new FormData()
                 formData.append('telefono', telefonoRescate)
-                formData.append('equipo', 'Consulta General')
+                formData.append('equipo', 'Consulta WhatsApp')
                 formData.append('fallaReportada', 'Cita Agendada')
 
                 const resCreate = await fetch('/api/tickets', { method: 'POST', body: formData })
@@ -371,10 +373,7 @@ export default function AdminDashboard() {
                 }
             }
 
-            if (!targetTicketId) {
-                alert("No se pudo identificar la ficha del cliente.")
-                return
-            }
+            if (!targetTicketId) return alert("No se pudo identificar la ficha del cliente.")
 
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
@@ -444,6 +443,8 @@ export default function AdminDashboard() {
     }
 
     if (cargando) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono">Iniciando SO Soltecot_...</div>
+
+    const itemSeleccionadoActual = listaUnificada.find(i => i.telefono?.endsWith(telefonoRescate.slice(-10)))
 
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
@@ -654,16 +655,14 @@ export default function AdminDashboard() {
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <h2 className="font-bold text-sm text-zinc-100 truncate max-w-[120px] sm:max-w-[200px]">
-                                                {ticketSeleccionado?.cliente?.nombre || 'Cliente WhatsApp'}
+                                                {ticketSeleccionado?.cliente?.nombre || itemSeleccionadoActual?.nombre || 'Cliente WhatsApp'}
                                             </h2>
-                                            {ticketSeleccionado && (
-                                                <span className={`border text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded font-bold hidden sm:inline-block ${!ticketSeleccionado.numeroOrden.startsWith('LEAD-')
-                                                    ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                                                    : 'bg-amber-950 text-amber-400 border-amber-800/60'
-                                                    }`}>
-                                                    {ticketSeleccionado.numeroOrden}
-                                                </span>
-                                            )}
+                                            <span className={`border text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded font-bold hidden sm:inline-block ${itemSeleccionadoActual?.tipo === 'taller'
+                                                ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                                                : 'bg-amber-950 text-amber-400 border-amber-800/60'
+                                                }`}>
+                                                {itemSeleccionadoActual?.folio || 'LEAD-WHATSAPP'}
+                                            </span>
                                         </div>
                                         <p className="text-[10px] sm:text-[11px] text-zinc-400 flex items-center gap-2 mt-0.5">
                                             <span className="font-mono text-emerald-400">📱 {telefonoRescate}</span>
@@ -673,7 +672,7 @@ export default function AdminDashboard() {
 
                                 <div className="flex items-center gap-2">
                                     <select
-                                        value={ticketSeleccionado?.estado || 'ESPERANDO_APROBACION'}
+                                        value={itemSeleccionadoActual?.esAgendado ? 'AGENDADO' : (ticketSeleccionado?.estado || 'ESPERANDO_APROBACION')}
                                         onChange={(e) => cambiarEstatusTaller(e.target.value)}
                                         className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold outline-none cursor-pointer focus:border-amber-500"
                                     >
@@ -721,13 +720,13 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                    {ticketSeleccionado && ticketSeleccionado.numeroOrden.startsWith('LEAD-') && (
+                                    {itemSeleccionadoActual?.clienteId && (
                                         <button
-                                            onClick={() => handleDesecharLead(ticketSeleccionado.clienteId)}
+                                            onClick={() => handleDesecharLead(itemSeleccionadoActual.clienteId)}
                                             className="bg-rose-950/40 hover:bg-rose-900 text-rose-400 text-[10px] px-2 py-1 rounded border border-rose-900/50"
                                             title="Purgar Lead definitivamente"
                                         >
-                                            🗑️
+                                            🗑️ Purgar
                                         </button>
                                     )}
                                     {ticketSeleccionado && (
