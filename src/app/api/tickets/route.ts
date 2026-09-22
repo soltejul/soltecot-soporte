@@ -5,8 +5,8 @@ import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleD
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
-// 🎨 Mapeo de estados de DB a texto estético para el cliente en WhatsApp
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
+    AGENDADO: '📅 CITA CONFIRMADA EN LABORATORIO',
     RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO',
     EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO',
     ESPERANDO_APROBACION: '⏳ PENDIENTE DE APROBACIÓN',
@@ -16,7 +16,7 @@ const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     RECHAZADO: '❌ REPARACIÓN CANCELADA'
 }
 
-// 🚀 FUNCIÓN 1: ENVÍO DE TEXTO LIBRE (DENTRO DE LA VENTANA DE 24 HORAS)
+// 🚀 FUNCIÓN 1: ENVÍO DE TEXTO LIBRE
 async function enviarMensajeMeta(to: string, texto: string) {
     if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
 
@@ -47,7 +47,7 @@ async function enviarMensajeMeta(to: string, texto: string) {
     }
 }
 
-// ⚡ FUNCIÓN 2: ENVÍO DE PLANTILLA DE UTILIDAD (SALTA LA REGLA DE 24 HORAS)
+// ⚡ FUNCIÓN 2: ENVÍO DE PLANTILLA DE UTILIDAD
 async function enviarPlantillaMeta(
     to: string,
     nombreCliente: string,
@@ -55,16 +55,10 @@ async function enviarPlantillaMeta(
     folio: string,
     estatusFormateado: string
 ) {
-    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
-        console.error('🔴 [META CONFIG ERROR]: Falta WHATSAPP_TOKEN o PHONE_NUMBER_ID.')
-        return false
-    }
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
 
     const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
-    if (cleanPhone.length < 10) {
-        console.error('🔴 [META PHONE ERROR]: Número inválido:', to)
-        return false
-    }
+    if (cleanPhone.length < 10) return false
     const toMeta = `52${cleanPhone}`
 
     const paramNombre = String(nombreCliente || 'Cliente').trim()
@@ -105,16 +99,9 @@ async function enviarPlantillaMeta(
                 })
             })
 
-            const dataMeta = await respuesta.json()
-
-            if (respuesta.ok) {
-                console.log(`✅ [META SUCCESS]: Plantilla 'soltecot_seguimiento' entregada a ${toMeta} (${codigoIdioma})`)
-                return true
-            }
-
-            console.warn(`⚠️ [META WARN]: Intento fallido (${codigoIdioma}):`, dataMeta.error?.message || dataMeta)
+            if (respuesta.ok) return true
         } catch (err: any) {
-            console.error(`🔴 [META TEMPLATE ERROR]: Excepción en idioma ${codigoIdioma}:`, err.message)
+            console.error(`🔴 [META TEMPLATE ERROR]:`, err.message)
         }
     }
 
@@ -204,7 +191,6 @@ export async function POST(request: Request) {
             folioAsignado = await obtenerSiguienteFolioOficial()
         }
 
-        // Subida de evidencias a Google Drive
         let fileIds: string[] = []
         if (files && files.length > 0) {
             const targetFolderId = await obtenerOCrearCarpetaFolio(folioAsignado)
@@ -254,7 +240,6 @@ export async function POST(request: Request) {
             })
         }
 
-        // Envío de plantilla de ingreso por WhatsApp
         const nombreEstetico = cliente.nombre || 'amigo'
         const exitoPlantilla = await enviarPlantillaMeta(
             cliente.telefono,
@@ -294,7 +279,7 @@ export async function GET() {
     }
 }
 
-// 🔄 3. ACTUALIZAR TICKET DINÁMICO DESDE SELECTORES DEL PANEL (PATCH)
+// 🔄 3. ACTUALIZAR TICKET DINÁMICO DESDE SELECTORES DEL PANEL (PATCH CORREGIDO)
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
@@ -302,7 +287,6 @@ export async function PATCH(request: Request) {
 
         if (!ticketId) return NextResponse.json({ error: 'Ticket ID requerido' }, { status: 400 })
 
-        // 1. Obtener ticket con cliente
         const ticket = await prisma.ticket.findUnique({
             where: { id: ticketId },
             include: { cliente: true }
@@ -310,7 +294,6 @@ export async function PATCH(request: Request) {
 
         if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 })
 
-        // 2. Corrección opcional de número telefónico
         let telefonoFinal = ticket.cliente.telefono
         if (telefonoNuevo) {
             const cleanPhone = telefonoNuevo.replace(/[^0-9]/g, '').slice(-10)
@@ -323,29 +306,38 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // 3. Actualizar datos en DB
+        // Manejo seguro de 'AGENDADO' sin romper el enum de Prisma
+        const esCitaAgendada = nuevoEstado === 'AGENDADO'
+        const estadoDbValido = esCitaAgendada ? 'ESPERANDO_APROBACION' : (nuevoEstado || undefined)
+
+        // Si se marca como CITA AGENDADA o manual, apaga la IA del cliente
+        const botActivoFinal = esCitaAgendada ? false : (botActivo !== undefined ? botActivo : undefined)
+
+        if (botActivoFinal !== undefined) {
+            await prisma.cliente.update({
+                where: { id: ticket.clienteId },
+                data: { atendidoPorBot: botActivoFinal }
+            })
+        }
+
         const ticketActualizado = await prisma.ticket.update({
             where: { id: ticketId },
             data: {
-                estado: nuevoEstado || undefined,
+                estado: estadoDbValido,
                 costoReparacion: costoReparacion !== undefined ? costoReparacion : undefined,
                 notasDiagnostico: notasDiagnostico !== undefined ? notasDiagnostico : undefined,
-                botActivo: botActivo !== undefined ? botActivo : undefined
+                botActivo: botActivoFinal
             },
             include: { cliente: true }
         })
 
-        // 4. Notificar automáticamente al cliente si cambió el estatus o se pidió reenvío
-        const huboCambioEstatus = nuevoEstado && nuevoEstado !== ticket.estado
-        if (huboCambioEstatus || reenviarNotificacion || telefonoNuevo) {
-            const estatusTarget = nuevoEstado || ticketActualizado.estado
-
+        if (reenviarNotificacion || telefonoNuevo) {
             await enviarPlantillaMeta(
                 telefonoFinal,
                 ticketActualizado.cliente.nombre || 'Cliente',
                 ticketActualizado.equipo,
                 ticketActualizado.numeroOrden,
-                estatusTarget
+                nuevoEstado || ticketActualizado.estado
             )
         }
 

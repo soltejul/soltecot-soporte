@@ -11,14 +11,11 @@ export default function AdminDashboard() {
     const [cargando, setCargando] = useState(true)
     const router = useRouter()
 
-    // 📂 PESTAÑAS Y MODALES
     const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'agendados' | 'leads' | 'taller'>('todos')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
-    // 🔍 MODAL DETALLE DE FOLIO (FICHA DE INGRESO)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
 
-    // 💬 CENTRO DE CHATS Y MULTIMEDIA NATIVO
     const [conversaciones, setConversaciones] = useState<any[]>([])
     const [telefonoRescate, setTelefonoRescate] = useState('')
     const [mensajeRescate, setMensajeRescate] = useState('')
@@ -28,19 +25,16 @@ export default function AdminDashboard() {
     const [cargandoHistorial, setCargandoHistorial] = useState(false)
     const [estadoBotDirecto, setEstadoBotDirecto] = useState<boolean | null>(null)
 
-    // 💰 PRESUPUESTOS Y GESTIÓN DE ORDEN SELECCIONADA
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
     const [ticketSeleccionado, setTicketSeleccionado] = useState<any>(null)
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
 
-    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING
     const chatEndRef = useRef<HTMLDivElement | null>(null)
     const historialRef = useRef<any[]>([])
     historialRef.current = historialDirecto
     const esPrimeraCargaChat = useRef(true)
 
-    // 📜 CARGAR ÓRDENES DE TALLER Y LEADS
     const cargarTickets = async () => {
         try {
             const res = await fetch('/api/tickets')
@@ -56,7 +50,6 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CARGAR LISTA DE CONVERSACIONES DE WHATSAPP
     const cargarListaConversaciones = async () => {
         try {
             const res = await fetch('/api/admin/mensajes')
@@ -69,7 +62,6 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO
     const consultarHistorialTelefono = async (num: string, silenciarCarga = false) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -137,7 +129,6 @@ export default function AdminDashboard() {
         }
     }, [historialDirecto])
 
-    // ⚡ UNIFICACIÓN Y DETECCIÓN PROFUNDA DE CITAS
     const listaUnificada = (() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
@@ -149,7 +140,6 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
-            // Detección en historial completo de mensajes
             const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) =>
                 m.texto?.includes('Cita Confirmada') ||
                 m.texto?.includes('_FECHA_CITA:') ||
@@ -214,7 +204,6 @@ export default function AdminDashboard() {
         return items
     })()
 
-    // 🎯 FILTRADO POR BÚSQUEDA Y PESTAÑAS DEDICADAS
     const itemsFiltrados = listaUnificada.filter((item) => {
         const term = busqueda.toLowerCase().trim()
         const coincideBusqueda =
@@ -232,14 +221,12 @@ export default function AdminDashboard() {
         return true
     })
 
-    // 📊 CONTEOS EXACTOS
     const conteoTodos = listaUnificada.length
     const conteoManual = listaUnificada.filter(i => !i.botActivo).length
     const conteoAgendados = listaUnificada.filter(i => i.esAgendado && i.tipo !== 'taller').length
     const conteoTaller = listaUnificada.filter(i => i.tipo === 'taller').length
     const conteoLeads = listaUnificada.filter(i => i.tipo === 'lead' && !i.esAgendado).length
 
-    // ⚡ ACCIONES DE CHAT
     const handleEnviarMensaje = async () => {
         const cleanNum = telefonoRescate.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) return alert('Ingresa un número válido de 10 dígitos')
@@ -360,27 +347,51 @@ export default function AdminDashboard() {
     }
 
     const cambiarEstatusTaller = async (nuevoEstado: string) => {
-        if (!ticketSeleccionado) return
+        if (!ticketSeleccionado && !telefonoRescate) return
         if (nuevoEstado === 'ESPERANDO_APROBACION') {
             setMostrarModalPresupuesto(true)
             return
         }
 
         try {
+            // Si el cliente no tiene un Ticket aún, creamos uno de tipo LEAD antes de cambiar su estatus
+            let targetTicketId = ticketSeleccionado?.id
+
+            if (!targetTicketId && telefonoRescate) {
+                const formData = new FormData()
+                formData.append('telefono', telefonoRescate)
+                formData.append('equipo', 'Consulta General')
+                formData.append('fallaReportada', 'Cita Agendada')
+
+                const resCreate = await fetch('/api/tickets', { method: 'POST', body: formData })
+                const dataCreate = await resCreate.json()
+
+                if (resCreate.ok && dataCreate.ticket) {
+                    targetTicketId = dataCreate.ticket.id
+                }
+            }
+
+            if (!targetTicketId) {
+                alert("No se pudo identificar la ficha del cliente.")
+                return
+            }
+
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ticketId: ticketSeleccionado.id,
+                    ticketId: targetTicketId,
                     nuevoEstado,
-                    // Si se marca como CITA AGENDADA, silencia la IA en automático
                     botActivo: nuevoEstado === 'AGENDADO' ? false : undefined
                 })
             })
+
             if (res.ok) {
                 cargarTickets()
                 cargarListaConversaciones()
-                alert(`Estatus actualizado a ${nuevoEstado} con éxito 🚀`)
+                alert(`✅ Estatus actualizado a ${nuevoEstado}. La IA ha sido silenciada.`)
+            } else {
+                alert("Error al actualizar estatus")
             }
         } catch (err) {
             alert("Error al actualizar estatus")
@@ -437,7 +448,6 @@ export default function AdminDashboard() {
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
 
-            {/* 🔄 BARRA SUPERIOR DE NAVEGACIÓN */}
             <header className="h-auto min-h-[3.5rem] py-2 bg-zinc-950 border-b border-zinc-900 px-3 sm:px-4 flex items-center justify-between shrink-0 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <h1 className="text-base sm:text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
@@ -461,15 +471,13 @@ export default function AdminDashboard() {
                         <span className="hidden sm:inline">Tester</span>
                     </Link>
 
-                    <Link href="/admin/historial" className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1" title="Historial">
-                        <span>📜</span>
-                        <span className="hidden sm:inline">Historial</span>
+                    <Link href="/admin/historial" className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-2 py-1.5 rounded transition-colors hidden md:block">
+                        📜 Historial
                     </Link>
 
                     <button
                         onClick={dispararRecordatoriosManual}
                         className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1"
-                        title="Procesar cola de recordatorios"
                     >
                         <span>🔔</span>
                         <span className="hidden sm:inline">Recordatorios</span>
@@ -478,7 +486,6 @@ export default function AdminDashboard() {
                     <button
                         onClick={() => setModalInactividadAbierto(true)}
                         className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1"
-                        title="Programar vacaciones o inactividad"
                     >
                         <span>🌴</span>
                         <span className="hidden sm:inline">Vacaciones</span>
@@ -490,13 +497,10 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* 💬 CONTENEDOR PRINCIPAL TIPO WHATSAPP WEB */}
             <div className="flex-1 flex overflow-hidden relative">
 
-                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR Y PESTAÑAS */}
                 <aside className={`absolute md:static w-full md:w-[380px] lg:w-[420px] h-full bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0 z-10 transition-transform duration-300 ${telefonoRescate.length >= 10 ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}`}>
 
-                    {/* BUSCADOR */}
                     <div className="p-3 border-b border-zinc-900">
                         <input
                             type="text"
@@ -507,7 +511,6 @@ export default function AdminDashboard() {
                         />
                     </div>
 
-                    {/* PESTAÑAS DE FILTRADO */}
                     <div className="flex border-b border-zinc-900 bg-zinc-950 text-[11px] font-bold overflow-x-auto hide-scrollbar">
                         <button
                             onClick={() => setFiltroPestana('todos')}
@@ -541,7 +544,6 @@ export default function AdminDashboard() {
                         </button>
                     </div>
 
-                    {/* LISTA DE REGISTROS */}
                     <div className="flex-1 overflow-y-auto divide-y divide-zinc-900 hide-scrollbar pb-20">
                         {itemsFiltrados.length === 0 ? (
                             <div className="text-center py-8 px-4 text-zinc-600 text-xs">
@@ -629,7 +631,6 @@ export default function AdminDashboard() {
                     </div>
                 </aside>
 
-                {/* 👉 COLUMNA DERECHA: CHAT DEDICADO Y FICHA TÉCNICA */}
                 <main className="flex-1 bg-zinc-900/30 flex flex-col h-full overflow-hidden w-full relative">
 
                     {telefonoRescate.length < 10 ? (
@@ -639,7 +640,6 @@ export default function AdminDashboard() {
                         </div>
                     ) : (
                         <>
-                            {/* HEADER DEL CHAT ACTIVO CON SELECTOR DE ESTADO EXPANDIDO */}
                             <div className="h-16 bg-zinc-950 border-b border-zinc-900 px-2 sm:px-4 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-2 sm:gap-3">
                                     <button
@@ -671,24 +671,21 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
 
-                                {/* ACCIONES Y CONTROL DE MODO DE ATENCIÓN */}
                                 <div className="flex items-center gap-2">
-                                    {ticketSeleccionado && (
-                                        <select
-                                            value={ticketSeleccionado.estado}
-                                            onChange={(e) => cambiarEstatusTaller(e.target.value)}
-                                            className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold outline-none cursor-pointer focus:border-amber-500"
-                                        >
-                                            <option value="AGENDADO">📅 CITA AGENDADA</option>
-                                            <option value="RECIBIDO">🛠️ RECIBIDO EN TALLER</option>
-                                            <option value="EN_DIAGNOSTICO">🔬 EN DIAGNÓSTICO</option>
-                                            <option value="ESPERANDO_APROBACION">⏳ APROBACIÓN PENDIENTE</option>
-                                            <option value="EN_REPARACION">⚙️ EN REPARACIÓN</option>
-                                            <option value="LISTO_PARA_ENTREGA">✅ LISTO PARA ENTREGAR</option>
-                                            <option value="ENTREGADO">📦 ENTREGADO</option>
-                                            <option value="RECHAZADO">❌ RECHAZADO</option>
-                                        </select>
-                                    )}
+                                    <select
+                                        value={ticketSeleccionado?.estado || 'ESPERANDO_APROBACION'}
+                                        onChange={(e) => cambiarEstatusTaller(e.target.value)}
+                                        className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold outline-none cursor-pointer focus:border-amber-500"
+                                    >
+                                        <option value="AGENDADO">📅 CITA AGENDADA</option>
+                                        <option value="RECIBIDO">🛠️ RECIBIDO EN TALLER</option>
+                                        <option value="EN_DIAGNOSTICO">🔬 EN DIAGNÓSTICO</option>
+                                        <option value="ESPERANDO_APROBACION">⏳ APROBACIÓN PENDIENTE</option>
+                                        <option value="EN_REPARACION">⚙️ EN REPARACIÓN</option>
+                                        <option value="LISTO_PARA_ENTREGA">✅ LISTO PARA ENTREGAR</option>
+                                        <option value="ENTREGADO">📦 ENTREGADO</option>
+                                        <option value="RECHAZADO">❌ RECHAZADO</option>
+                                    </select>
 
                                     <button
                                         onClick={toggleBotActual}
@@ -702,7 +699,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* BARRA SUPERIOR DE COTIZACIÓN RÁPIDA */}
                             <div className="bg-zinc-950/80 border-b border-zinc-900 px-3 sm:px-4 py-2 flex items-center justify-between text-xs flex-wrap gap-2">
                                 <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
                                     <span className="text-zinc-400 font-semibold hidden sm:inline">Costo:</span>
@@ -745,7 +741,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* VISOR DE CONVERSACIÓN */}
                             <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 text-xs bg-[url('/bg-chat.png')] bg-cover bg-center">
                                 {cargandoHistorial ? (
                                     <p className="text-zinc-500 text-center py-8">Sincronizando chat...</p>
@@ -781,7 +776,6 @@ export default function AdminDashboard() {
                                 <div ref={chatEndRef} />
                             </div>
 
-                            {/* CHIPS DE ACCIÓN RÁPIDA */}
                             <div className="bg-zinc-950 px-3 sm:px-4 pt-2 pb-1 flex items-center gap-2 overflow-x-auto text-[11px] hide-scrollbar border-t border-zinc-900 shrink-0">
                                 <button
                                     onClick={() => handleEnviarPlantillaCotizacion(telefonoRescate)}
@@ -803,7 +797,6 @@ export default function AdminDashboard() {
                                 </button>
                             </div>
 
-                            {/* FOOTER DE ENVIAR MENSAJE */}
                             <div className="p-2 sm:p-3 bg-zinc-950 flex flex-wrap items-center gap-2 border-t border-zinc-900 shrink-0">
                                 <label
                                     className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 p-2.5 sm:p-3 rounded-xl transition-colors flex items-center justify-center shrink-0"
@@ -849,7 +842,6 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* 📋 MODAL DETALLE DE FICHA TÉCNICA */}
             {ticketDetalle && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -967,7 +959,6 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* MODAL DE PRESUPUESTO */}
             {mostrarModalPresupuesto && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
@@ -1016,7 +1007,6 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* MODAL DE BLOQUEOS / VACACIONES */}
             <ModalBloqueos
                 isOpen={modalInactividadAbierto}
                 onClose={() => setModalInactividadAbierto(false)}
