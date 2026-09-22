@@ -11,8 +11,8 @@ export default function AdminDashboard() {
     const [cargando, setCargando] = useState(true)
     const router = useRouter()
 
-    // 📂 PESTAÑAS Y MODALES
-    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'leads' | 'taller'>('todos')
+    // 📂 PESTAÑAS Y MODALES (NUEVA PESTAÑA AGENDADOS)
+    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'agendados' | 'leads' | 'taller'>('todos')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
 
     // 🔍 MODAL DETALLE DE FOLIO (FICHA DE INGRESO)
@@ -34,7 +34,7 @@ export default function AdminDashboard() {
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
 
-    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING SIN PARPADEO
+    // 🛡️ REFS PARA CONTROL SILENCIOSO DE SCROLL Y POLLING
     const chatEndRef = useRef<HTMLDivElement | null>(null)
     const historialRef = useRef<any[]>([])
     historialRef.current = historialDirecto
@@ -69,7 +69,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO (COMPLETAMENTE SILENCIOSO)
+    // 📜 CONSULTAR HISTORIAL DE UN CHAT ESPECÍFICO
     const consultarHistorialTelefono = async (num: string, silenciarCarga = false) => {
         const cleanNum = num.replace(/[^0-9]/g, '')
         if (cleanNum.length < 10) {
@@ -84,7 +84,6 @@ export default function AdminDashboard() {
             if (res.ok) {
                 const nuevosMsgs = data.comparableMensajes || data.mensajes || []
 
-                // 🤐 COMPARA SI REALMENTE CAMBIARON LOS MENSAJES PARA EVITAR RE-RENDERS Y PARPADEO
                 const esDiferente = JSON.stringify(nuevosMsgs) !== JSON.stringify(historialRef.current)
                 if (esDiferente) {
                     setHistorialDirecto(nuevosMsgs)
@@ -111,7 +110,6 @@ export default function AdminDashboard() {
         return () => clearInterval(intervaloGlobal)
     }, [])
 
-    // 🎯 CARGA DE CHAT SELECCIONADO (SIN VINCULAR A LA LISTA COMPLETA DE TICKETS PARA EVITAR RE-EJECUCIONES)
     useEffect(() => {
         if (telefonoRescate) {
             esPrimeraCargaChat.current = true
@@ -132,7 +130,6 @@ export default function AdminDashboard() {
         }
     }, [telefonoRescate])
 
-    // 🔒 SCROLL INTELIGENTE: SÓLO AL ABRIR CHAT O AL MANDAR UN MENSAJE
     useEffect(() => {
         if (esPrimeraCargaChat.current && historialDirecto.length > 0) {
             chatEndRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -140,12 +137,11 @@ export default function AdminDashboard() {
         }
     }, [historialDirecto])
 
-    // ⚡ UNIFICACIÓN ATÓMICA DE TICKETS + CONVERSACIONES
+    // ⚡ UNIFICACIÓN Y DETECCIÓN AUTOMÁTICA DE CITAS AGENDADAS
     const listaUnificada = (() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
 
-        // 1️⃣ Añadir todas las órdenes activas del taller (SOL-XXXX y LEAD-XXXX)
         tickets.forEach(ticket => {
             const tel10 = ticket.cliente?.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (tel10) telefonosProcesados.add(tel10)
@@ -153,7 +149,13 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find(c => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
-            // Prioridad absoluta al estado manual del cliente
+            // Detección de cita confirmada
+            const ultimoTexto = convAsociada?.mensajes?.[0]?.texto || ''
+            const esAgendado = ticket.estado === 'AGENDADO' ||
+                ultimoTexto.includes('Cita Confirmada') ||
+                ultimoTexto.includes('_FECHA_CITA:') ||
+                ultimoTexto.includes('reservado con éxito')
+
             const botActivoCalculado = convAsociada?.atendidoPorBot === false
                 ? false
                 : (ticket.botActivo ?? convAsociada?.atendidoPorBot ?? true)
@@ -161,6 +163,7 @@ export default function AdminDashboard() {
             items.push({
                 id: ticket.id,
                 tipo: esTallerOficial ? 'taller' : 'lead',
+                esAgendado,
                 folio: ticket.numeroOrden,
                 nombre: ticket.cliente?.nombre || convAsociada?.nombre || 'Cliente WhatsApp',
                 telefono: ticket.cliente?.telefono || convAsociada?.telefono || '',
@@ -175,23 +178,28 @@ export default function AdminDashboard() {
             })
         })
 
-        // 2️⃣ Añadir conversaciones sueltas de WhatsApp
         conversaciones.forEach(conv => {
             const tel10 = conv.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (!telefonosProcesados.has(tel10)) {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
+                const ultimoTexto = ultimoMsg?.texto || ''
+
+                const esAgendado = ultimoTexto.includes('Cita Confirmada') ||
+                    ultimoTexto.includes('_FECHA_CITA:') ||
+                    ultimoTexto.includes('reservado con éxito')
 
                 items.push({
                     id: conv.id,
                     tipo: 'lead',
+                    esAgendado,
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
                     telefono: conv.telefono,
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     costo: '',
-                    estadoTaller: 'ESPERANDO_APROBACION',
+                    estadoTaller: esAgendado ? 'AGENDADO' : 'ESPERANDO_APROBACION',
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
@@ -203,7 +211,7 @@ export default function AdminDashboard() {
         return items
     })()
 
-    // 🎯 FILTRADO UNIFICADO POR BÚSQUEDA Y PESTAÑA
+    // 🎯 FILTRADO POR BÚSQUEDA Y PESTAÑAS DEDICADAS
     const itemsFiltrados = listaUnificada.filter((item) => {
         const term = busqueda.toLowerCase().trim()
         const coincideBusqueda =
@@ -215,16 +223,18 @@ export default function AdminDashboard() {
         if (!coincideBusqueda) return false
 
         if (filtroPestana === 'manual') return !item.botActivo
+        if (filtroPestana === 'agendados') return item.esAgendado && item.tipo !== 'taller'
         if (filtroPestana === 'taller') return item.tipo === 'taller'
-        if (filtroPestana === 'leads') return item.tipo === 'lead'
+        if (filtroPestana === 'leads') return item.tipo === 'lead' && !item.esAgendado
         return true
     })
 
     // 📊 CONTEOS EXACTOS
     const conteoTodos = listaUnificada.length
     const conteoManual = listaUnificada.filter(i => !i.botActivo).length
+    const conteoAgendados = listaUnificada.filter(i => i.esAgendado && i.tipo !== 'taller').length
     const conteoTaller = listaUnificada.filter(i => i.tipo === 'taller').length
-    const conteoLeads = listaUnificada.filter(i => i.tipo === 'lead').length
+    const conteoLeads = listaUnificada.filter(i => i.tipo === 'lead' && !i.esAgendado).length
 
     // ⚡ ACCIONES DE CHAT
     const handleEnviarMensaje = async () => {
@@ -250,7 +260,7 @@ export default function AdminDashboard() {
                 setMensajeRescate('')
                 setArchivoAdjunto(null)
 
-                esPrimeraCargaChat.current = true // Fuerza el scroll al fondo al enviar mensaje propio
+                esPrimeraCargaChat.current = true
                 consultarHistorialTelefono(telefonoRescate, true)
                 cargarListaConversaciones()
                 setEstadoBotDirecto(false)
@@ -474,7 +484,7 @@ export default function AdminDashboard() {
             {/* 💬 CONTENEDOR PRINCIPAL TIPO WHATSAPP WEB (2 COLUMNAS) */}
             <div className="flex-1 flex overflow-hidden relative">
 
-                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR, FILTROS Y REGISTROS DE TALLER / LEADS */}
+                {/* 👈 COLUMNA IZQUIERDA: BUSCADOR Y PESTAÑAS (INCLUYE AGENDADOS) */}
                 <aside className={`absolute md:static w-full md:w-[380px] lg:w-[420px] h-full bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0 z-10 transition-transform duration-300 ${telefonoRescate.length >= 10 ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}`}>
 
                     {/* BUSCADOR */}
@@ -489,34 +499,40 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* PESTAÑAS DE FILTRADO */}
-                    <div className="flex border-b border-zinc-900 bg-zinc-950 text-xs font-bold">
+                    <div className="flex border-b border-zinc-900 bg-zinc-950 text-[11px] font-bold overflow-x-auto hide-scrollbar">
                         <button
                             onClick={() => setFiltroPestana('todos')}
-                            className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'todos' ? 'border-emerald-500 text-emerald-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+                            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap ${filtroPestana === 'todos' ? 'border-emerald-500 text-emerald-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
                             Todos ({conteoTodos})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('manual')}
-                            className={`flex-1 py-2.5 text-center border-b-2 flex items-center justify-center gap-1 ${filtroPestana === 'manual' ? 'border-rose-500 text-rose-400 bg-rose-950/20' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+                            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap ${filtroPestana === 'manual' ? 'border-rose-500 text-rose-400 bg-rose-950/20' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
                             🚨 Manual ({conteoManual})
                         </button>
                         <button
+                            onClick={() => setFiltroPestana('agendados')}
+                            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap ${filtroPestana === 'agendados' ? 'border-purple-500 text-purple-400 bg-purple-950/30 font-black' : 'border-transparent text-purple-400/70 hover:text-purple-300'}`}
+                        >
+                            📅 Citas ({conteoAgendados})
+                        </button>
+                        <button
                             onClick={() => setFiltroPestana('leads')}
-                            className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'leads' ? 'border-amber-500 text-amber-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+                            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap ${filtroPestana === 'leads' ? 'border-amber-500 text-amber-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
                             🎯 Leads ({conteoLeads})
                         </button>
                         <button
                             onClick={() => setFiltroPestana('taller')}
-                            className={`flex-1 py-2.5 text-center border-b-2 ${filtroPestana === 'taller' ? 'border-indigo-500 text-indigo-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+                            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap ${filtroPestana === 'taller' ? 'border-indigo-500 text-indigo-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
                         >
                             🛠️ Taller ({conteoTaller})
                         </button>
                     </div>
 
-                    {/* LISTA DE REGISTROS (UNIFICADA DE TALLER Y CHATS) */}
+                    {/* LISTA DE REGISTROS */}
                     <div className="flex-1 overflow-y-auto divide-y divide-zinc-900 hide-scrollbar pb-20">
                         {itemsFiltrados.length === 0 ? (
                             <div className="text-center py-8 px-4 text-zinc-600 text-xs">
@@ -536,13 +552,15 @@ export default function AdminDashboard() {
                                         onClick={() => setTelefonoRescate(item.telefono)}
                                         className={`p-3 cursor-pointer transition-colors space-y-1 ${esSeleccionado
                                             ? 'bg-indigo-950/60 border-l-4 border-l-indigo-500'
-                                            : requiereAtencion
-                                                ? 'bg-rose-950/20 border-l-4 border-l-rose-500 hover:bg-rose-950/30'
-                                                : 'bg-zinc-950 hover:bg-zinc-900/60 border-l-4 border-l-transparent'
+                                            : item.esAgendado && !esTallerReal
+                                                ? 'bg-purple-950/30 border-l-4 border-l-purple-500 hover:bg-purple-950/40'
+                                                : requiereAtencion
+                                                    ? 'bg-rose-950/20 border-l-4 border-l-rose-500 hover:bg-rose-950/30'
+                                                    : 'bg-zinc-950 hover:bg-zinc-900/60 border-l-4 border-l-transparent'
                                             }`}
                                     >
                                         <div className="flex justify-between items-start">
-                                            <span className={`font-bold text-xs truncate max-w-[150px] ${requiereAtencion ? 'text-rose-200' : 'text-zinc-200'}`}>
+                                            <span className={`font-bold text-xs truncate max-w-[150px] ${item.esAgendado ? 'text-purple-200 font-extrabold' : requiereAtencion ? 'text-rose-200' : 'text-zinc-200'}`}>
                                                 {item.nombre}
                                             </span>
                                             {ultimoMsg && (
@@ -554,18 +572,18 @@ export default function AdminDashboard() {
 
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-zinc-500 font-mono">📱 {item.telefono}</span>
-                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${item.botActivo
-                                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                                : requiereAtencion
-                                                    ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
+                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${item.esAgendado && !esTallerReal
+                                                ? 'bg-purple-900/80 text-purple-300 border border-purple-600 animate-pulse'
+                                                : item.botActivo
+                                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                                                     : 'bg-rose-950 text-rose-400 border border-rose-800'
                                                 }`}>
-                                                {item.botActivo ? '🤖 IA' : requiereAtencion ? '🚨 RESPUESTA' : '🚨 MAN'}
+                                                {item.esAgendado && !esTallerReal ? '📅 CITA CONFIRMADA' : item.botActivo ? '🤖 IA' : '🚨 MAN'}
                                             </span>
                                         </div>
 
                                         {ultimoMsg ? (
-                                            <p className={`text-xs truncate ${requiereAtencion ? 'text-rose-300 font-medium' : 'text-zinc-400'}`}>
+                                            <p className={`text-xs truncate ${item.esAgendado ? 'text-purple-300/80' : requiereAtencion ? 'text-rose-300 font-medium' : 'text-zinc-400'}`}>
                                                 <span className="opacity-60">{esMensajeCliente ? '👤 ' : '🛠️ '}</span>
                                                 {ultimoMsg.texto}
                                             </p>
@@ -579,7 +597,9 @@ export default function AdminDashboard() {
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${esTallerReal
                                                     ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800 font-bold'
-                                                    : 'bg-amber-950/40 text-amber-400 border-amber-900'
+                                                    : item.esAgendado
+                                                        ? 'bg-purple-950 text-purple-300 border-purple-800 font-bold'
+                                                        : 'bg-amber-950/40 text-amber-400 border-amber-900'
                                                     }`}>
                                                     {item.folio}
                                                 </span>
@@ -842,7 +862,6 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="space-y-3 text-xs">
-                            {/* DATOS DEL CLIENTE CON EDICIÓN DE TELÉFONO */}
                             <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
                                 <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Cliente y Contacto</span>
                                 <p className="text-zinc-200 font-semibold text-sm">{ticketDetalle.cliente?.nombre || 'Sin Nombre'}</p>
@@ -886,7 +905,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* EQUIPO Y FALLA REPORTADA */}
                             <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900 space-y-2">
                                 <div>
                                     <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-0.5">Dispositivo / Equipo</span>
@@ -900,7 +918,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* DIAGNÓSTICO EN TALLER */}
                             {ticketDetalle.notasDiagnostico && (
                                 <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
                                     <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-1">Notas de Diagnóstico en Taller</span>
@@ -908,7 +925,6 @@ export default function AdminDashboard() {
                                 </div>
                             )}
 
-                            {/* EVIDENCIA GOOGLE DRIVE */}
                             {ticketDetalle.fotosIngreso && ticketDetalle.fotosIngreso.length > 0 && (
                                 <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-900">
                                     <span className="text-zinc-500 uppercase font-bold text-[10px] block mb-2">Evidencias Fotográficas</span>
