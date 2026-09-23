@@ -75,12 +75,12 @@ export async function POST() {
 
         console.log(`📡 [RECORDATORIOS CRON]: Ejecutando revisión de citas en vivo...`)
 
-        // 🐘 Buscar tickets o leads agendados en Neon DB
+        // 🐘 Buscar tickets o leads agendados en Neon DB mediante las notas o falla reportada
         const ticketsAgendados = await prisma.ticket.findMany({
             where: {
                 OR: [
-                    { estado: 'AGENDADO' as any },
-                    { notasInternas: { contains: '[AGENDADO]' } }
+                    { notasInternas: { contains: '[AGENDADO]' } },
+                    { fallaReportada: { contains: 'Agendad' } }
                 ]
             },
             include: { cliente: true }
@@ -105,7 +105,7 @@ export async function POST() {
             const folio = ticket.numeroOrden || 'CITA'
 
             // 🎯 LÓGICA DE TIEMPO DINÁMICO PARA VARIABLE {{4}}
-            const fechaCitaRaw = (ticket as any) || ticket.updatedAt || ticket.createdAt
+            const fechaCitaRaw = (ticket as any).fechaCita || ticket.updatedAt || ticket.createdAt
             const horaCita = new Date(fechaCitaRaw)
 
             let paramEstatus = '📅 RECORDATORIO DE CITA EN LABORATORIO'
@@ -117,13 +117,13 @@ export async function POST() {
                     // 🚨 CLIENTE RETRASADO (Entre 1 y 45 min de retraso)
                     paramEstatus = '📍 ¿TUVISTE UN CONTRATIEMPO? RESPÓNDENOS SI AÚN VIENES HOY O SI REAGENDAMOS TU CITA 🗓️'
                 } else if (diferenciaMinutos >= 0 && diferenciaMinutos <= 60) {
-                    // ⏰ CITA PRÓXIMA (Faltan menos de 60 minutos, ej: 10 o 20 min)
+                    // ⏰ CITA PRÓXIMA (Faltan menos de 60 minutos)
                     paramEstatus = `⏰ TE ESPERAMOS EN TU CITA EN ${diferenciaMinutos} MINUTOS`
                 } else if (horaCita.getDate() === ahora.getDate()) {
-                    // 📍 CITA HOY (Más tarde en el día)
+                    // 📍 CITA HOY (Más tarde)
                     paramEstatus = '📍 TE ESPERAMOS HOY EN TU CITA EN LABORATORIO'
                 } else {
-                    // 📅 CITA MAÑANA O DÍAS POSTERIORES
+                    // 📅 CITA MAÑANA O POSTERIOR
                     paramEstatus = '📅 RECORDATORIO DE CITA MAÑANA EN LABORATORIO'
                 }
             }
