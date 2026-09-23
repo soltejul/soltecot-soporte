@@ -1,82 +1,151 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/prisma'
-import { enviarMensajeWhatsApp } from '../../../../lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
+
+// 🚀 ENVÍO VÍA PLANTILLA META CLOUD API (SALTA RESTRICCIÓN DE 24 HORAS)
+async function enviarPlantillaRecordatorioMeta(
+    to: string,
+    nombreCliente: string,
+    equipo: string,
+    folio: string,
+    estatusDinamico: string
+) {
+    if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) return false
+
+    const cleanPhone = to.replace(/[^0-9]/g, '').slice(-10)
+    if (cleanPhone.length < 10) return false
+    const toMeta = `52${cleanPhone}`
+
+    const paramNombre = String(nombreCliente || 'Cliente').trim()
+    const paramEquipo = String(equipo || 'Dispositivo').trim()
+    const paramFolio = String(folio || 'Sin Folio').trim()
+    const paramEstatus = String(estatusDinamico).trim()
+
+    const idiomas = ['es_MX', 'es']
+
+    for (const codigoIdioma of idiomas) {
+        try {
+            const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+            const respuesta = await fetch(urlMeta, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    to: toMeta,
+                    type: 'template',
+                    template: {
+                        name: 'soltecot_seguimiento',
+                        language: { code: codigoIdioma },
+                        components: [
+                            {
+                                type: 'body',
+                                parameters: [
+                                    { type: 'text', text: paramNombre },   // {{1}}
+                                    { type: 'text', text: paramEquipo },   // {{2}}
+                                    { type: 'text', text: paramFolio },    // {{3}}
+                                    { type: 'text', text: paramEstatus }   // {{4}} Dinámico
+                                ]
+                            }
+                        ]
+                    }
+                })
+            })
+
+            if (respuesta.ok) return true
+        } catch (err: any) {
+            console.error(`🔴 [META TEMPLATE RECORDATORIO ERROR]:`, err.message)
+        }
+    }
+
+    return false
+}
+
 export async function POST() {
     try {
-        // 📅 OBTENER FECHA DE HOY EN MÉXICO (Forzando la zona horaria)
+        // 📅 OBTENER HORA ACTUAL EN ZONA HORARIA DE MÉXICO
         const ahoraMexicoString = new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" })
-        const ahoraMexico = new Date(ahoraMexicoString)
+        const ahora = new Date(ahoraMexicoString)
 
-        // Calcular el año, mes y día de MAÑANA de forma matemática exacta
-        const mañana = new Date(ahoraMexico)
-        mañana.setDate(ahoraMexico.getDate() + 1)
+        console.log(`📡 [RECORDATORIOS CRON]: Ejecutando revisión de citas en vivo...`)
 
-        const año = mañana.getFullYear()
-        const mes = String(mañana.getMonth() + 1).padStart(2, '0')
-        const dia = String(mañana.getDate()).padStart(2, '0')
-
-        // 🛡️ CREAR STRINGS DE FECHA CON EL OFFSET DE MÉXICO (-06:00)
-        // Quitamos la "Z" (Zulu/UTC) y le ponemos explícitamente -06:00. 
-        // Así Neon sabe perfectamente cuándo empieza y termina el día en México.
-        const inicioMañanaMX = `${año}-${mes}-${dia}T00:00:00.000-06:00`
-        const finMañanaMX = `${año}-${mes}-${dia}T23:59:59.999-06:00`
-
-        console.log(`📡 [RECORDATORIOS TIMING]: Buscando citas entre ${inicioMañanaMX} y ${finMañanaMX}`)
-
-        // 🐘 Buscar en Neon todas las citas pendientes de mañana
-        const citasDeMañana = await prisma.cita.findMany({
+        // 🐘 Buscar tickets o leads agendados en Neon DB
+        const ticketsAgendados = await prisma.ticket.findMany({
             where: {
-                fechaCita: {
-                    gte: new Date(inicioMañanaMX),
-                    lte: new Date(finMañanaMX)
-                },
-                estado: 'PENDIENTE'
-            }
+                OR: [
+                    { estado: 'AGENDADO' },
+                    { notasInternas: { contains: '[AGENDADO]' } }
+                ]
+            },
+            include: { cliente: true }
         })
 
-        if (citasDeMañana.length === 0) {
-            return NextResponse.json({ success: true, enviados: 0, mensaje: `No hay citas pendientes detectadas en Neon para el día ${año}-${mes}-${dia}.` })
+        if (ticketsAgendados.length === 0) {
+            return NextResponse.json({
+                success: true,
+                enviados: 0,
+                mensaje: `No hay citas agendadas detectadas en Neon DB.`
+            })
         }
 
         let contadorEnviados = 0
 
-        // 🚀 Recorrer las citas encontradas y despachar por WhatsApp
-        for (const cita of citasDeMañana) {
+        for (const ticket of ticketsAgendados) {
+            const cliente = ticket.cliente
+            if (!cliente || !cliente.telefono) continue
 
-            // 🛡️ ESCUDO DE PARSEO ANTICRASH
-            const objetoFecha = cita.fechaCita instanceof Date ? cita.fechaCita : new Date(cita.fechaCita)
+            const nombreCliente = cliente.nombre || 'Cliente'
+            const equipo = ticket.equipo || 'Equipo'
+            const folio = ticket.numeroOrden || 'CITA'
 
-            let horaFormateada = 'Hora pendiente'
+            // 🎯 LÓGICA DE TIEMPO DINÁMICO PARA VARIABLE {{4}}
+            const fechaCitaRaw = ticket.fechaCita || ticket.updatedAt || ticket.createdAt
+            const horaCita = new Date(fechaCitaRaw)
 
-            // Convertimos la hora de la base de datos a formato local de México para el mensaje
-            if (!isNaN(objetoFecha.getTime())) {
-                horaFormateada = objetoFecha.toLocaleTimeString('es-MX', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true, // 🕐 Cambia a formato natural de 12 horas (Ej: 10:00 a.m.)
-                    timeZone: 'America/Mexico_City' // 👈 Garantiza que diga la hora en MX
-                })
+            let paramEstatus = '📅 RECORDATORIO DE CITA EN LABORATORIO'
+
+            if (horaCita && !isNaN(horaCita.getTime())) {
+                const diferenciaMinutos = Math.round((horaCita.getTime() - ahora.getTime()) / (1000 * 60))
+
+                if (diferenciaMinutos < 0 && diferenciaMinutos >= -45) {
+                    // 🚨 CLIENTE RETRASADO (Entre 1 y 45 min de retraso)
+                    paramEstatus = '📍 ¿TUVISTE UN CONTRATIEMPO? RESPÓNDENOS SI AÚN VIENES HOY O SI REAGENDAMOS TU CITA 🗓️'
+                } else if (diferenciaMinutos >= 0 && diferenciaMinutos <= 60) {
+                    // ⏰ CITA PRÓXIMA (Faltan menos de 60 minutos, ej: 10 o 20 min)
+                    paramEstatus = `⏰ TE ESPERAMOS EN TU CITA EN ${diferenciaMinutos} MINUTOS`
+                } else if (horaCita.getDate() === ahora.getDate()) {
+                    // 📍 CITA HOY (Más tarde en el día)
+                    paramEstatus = '📍 TE ESPERAMOS HOY EN TU CITA EN LABORATORIO'
+                } else {
+                    // 📅 CITA MAÑANA O DÍAS POSTERIORES
+                    paramEstatus = '📅 RECORDATORIO DE CITA MAÑANA EN LABORATORIO'
+                }
             }
 
-            let textoRecordatorio = ''
+            // Disparo vía Meta Cloud API
+            const exito = await enviarPlantillaRecordatorioMeta(
+                cliente.telefono,
+                nombreCliente,
+                equipo,
+                folio,
+                paramEstatus
+            )
 
-            if (cita.tipo === 'ENTREGA') {
-                textoRecordatorio = `🔬 *SOLTECOT_ RECORDATORIO DE CITA* 🔬\n\nHola *${cita.nombreCliente}*, te recordamos que el día de mañana tienes una cita programada para traer tu equipo a revisión en nuestro laboratorio.\n\n⏰ *Hora reservada:* ${horaFormateada}\n📍 *Laboratorio:* Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán.\n\n_Si tienes algún contratiempo o requieres reprogramar, por favor avísanos por este medio. ¡Te esperamos!_ 🛠️`
-            } else {
-                textoRecordatorio = `🚚 *SOLTECOT_ RUTA DE RECOLECCIÓN* 🚚\n\nHola *${cita.nombreCliente}*, te recordamos que el día de mañana nuestro equipo de logística pasará a tu domicilio a recolectar tu equipo para ingresarlo al laboratorio.\n\n⏰ *Horario aproximado:* ${horaFormateada}\n📍 *Dirección de arribo:* ${cita.direccion}\n\n_Por favor, ten tu equipo listo (con su cargador en caso de laptops). ¡Vamos en camino!_ 🚚💨`
-            }
-
-            // Disparar vía Meta / Baileys
-            const destinatarioReal = cita.telefono.includes('@') ? cita.telefono : `${cita.telefono}@s.whatsapp.net`
-
-            const exito = await enviarMensajeWhatsApp(destinatarioReal, textoRecordatorio)
             if (exito) contadorEnviados++
         }
 
-        return NextResponse.json({ success: true, enviados: contadorEnviados, total: citasDeMañana.length })
+        return NextResponse.json({
+            success: true,
+            enviados: contadorEnviados,
+            total: ticketsAgendados.length
+        })
+
     } catch (error: any) {
         console.error("🔴 [ERROR RECORDATORIOS CRON]:", error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })

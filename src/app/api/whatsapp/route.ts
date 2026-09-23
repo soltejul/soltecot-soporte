@@ -141,7 +141,7 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const valoresFila = [fechaActual, telefono, mensaje, respuesta, status, nombre, dispositivo, falla]
 
         await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID, range: "'Hoja 1'!A:H",
+            spreadsheetId: SPREADSHEET_ID, range: "A:H",
             valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
         })
     } catch (error: any) {
@@ -172,8 +172,8 @@ async function registrarFinanzasEnFacturacion(
             const rowFolio = filasExistentes[i][0]
             const rowTelefono = filasExistentes[i][3]
 
-            if (folio === 'SOL-REM-PENDIENTE') {
-                if (rowFolio === 'SOL-REM-PENDIENTE' && rowTelefono === telefono) {
+            if (folio === 'SOL-REM-PENDIENTE' || folio.startsWith('LEAD-')) {
+                if ((rowFolio === folio || rowFolio === 'SOL-REM-PENDIENTE' || rowFolio.startsWith('LEAD-')) && rowTelefono === telefono) {
                     numeroDeFilaDestino = i + 1
                     filaVieja = filasExistentes[i]
                     break
@@ -191,7 +191,7 @@ async function registrarFinanzasEnFacturacion(
             const nombreFinal = (nombre === 'Cliente WhatsApp' && filaVieja[2]) ? filaVieja[2] : nombre;
             const soporteFinal = (tipoSoporte === 'Remoto' && filaVieja[4]) ? filaVieja[4] : tipoSoporte;
             const fallaFinal = (dispositivoFalla.includes('Soporte General') && filaVieja[5]) ? filaVieja[5] : dispositivoFalla;
-            const statusFinal = (status === 'PROSPECTO' && filaVieja[6]) ? filaVieja[6] : status;
+            const statusFinal = status; // Mantiene el estado fresco (ej. AGENDADO)
             const facturaFinal = (reqFactura === 'NO' && filaVieja[7] === 'SI') ? 'SI' : reqFactura;
 
             const rfcFinal = (!rfc && filaVieja[8]) ? filaVieja[8] : rfc;
@@ -218,7 +218,7 @@ async function registrarFinanzasEnFacturacion(
                 valueInputOption: 'USER_ENTERED',
                 requestBody: { values: [valoresCombinados] }
             })
-            console.log(`✅ [CRM MERGE SUCCESS]: Fila indexada y protegida para el cliente: ${telefono}`)
+            console.log(`✅ [CRM MERGE SUCCESS]: Fila actualizada con estado '${statusFinal}' para el cliente: ${telefono}`)
         } else {
             const valoresFila = [
                 folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
@@ -327,9 +327,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
     const telefono10Digitos = telefonoLimpio.slice(-10)
 
-    // -------------------------------------------------------------------------
-    // 🏢 MÓDULO VIP B2B: CORTAFUEGOS Y CAPTURA DE LEADS EMPRESARIALES
-    // -------------------------------------------------------------------------
     let memoriaB2B = MEMORIA_CHAT.get(`B2B_${numeroCliente}`) || [];
     const esPrimerMensajeB2B = textoSinAcentos.includes('poliza corporativa') || textoSinAcentos.includes('poliza') || textoSinAcentos.includes('pyme');
     const yaEstaEnConversacionB2B = memoriaB2B.length > 0;
@@ -568,9 +565,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const costoPactado = (esPreventaActiva && ticketMasReciente.costoReparacion)
         ? `$${ticketMasReciente.costoReparacion} MXN` : 'Por cotizar';
 
-    // -------------------------------------------------------------------------
-    // 📅 CONSULTA EN TIEMPO REAL: BLOQUEOS Y DÍAS INACTIVOS (OUT OF OFFICE)
-    // -------------------------------------------------------------------------
     let instruccionesCalendario = "";
     try {
         const hoy = new Date();
@@ -617,7 +611,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         try {
             const ai = new GoogleGenAI({ apiKey })
 
-            // CÁLCULO EXACTO DE FECHAS DE FIN DE SEMANA
             const hoyCalc = new Date();
             const fechaHoyString = hoyCalc.toLocaleDateString('es-MX', {
                 timeZone: 'America/Mexico_City',
@@ -700,10 +693,6 @@ PASO 1: RESPUESTA A BOTONES DE ANUNCIOS META (Facebook/Instagram)
   -> Explica las ventajas de la tecnología TMR (magnética, anti-drift definitivo) y entrega la tarifa exacta aclarándole que el costo es **por ambos joysticks**.
 - Si presiona "Quiero agendar una cita para entregar mi control en taller" o "Quiero agendar una cita para llevar mi laptop al taller":
   -> Pasa directo a aplicar la REGLA DE HORARIOS Y RECEPCIÓN para acordar el día y hora dentro del rango permitido.
-- Si el usuario presiona "Quiero cotizar el mantenimiento de mi laptop (Oficina / Gamer)" o consulta por laptop:
-  -> Responde: "El mantenimiento completo de laptop incluye desarmado, limpieza profunda de componentes, lubricación y cambio de pasta térmica premium. El costo es de **$600 MXN** para laptops de Oficina/Uso general, o de **$850 a $1,200 MXN** para equipos Gamer/Workstation. La revisión previa es 100% SIN COSTO e incluye fotos del proceso. ¿Tu equipo es de uso general o gamer?"
-- Si presiona "¿Cómo funciona la recolección a domicilio en mi zona?":
-  -> Explica: "Coordinamos recolecciones en un radio de hasta 10 km alrededor de Cuautitlán (fines de semana o puntos acordados). Nos proporcionas tu dirección, pasamos por tu equipo etiquetado con folio oficial y lo ingresamos a laboratorio. ¿De qué colonia o zona nos escribes?"
 
 PASO 2: EVALUACIÓN DE INTERVENCIÓN HUMANA PREVIA (HANDOVER)
 - Si el "Costo Total pactado por el Ingeniero Julio" es DIFERENTE a 'Por cotizar', O SI en el historial observas que el Ingeniero Julio (o Taller) ya acordó una revisión, costo o solución:
@@ -717,12 +706,6 @@ PASO 3: RETENCIÓN DE VENTAS (CANDADO ANTI-FUGAS)
   2. Responde LITERALMENTE: "Comprendo tu punto. Permíteme transferir este chat con el Ingeniero Julio, el jefe del laboratorio, para que revise tu caso y vea si es posible ofrecerte alguna alternativa técnica."
   3. Concatena inmediatamente en una nueva línea la etiqueta: __TRANSFERIR_HUMANO__
 
-PASO 4: REGLA DE COTIZACIÓN GENERAL
-Si el costo en Neon es 'Por cotizar':
-1. Si está en la TABLA DE PRECIOS FIJOS: Entrega el precio exacto (si son controles, recuerda mencionar que incluye ambos joysticks).
-2. Si es una falla no contemplada en la tabla: Explica que la revisión en laboratorio es **SIN COSTO** y ofrece agendar Visita o Recolección.
-3. Si es producto Apple (MacBook, iMac): Indica que requiere diagnóstico técnico previo (sin costo). NO des rangos de precio.
-
 --------------------------------------------------
 4. REGLAS DE HORARIO Y RECEPCIÓN (ESTRICTO)
 --------------------------------------------------
@@ -732,51 +715,20 @@ Los horarios de recepción y entrega en el laboratorio de Villas Xaltipa son:
 - Sábados: 10:00 AM a 6:00 PM.
 - Domingos: 10:00 AM a 2:00 PM (Solo entregas/recepciones programadas).
 
-MODALIDAD 2: RECOLECCIÓN A DOMICILIO
-- Solo disponible previa programación en puntos medios u horarios acordados (Radio máximo 10 km).
-
-REGLAS DE RECOPILACIÓN Y OCULTACIÓN DE DIRECCIÓN:
-- NUNCA pidas el número telefónico (el sistema lo extrae automáticamente).
-- CANDADO DE DIRECCIÓN FÍSICA: NUNCA entregues la dirección ni el link de Google Maps de inmediato si el cliente pregunta "dónde están". 
-- Instrucción obligatoria ante dudas de ubicación: Responde diciendo que estamos en Villas Xaltipa, Cuautitlán, pero agrega inmediatamente: "Trabajamos únicamente con cita previa para darte la mejor atención. Tenemos disponibilidad de Lunes a Viernes de 7:00 PM a 9:30 PM, o los fines de semana. ¿Qué día y en qué horario aproximado te gustaría agendar tu visita?". 
-- SOLAMENTE cuando el cliente confirme un día y una hora EXACTA dentro del horario oficial, confírmale la cita y entrégale la DIRECCIÓN FÍSICA y el GOOGLE MAPS.
-- VISITA AL LABORATORIO: Solicita Nombre Completo, Fecha/Hora exacta y confirmación de Factura (SÍ/NO). PROHIBIDO pedir dirección física (asigna en la etiqueta: "Visita en Laboratorio").
-- RECOLECCIÓN A DOMICILIO: Solicita Nombre Completo, Dirección Completa, Fecha/Hora deseada y confirmación de Factura (SÍ/NO).
+⛔ REGLA STRICTA POST-CONFIRMACIÓN DE CITA:
+Si en el historial de chat YA se emitió el bloque "🎫 *Cita Confirmada en Laboratorio*" o "🎫 *Confirmación de Ruta de Recolección*", Y el usuario responde únicamente con agradecimientos, cierres o frases de cortesía (ej. "Muchas gracias", "Gracias", "Excelente", "Ok", "Perfecto", "Enterado"):
+-> PROHIBIDO volver a pedir fecha, hora o solicitar datos para agendar.
+-> Responde ÚNICAMENTE: "¡De nada! Quedamos al pendiente para recibirte el día de tu cita. ¡Que tengas un excelente día! 🛠️" Y NO vuelvas a pedir fecha/hora.
 
 --------------------------------------------------
 5. PROTOCOLO DE FACTURACIÓN FISCAL (DOS FASES)
 --------------------------------------------------
 - FASE 1: Pregunta inicialmente si requerirá factura fiscal (SÍ/NO).
-- FASE 2: Si el usuario responde "SÍ" o proporciona datos fiscales, PROHIBIDO cerrar la cita. Solicita los 6 datos fiscales obligatorios: 1) RFC, 2) Nombre Fiscal / Razón Social, 3) Código Postal Fiscal, 4) Régimen Fiscal, 5) Uso de CFDI y 6) Correo electrónico.
-- Emitir el mensaje de confirmación final únicamente cuando los 6 datos hayan sido proporcionados o cuando el cliente confirme que "NO" requiere factura.
-
---------------------------------------------------
-6. PROTOCOLO EXCLUSIVO: SOPORTE TÉCNICO REMOTO (OPCIÓN 1)
---------------------------------------------------
-1. Si elige Soporte Remoto ($419 MXN neto), solicita Nombre Completo y Factura (SÍ/NO).
-2. Tras recibir el nombre y estatus de factura, envía exactamente estas instrucciones de conexión:
-
-"¡Excelente [Nombre]! Hemos registrado tu solicitud de Soporte Técnico Remoto ($419 MXN). Para que el Ingeniero Julio pueda conectarse a tu equipo, usaremos la plataforma oficial de Google. 
-
-⚠️ **IMPORTANTE:** Si usas Windows, asegúrate de ser el administrador del equipo (o tener la contraseña), ya que el sistema te pedirá permiso para instalar la extensión. Si usas Mac, te pedirá activar permisos de grabación de pantalla.
-
-Sigue estos 3 rápidos pasos:
-1. Desde la computadora con el problema, abre Chrome e ingresa a: **remotedesktop.google.com/support**
-2. En la sección 'Recibir asistencia', haz clic en el botón azul para descargar y acepta los permisos de installation.
-3. Haz clic en el botón **'+ Generar código'**. Te aparecerá un número de 12 dígitos.
-
-Escríbeme o pega ese código aquí abajo para iniciar la sesión de inmediato."
-
-3. Al final de este mensaje, concatena obligatoriamente las etiquetas de salida ISO con la hora actual.
+- FASE 2: Si el usuario responde "SÍ" o proporciona datos fiscales, PROHIBIDO cerrar la cita. Solicita los 6 datos fiscales obligatorios.
 
 --------------------------------------------------
 7. ESTRUCTURA Y ETIQUETAS DE SALIDA (OBLIGATORIAS AL CONFIRMAR)
 --------------------------------------------------
-REGLAS DE CALENDARIO Y FECHAS:
-- Próximo Sábado: Usar la fecha exactísima ${fechaSabadoISO}
-- Próximo Domingo: Usar la fecha exactísima ${fechaDomingoISO}
-- Regla de Zona Horaria: Formato ISO con hora local de México en 24h (Ej: 2:00 PM = T14:00:00). NO convertir a UTC.
-
 Al emitir el mensaje final de confirmación de cita (Visita o Recolección), DEBES concatenar al FINAL del mensaje de forma estricta las siguientes etiquetas:
 
 Para Visita en Laboratorio:
@@ -814,7 +766,6 @@ Etiquetas complementarias obligatorias:
         const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
         const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
 
-        // PARSER MEJORADO Y FLEXIBLE PARA ETIQUETAS DE CITA
         const matchVisita = respuestaRaw.match(/_?_?AGENDAR_VISITA_?_?:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?FECHA_CITA_?_?:\s*([^\n\r]+)/i)
         const matchRecoleccion = respuestaRaw.match(/_?_?AGENDAR_RECOLECCION_?_?:\s*([^\n\r]+)/i)
         const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:\s*([^\n\r]+)/i)
@@ -931,6 +882,9 @@ Etiquetas complementarias obligatorias:
             tipoSoporteCalculado = 'Reparación Física'
         }
 
+        // =========================================================================
+        // 🎯 PROCESAMIENTO Y REGISTRO DIRECTO DE VISITA EN LABORATORIO
+        // =========================================================================
         if (matchVisita) {
             const fechaExtraida = matchVisita[1].trim()
             const fechaParseada = new Date(fechaExtraida)
@@ -946,10 +900,11 @@ Etiquetas complementarias obligatorias:
 
                         await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
 
+                        // 🛑 SILENCIAR BOT Y REGISTRAR TAG [AGENDADO] EN NEON DB
                         const clienteDb = await prisma.cliente.upsert({
                             where: { telefono: telefonoParaCita },
-                            update: { nombre: nombreCrm },
-                            create: { telefono: telefonoParaCita, nombre: nombreCrm }
+                            update: { nombre: nombreCrm, atendidoPorBot: false },
+                            create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
                         });
 
                         await prisma.ticket.upsert({
@@ -957,14 +912,18 @@ Etiquetas complementarias obligatorias:
                             update: {
                                 equipo: dispositivoCrm,
                                 fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
-                                estado: 'ESPERANDO_APROBACION'
+                                estado: 'ESPERANDO_APROBACION',
+                                notasInternas: '[AGENDADO] Cita presencial agendada por IA',
+                                botActivo: false
                             },
                             create: {
                                 numeroOrden: `LEAD-${telefonoParaCita}`,
                                 equipo: dispositivoCrm,
                                 fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
                                 estado: 'ESPERANDO_APROBACION',
-                                clienteId: clienteDb.id
+                                clienteId: clienteDb.id,
+                                notasInternas: '[AGENDADO] Cita presencial agendada por IA',
+                                botActivo: false
                             }
                         });
 
@@ -978,6 +937,9 @@ Etiquetas complementarias obligatorias:
             }
         }
 
+        // =========================================================================
+        // 🎯 PROCESAMIENTO Y REGISTRO DIRECTO DE RECOLECCIÓN A DOMICILIO
+        // =========================================================================
         if (matchRecoleccion) {
             const fechaExtraida = matchRecoleccion[1].trim()
             const fechaParseada = new Date(fechaExtraida.includes('-06:00') ? fechaExtraida : `${fechaExtraida}-06:00`)
@@ -991,10 +953,11 @@ Etiquetas complementarias obligatorias:
                     const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
                     await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
 
+                    // 🛑 SILENCIAR BOT Y REGISTRAR TAG [AGENDADO] EN NEON DB
                     const clienteDb = await prisma.cliente.upsert({
                         where: { telefono: telefonoParaCita },
-                        update: { nombre: nombreCrm },
-                        create: { telefono: telefonoParaCita, nombre: nombreCrm }
+                        update: { nombre: nombreCrm, atendidoPorBot: false },
+                        create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
                     });
 
                     await prisma.ticket.upsert({
@@ -1002,14 +965,18 @@ Etiquetas complementarias obligatorias:
                         update: {
                             equipo: dispositivoCrm,
                             fallaReportada: `${fallaCrm} (Recolección Agendada)`,
-                            estado: 'ESPERANDO_APROBACION'
+                            estado: 'ESPERANDO_APROBACION',
+                            notasInternas: '[AGENDADO] Recolección a domicilio agendada por IA',
+                            botActivo: false
                         },
                         create: {
                             numeroOrden: `LEAD-${telefonoParaCita}`,
                             equipo: dispositivoCrm,
                             fallaReportada: `${fallaCrm} (Recolección Agendada)`,
                             estado: 'ESPERANDO_APROBACION',
-                            clienteId: clienteDb.id
+                            clienteId: clienteDb.id,
+                            notasInternas: '[AGENDADO] Recolección a domicilio agendada por IA',
+                            botActivo: false
                         }
                     });
 
@@ -1050,7 +1017,7 @@ Etiquetas complementarias obligatorias:
 
         const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         if (exitoEnvio) {
-            const codigoFolio = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
+            const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
             const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
             try {
@@ -1087,6 +1054,7 @@ Etiquetas complementarias obligatorias:
 
             const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
+            // 📊 ESCRITURA INMEDIATA EN GOOGLE SHEETS
             await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
             await registrarFinanzasEnFacturacion(
                 codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
@@ -1143,7 +1111,6 @@ export async function POST(req: Request) {
 
         const message = value.messages[0]
 
-        // 🎯 1. EXTRAER TEXTO DE MENSAJES NORMALES O BOTONES INTERACTIVOS DE PLANTILLAS
         let mensajeCliente = ''
         if (message.type === 'text') {
             mensajeCliente = message.text?.body || ''
@@ -1217,20 +1184,17 @@ export async function POST(req: Request) {
                 return new Response('Bot reseteado', { status: 200 })
             }
 
-            // 🎯 2. INTERCEPCIÓN DE CLIC EN BOTÓN DE PLANTILLA ("Hablar con el Ing. Julio")
             const esBotonReactivacion = message.type === 'button' ||
                 message.type === 'interactive' ||
                 textoNormalizado.includes('hablar con el ing. julio') ||
                 textoNormalizado.includes('ing. julio');
 
             if (esBotonReactivacion) {
-                // Silenciar bot para pasar a atención manual
                 await prisma.cliente.update({
                     where: { id: cliente.id },
                     data: { atendidoPorBot: false }
                 });
 
-                // Registrar mensaje en la base de datos
                 await prisma.mensaje.create({
                     data: {
                         texto: `⚡ [Respuesta a Botón]: ${mensajeCliente}`,
@@ -1239,14 +1203,12 @@ export async function POST(req: Request) {
                     }
                 });
 
-                // Disparar alerta en Google Chat
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '💬 CLIENTE REACTIVADO',
                     `El cliente *${cliente.nombre || 'WhatsApp'}* (${telefono10Digitos}) presionó el botón *"${mensajeCliente}"*. La ventana de 24h de WhatsApp está abierta y lista en el panel.`
                 );
 
-                // Mensaje de confirmación al cliente
                 await enviarMensajeWhatsApp(
                     numeroCliente,
                     "👋 ¡Hola! He notificado directamente al Ingeniero Julio. En un momento tomará tu chat desde el panel de control para atenderte. 🔬"
