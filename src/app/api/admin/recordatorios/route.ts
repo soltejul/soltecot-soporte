@@ -79,7 +79,7 @@ export async function POST() {
         const ticketsAgendados = await prisma.ticket.findMany({
             where: {
                 OR: [
-                    { estado: 'AGENDADO' },
+                    { estado: 'AGENDADO' as any },
                     { notasInternas: { contains: '[AGENDADO]' } }
                 ]
             },
