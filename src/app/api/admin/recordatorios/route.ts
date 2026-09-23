@@ -129,6 +129,7 @@ export async function POST() {
             }
 
             // Disparo vía Meta Cloud API
+            // Disparo vía Meta Cloud API
             const exito = await enviarPlantillaRecordatorioMeta(
                 cliente.telefono,
                 nombreCliente,
@@ -137,8 +138,27 @@ export async function POST() {
                 paramEstatus
             )
 
-            if (exito) contadorEnviados++
-        }
+            if (exito) {
+                contadorEnviados++
+
+                // 👇 AGREGAR ESTE BLOQUE NUEVO 👇
+                // Guardar una copia visual del recordatorio en la base de datos para el Panel
+                try {
+                    const textoVisual = `⏳ *[RECORDATORIO AUTOMÁTICO ENVIADO]*\n\nHola ${nombreCliente}, el estatus de tu equipo ${equipo} (Folio: ${folio}) ha cambiado a:\n\n👉 *${paramEstatus}*\n\n🌐 Puedes consultar los detalles de tu orden o responder a este mensaje para conectar con nuestro equipo.`
+
+                    await prisma.mensaje.create({
+                        data: {
+                            texto: textoVisual,
+                            origen: 'BOT',
+                            clienteId: cliente.id
+                        }
+                    })
+                } catch (errDb) {
+                    console.error("🔴 Error guardando eco visual en DB:", errDb)
+                }
+                // 👆 FIN DEL BLOQUE NUEVO 👆
+            }
+        } // Fin del for
 
         return NextResponse.json({
             success: true,
