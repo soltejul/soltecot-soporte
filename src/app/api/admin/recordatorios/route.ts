@@ -105,7 +105,7 @@ export async function POST() {
             const folio = ticket.numeroOrden || 'CITA'
 
             // 🎯 LÓGICA DE TIEMPO DINÁMICO PARA VARIABLE {{4}}
-            const fechaCitaRaw = ticket.fechaCita || ticket.updatedAt || ticket.createdAt
+            const fechaCitaRaw = (ticket as any) || ticket.updatedAt || ticket.createdAt
             const horaCita = new Date(fechaCitaRaw)
 
             let paramEstatus = '📅 RECORDATORIO DE CITA EN LABORATORIO'
