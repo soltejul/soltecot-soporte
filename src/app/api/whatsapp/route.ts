@@ -140,12 +140,17 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
         const valoresFila = [fechaActual, telefono, mensaje, respuesta, status, nombre, dispositivo, falla]
 
+        console.log(`📊 [GOOGLE SHEETS HOJA1]: Intentando registrar fila para ${telefono}...`)
+
         await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID, range: "A:H",
-            valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
+            spreadsheetId: SPREADSHEET_ID,
+            range: "'Hoja 1'!A:H",
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [valoresFila] }
         })
+        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila agregada correctamente para ${telefono}`)
     } catch (error: any) {
-        console.error('🔴 Error Sheets Hoja 1:', error.message)
+        console.error('🔴 [ERROR CRÍTICO HOJA 1 SHEETS]:', error.message)
     }
 }
 
@@ -191,7 +196,7 @@ async function registrarFinanzasEnFacturacion(
             const nombreFinal = (nombre === 'Cliente WhatsApp' && filaVieja[2]) ? filaVieja[2] : nombre;
             const soporteFinal = (tipoSoporte === 'Remoto' && filaVieja[4]) ? filaVieja[4] : tipoSoporte;
             const fallaFinal = (dispositivoFalla.includes('Soporte General') && filaVieja[5]) ? filaVieja[5] : dispositivoFalla;
-            const statusFinal = status; // Mantiene el estado fresco (ej. AGENDADO)
+            const statusFinal = status;
             const facturaFinal = (reqFactura === 'NO' && filaVieja[7] === 'SI') ? 'SI' : reqFactura;
 
             const rfcFinal = (!rfc && filaVieja[8]) ? filaVieja[8] : rfc;
@@ -1015,53 +1020,55 @@ Etiquetas complementarias obligatorias:
         if (historial.length > 12) historial = historial.slice(-12)
         MEMORIA_CHAT.set(numeroCliente, historial)
 
-        const exitoEnvio = await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
-        if (exitoEnvio) {
-            const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
-            const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
+        // 🚀 DISPARO A WHATSAPP
+        await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
 
-            try {
-                const clienteFresco = await prisma.cliente.findFirst({
-                    where: { telefono: { endsWith: telefono10Digitos } }
+        // 🎯 CÁLCULO DE FINANZAS Y REGISTRO EN CRM (EJECUCIÓN INCONDICIONAL)
+        const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
+        const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
+
+        try {
+            const clienteFresco = await prisma.cliente.findFirst({
+                where: { telefono: { endsWith: telefono10Digitos } }
+            });
+
+            if (clienteFresco?.id) {
+                await prisma.mensaje.create({
+                    data: { texto: mensajeCliente, origen: 'CLIENTE', clienteId: clienteFresco.id }
                 });
 
-                if (clienteFresco?.id) {
-                    await prisma.mensaje.create({
-                        data: { texto: mensajeCliente, origen: 'CLIENTE', clienteId: clienteFresco.id }
-                    });
-
-                    await prisma.mensaje.create({
-                        data: { texto: respuestaWhatsApp, origen: 'BOT', clienteId: clienteFresco.id }
-                    });
-                }
-            } catch (errChat) {
-                console.error('🔴 Error guardando chat efímero:', errChat);
+                await prisma.mensaje.create({
+                    data: { texto: respuestaWhatsApp, origen: 'BOT', clienteId: clienteFresco.id }
+                });
             }
-
-            let totalCobrado = "", montoNeto = "", ivaCalculado = ""
-
-            if (ticketMasReciente?.costoReparacion) {
-                const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
-                if (!isNaN(costoTotal)) {
-                    totalCobrado = costoTotal.toFixed(2)
-                    const neto = costoTotal / 1.16
-                    montoNeto = neto.toFixed(2)
-                    ivaCalculado = (costoTotal - neto).toFixed(2)
-                }
-            } else {
-                totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
-            }
-
-            const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
-
-            // 📊 ESCRITURA INMEDIATA EN GOOGLE SHEETS
-            await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
-            await registrarFinanzasEnFacturacion(
-                codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
-                reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
-                montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
-            )
+        } catch (errChat) {
+            console.error('🔴 Error guardando chat efímero:', errChat);
         }
+
+        let totalCobrado = "", montoNeto = "", ivaCalculado = ""
+
+        if (ticketMasReciente?.costoReparacion) {
+            const costoTotal = parseFloat(ticketMasReciente.costoReparacion)
+            if (!isNaN(costoTotal)) {
+                totalCobrado = costoTotal.toFixed(2)
+                const neto = costoTotal / 1.16
+                montoNeto = neto.toFixed(2)
+                ivaCalculado = (costoTotal - neto).toFixed(2)
+            }
+        } else {
+            totalCobrado = "Por cotizar"; montoNeto = "Pendiente"; ivaCalculado = "Pendiente"
+        }
+
+        const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
+
+        // 📊 ESCRITURA INMEDIATA Y OBLIGATORIA EN GOOGLE SHEETS
+        await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
+        await registrarFinanzasEnFacturacion(
+            codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
+            reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
+            montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
+        )
+
     } catch (error: any) {
         console.error('🔴 Error crítico en el bloque de salida total:', error.message)
     }
