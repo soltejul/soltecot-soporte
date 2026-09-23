@@ -138,17 +138,22 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets'])
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
-        const valoresFila = [fechaActual, telefono, mensaje, respuesta, status, nombre, dispositivo, falla]
 
-        console.log(`📊 [GOOGLE SHEETS HOJA1]: Intentando registrar fila para ${telefono}...`)
+        const mensajeLimpio = String(mensaje || '').replace(/[\r\n]+/g, ' ').trim()
+        const respuestaLimpia = String(respuesta || '').replace(/[\r\n]+/g, ' ').trim()
+        const fallaLimpia = String(falla || '').replace(/[\r\n]+/g, ' ').trim()
+
+        const valoresFila = [fechaActual, telefono, mensajeLimpio, respuestaLimpia, status, nombre, dispositivo, fallaLimpia]
+
+        console.log(`📊 [GOOGLE SHEETS HOJA1]: Registrando fila (RAW)...`)
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: "'Hoja 1'!A:H",
-            valueInputOption: 'USER_ENTERED',
+            valueInputOption: 'RAW', // 👈 ¡ESTE ES EL CAMBIO CLAVE! 
             requestBody: { values: [valoresFila] }
         })
-        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila agregada correctamente para ${telefono}`)
+        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila agregada correctamente.`)
     } catch (error: any) {
         console.error('🔴 [ERROR CRÍTICO HOJA 1 SHEETS]:', error.message)
     }
