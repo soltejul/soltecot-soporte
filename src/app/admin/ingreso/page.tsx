@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 
@@ -13,14 +13,70 @@ export default function RegistroOrdenAdmin() {
         costoEstimado: '',
         notasInternas: ''
     })
+
+    const [buscandoCliente, setBuscandoCliente] = useState(false)
+    const [clienteRegistradoPrevio, setClienteRegistradoPrevio] = useState(false)
+
     const [fotos, setFotos] = useState<File[]>([])
+    const [previews, setPreviews] = useState<string[]>([])
     const [cargando, setCargando] = useState(false)
     const [mensajeExito, setMensajeExito] = useState('')
     const [error, setError] = useState('')
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // 🗜️ Helper: Comprime imágenes en el navegador antes de subir
+    // 🔍 AUTOCOMPLETADO DE CLIENTE POR TELÉFONO
+    const buscarClienteExistente = async (telefonoRaw: string) => {
+        const clean = telefonoRaw.replace(/[^0-9]/g, '').slice(-10)
+        if (clean.length < 10) return
+
+        setBuscandoCliente(true)
+        try {
+            const res = await fetch(`/api/admin/mensajes?telefono=${clean}`)
+            const data = await res.json()
+
+            if (res.ok && data.cliente) {
+                const nombreBd = data.cliente.nombre
+                if (nombreBd && nombreBd !== 'Cliente WhatsApp' && nombreBd !== 'Desconocido') {
+                    setForm((prev) => ({ ...prev, nombre: nombreBd }))
+                    setClienteRegistradoPrevio(true)
+                }
+            }
+        } catch (err) {
+            console.error("Error al buscar cliente previo:", err)
+        } finally {
+            setBuscandoCliente(false)
+        }
+    }
+
+    const manejarCambioTelefono = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
+        setForm({ ...form, telefono: val })
+        setClienteRegistradoPrevio(false)
+
+        const clean = val.replace(/[^0-9]/g, '').slice(-10)
+        if (clean.length === 10) {
+            buscarClienteExistente(clean)
+        }
+    }
+
+    // 🖼️ GESTIÓN DE PREVIEWS Y LIMPIEZA DE MEMORIA
+    useEffect(() => {
+        if (fotos.length === 0) {
+            setPreviews([])
+            return
+        }
+
+        const objectUrls = fotos.map((f) => URL.createObjectURL(f))
+        setPreviews(objectUrls)
+
+        // Limpieza de objetos de memoria al desmontar/cambiar
+        return () => {
+            objectUrls.forEach((url) => URL.revokeObjectURL(url))
+        }
+    }, [fotos])
+
+    // 🗜️ COMPRESIÓN DE IMÁGENES VÍA CANVAS (1280px / 0.75 JPEG)
     const comprimirImagen = (archivo: File): Promise<File> => {
         return new Promise((resolve) => {
             const reader = new FileReader()
@@ -81,18 +137,17 @@ export default function RegistroOrdenAdmin() {
         setMensajeExito('')
 
         try {
-            // Limpieza de teléfono a 10 dígitos
             const telefonoLimpio = form.telefono.replace(/[^0-9]/g, '').slice(-10)
             if (telefonoLimpio.length < 10) {
                 throw new Error('El número de teléfono debe contener al menos 10 dígitos válidos.')
             }
 
-            // 1️⃣ Comprimir todas las fotos seleccionadas en el navegador
+            // 1️⃣ Comprimir fotos en cliente
             const fotosComprimidas = await Promise.all(
                 fotos.map((f) => comprimirImagen(f))
             )
 
-            // 2️⃣ Construir un solo paquete FormData con los datos y las imágenes
+            // 2️⃣ Construcción de FormData
             const formData = new FormData()
             formData.append('telefono', telefonoLimpio)
             formData.append('nombre', form.nombre)
@@ -105,7 +160,7 @@ export default function RegistroOrdenAdmin() {
                 formData.append('files', f)
             })
 
-            // 3️⃣ Enviar todo en una sola petición atómica
+            // 3️⃣ Envío atómico
             const res = await fetch('/api/tickets', {
                 method: 'POST',
                 body: formData,
@@ -115,7 +170,7 @@ export default function RegistroOrdenAdmin() {
 
             if (!res.ok) throw new Error(data.error || 'Error al procesar el ingreso')
 
-            setMensajeExito(`¡Orden generada con éxito y notificación enviada por WhatsApp! Folio: ${data.ticket.numeroOrden}`)
+            setMensajeExito(`¡Orden generada con éxito y notificación enviada! Folio: ${data.ticket.numeroOrden}`)
             setForm({
                 telefono: '',
                 nombre: '',
@@ -125,6 +180,7 @@ export default function RegistroOrdenAdmin() {
                 notasInternas: '',
             })
             setFotos([])
+            setClienteRegistradoPrevio(false)
 
         } catch (err: any) {
             setError(err.message)
@@ -134,36 +190,45 @@ export default function RegistroOrdenAdmin() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-4 md:p-8 flex flex-col items-center justify-center">
-            <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-xl p-6 md:p-8 shadow-2xl">
+        <div className="min-h-screen bg-black text-white p-4 md:p-8 flex flex-col items-center justify-center font-sans">
+            <div className="w-full max-w-lg bg-zinc-950 border border-zinc-900 rounded-2xl p-6 md:p-8 shadow-2xl">
+
                 {/* ENCABEZADO */}
                 <div className="flex justify-between items-start border-b border-zinc-900 pb-4 mb-6">
                     <div>
-                        <h2 className="text-xl font-bold text-emerald-400">SOLTECOT_ INTERNAL</h2>
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest mt-0.5">Recepción de Equipos</p>
+                        <h2 className="text-xl font-bold text-emerald-400 font-mono">SOLTECOT_ RECEPCIÓN</h2>
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest mt-0.5">Ingreso de Equipos a Laboratorio</p>
                     </div>
                     <Link
                         href="/admin"
-                        className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-bold px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5"
+                        className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1.5"
                     >
-                        ⬅ Volver
+                        <span>⬅</span> <span>Volver</span>
                     </Link>
                 </div>
 
                 <form onSubmit={manejarEnvio} className="space-y-4">
+
+                    {/* TELÉFONO CON BÚSQUEDA EN TIEMPO REAL */}
                     <div>
-                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Teléfono del Cliente (Obligatorio)</label>
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-semibold text-zinc-400 uppercase">Teléfono del Cliente *</label>
+                            {buscandoCliente && <span className="text-[10px] text-emerald-400 font-mono animate-pulse">🔍 Buscando en DB...</span>}
+                            {clienteRegistradoPrevio && <span className="text-[10px] text-purple-400 font-bold font-mono">✅ Cliente Registrado</span>}
+                        </div>
                         <input
                             type="tel"
                             inputMode="tel"
                             required
-                            placeholder="Ej: 5510203040"
+                            placeholder="10 dígitos (Ej: 5510203040)"
                             value={form.telefono}
-                            onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors font-mono"
+                            onChange={manejarCambioTelefono}
+                            onBlur={() => buscarClienteExistente(form.telefono)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors font-mono"
                         />
                     </div>
 
+                    {/* NOMBRE COMPLETO */}
                     <div>
                         <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Nombre Completo</label>
                         <input
@@ -171,35 +236,38 @@ export default function RegistroOrdenAdmin() {
                             placeholder="Ej: Julio López"
                             value={form.nombre}
                             onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
                         />
                     </div>
 
+                    {/* EQUIPO / DISPOSITIVO */}
                     <div>
-                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Equipo / Dispositivo (Obligatorio)</label>
+                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Equipo / Dispositivo *</label>
                         <input
                             type="text"
                             required
                             placeholder="Ej: PlayStation 5 Slim o Laptop Dell Inspiron"
                             value={form.equipo}
                             onChange={(e) => setForm({ ...form, equipo: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
                         />
                     </div>
 
+                    {/* FALLA REPORTADA */}
                     <div>
-                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Falla Reportada por el Cliente (Obligatorio)</label>
+                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Falla Reportada por el Cliente *</label>
                         <textarea
                             required
                             rows={2}
-                            placeholder="Ej: Se apaga a los 10 minutos por sobrecalentamiento"
+                            placeholder="Ej: Drift en joystick izquierdo o sobrecalentamiento"
                             value={form.fallaReportada}
                             onChange={(e) => setForm({ ...form, fallaReportada: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors resize-none"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors resize-none"
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* COSTO ESTIMADO Y ESTATUS */}
+                    <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Costo Estimado ($)</label>
                             <input
@@ -208,29 +276,30 @@ export default function RegistroOrdenAdmin() {
                                 placeholder="Ej: 1200"
                                 value={form.costoEstimado}
                                 onChange={(e) => setForm({ ...form, costoEstimado: e.target.value })}
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white outline-none focus:border-emerald-500 transition-colors font-mono"
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-amber-400 font-mono font-bold outline-none focus:border-emerald-500 transition-colors"
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Estatus Inicial</label>
-                            <div className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-emerald-400 font-bold border-dashed border-emerald-900 text-center">
+                            <div className="w-full bg-zinc-900 border border-dashed border-emerald-800/80 rounded-xl p-2.5 text-xs text-emerald-400 font-bold text-center font-mono">
                                 🛠️ RECIBIDO
                             </div>
                         </div>
                     </div>
 
+                    {/* NOTAS INTERNAS */}
                     <div>
                         <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Notas Técnicas / Diagnóstico Interno</label>
                         <textarea
                             rows={2}
-                            placeholder="Detalles ocultos para el taller (Ej: Trae sello de garantía roto)"
+                            placeholder="Detalles ocultos para el taller (Ej: Sello roto, rayón en carcasa)"
                             value={form.notasInternas}
                             onChange={(e) => setForm({ ...form, notasInternas: e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors resize-none"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors resize-none"
                         />
                     </div>
 
-                    {/* 📸 SECCIÓN DE EVIDENCIA FOTOGRÁFICA */}
+                    {/* 📸 EVIDENCIA FOTOGRÁFICA DE INGRESO */}
                     <div className="pt-2 border-t border-zinc-900">
                         <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase">Evidencia Fotográfica de Ingreso</label>
 
@@ -247,18 +316,18 @@ export default function RegistroOrdenAdmin() {
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full border-2 border-dashed border-zinc-800 hover:border-emerald-500 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-semibold py-3 rounded text-sm transition-colors flex justify-center items-center gap-2"
+                            className="w-full border-2 border-dashed border-zinc-800 hover:border-emerald-500 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 font-semibold py-3 rounded-xl text-xs transition-colors flex justify-center items-center gap-2"
                         >
-                            📷 Tomar / Subir Foto
+                            📷 Tomar / Subir Foto de Evidencia
                         </button>
 
-                        {fotos.length > 0 && (
-                            <div className="flex gap-3 mt-3 overflow-x-auto pb-2">
-                                {fotos.map((foto, index) => (
-                                    <div key={index} className="relative flex-shrink-0 w-16 h-16 rounded border border-zinc-700 overflow-hidden group">
+                        {previews.length > 0 && (
+                            <div className="flex gap-2 mt-3 overflow-x-auto pb-2 hide-scrollbar">
+                                {previews.map((src, index) => (
+                                    <div key={index} className="relative flex-shrink-0 w-16 h-16 rounded-xl border border-zinc-800 overflow-hidden group">
                                         <Image
-                                            src={URL.createObjectURL(foto)}
-                                            alt={`Evidencia ${index}`}
+                                            src={src}
+                                            alt={`Evidencia ${index + 1}`}
                                             fill
                                             unoptimized
                                             className="object-cover"
@@ -266,9 +335,9 @@ export default function RegistroOrdenAdmin() {
                                         <button
                                             type="button"
                                             onClick={() => eliminarFoto(index)}
-                                            className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-xs font-bold"
+                                            className="absolute inset-0 bg-black/70 text-rose-400 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-xs font-bold"
                                         >
-                                            ❌
+                                            ✕
                                         </button>
                                     </div>
                                 ))}
@@ -279,14 +348,14 @@ export default function RegistroOrdenAdmin() {
                     <button
                         type="submit"
                         disabled={cargando}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded text-sm transition-colors mt-4 disabled:opacity-50"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-sm transition-colors mt-4 disabled:opacity-50 shadow-lg"
                     >
                         {cargando ? 'Guardando Orden y Subiendo Fotos...' : '🚀 Dar Entrada e Iniciar Orden'}
                     </button>
                 </form>
 
-                {error && <p className="text-center text-rose-500 text-sm font-semibold mt-4">⚠️ {error}</p>}
-                {mensajeExito && <p className="text-center text-emerald-400 text-sm font-semibold mt-4">✅ {mensajeExito}</p>}
+                {error && <p className="text-center text-rose-400 text-xs font-semibold mt-4">⚠️ {error}</p>}
+                {mensajeExito && <p className="text-center text-emerald-400 text-xs font-semibold mt-4 font-mono">✅ {mensajeExito}</p>}
             </div>
         </div>
     )

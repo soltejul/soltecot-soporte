@@ -139,29 +139,27 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
 
-        // Limpieza de saltos de línea para proteger el JSON
         const mensajeLimpio = String(mensaje || '').replace(/[\r\n]+/g, ' ').trim()
         const respuestaLimpia = String(respuesta || '').replace(/[\r\n]+/g, ' ').trim()
         const fallaLimpia = String(falla || '').replace(/[\r\n]+/g, ' ').trim()
 
         const valoresFila = [fechaActual, telefono, mensajeLimpio, respuestaLimpia, status, nombre, dispositivo, fallaLimpia]
 
-        // 1. Leer las filas actuales para calcular la primera fila libre real (ej. 271)
         const respuestaHoja = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
             range: "'Hoja 1'!A:H"
         })
 
         const filasExistentes = respuestaHoja.data.values || []
-        const numeroFilaDestino = filasExistentes.length + 1
+        const filasConDatos = filasExistentes.filter(row => row && row.length > 0 && String(row[0] || '').trim() !== '')
+        const numeroFilaDestino = filasConDatos.length + 1
 
-        console.log(`📊 [GOOGLE SHEETS HOJA1]: Escribiendo mensaje directamente en la fila ${numeroFilaDestino}...`)
+        console.log(`📊 [GOOGLE SHEETS HOJA1]: Escribiendo mensaje en fila libre real ${numeroFilaDestino}...`)
 
-        // 2. Forzar la escritura en la fila exacta destino mediante UPDATE
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
             range: `'Hoja 1'!A${numeroFilaDestino}:H${numeroFilaDestino}`,
-            valueInputOption: 'USER_ENTERED',
+            valueInputOption: 'RAW',
             requestBody: { values: [valoresFila] }
         })
 
@@ -661,8 +659,6 @@ Tono: Cordial, profesional, empático, seguro y muy directo.
 - HOY ES: ${fechaHoyString}
 - PRÓXIMO SÁBADO (FECHA EXACTA): ${fechaSabadoISO}
 - PRÓXIMO DOMINGO (FECHA EXACTA): ${fechaDomingoISO}
-- DIRECCIÓN FÍSICA: ${DIRECCION_TEXTUAL}
-- GOOGLE MAPS: ${LINK_GOOGLE_MAPS}
 
 📋 INFO DEL TICKET EN NEON (Estado de la orden actual):
 - Folio de Orden: ${folioOrden}
@@ -670,6 +666,30 @@ Tono: Cordial, profesional, empático, seguro y muy directo.
 - Costo Total pactado por el Ingeniero Julio: ${costoPactado}
 
 ${instruccionesCalendario}
+
+--------------------------------------------------
+🔒 REGLA DE ORO 1: PRIVACIDAD Y CANDADO DE UBICACIÓN
+--------------------------------------------------
+LA DIRECCIÓN FÍSICA Y EL LINK DE GOOGLE MAPS SON CONFIDENCIALES Y RESERVADOS.
+- NUNCA entregues la calle, el número ni el enlace de Google Maps de forma prematura.
+- Si el cliente pregunta dónde están ubicados, por dónde es, o si le queda lejos, responde de forma muy amable dando ÚNICAMENTE la colonia y municipio:
+  "Nos encontramos en el fraccionamiento Villas Xaltipa, en Cuautitlán, Estado de México. Te comparto la zona para que calcules tu distancia. Recuerda que atendemos únicamente con cita previa, ¿te gustaría agendar una revisión sin costo para tu equipo?"
+- Entrega la dirección completa y el link de Google Maps ÚNICAMENTE cuando la cita quede 100% CONFIRMADA (con Nombre, Día y Hora acordados).
+  Ubicación exacta para cuando la cita esté confirmada:
+  Dirección: ${DIRECCION_TEXTUAL}
+  Link: ${LINK_GOOGLE_MAPS}
+
+--------------------------------------------------
+🤝 REGLA DE ORO 2: IDENTIFICACIÓN CORDIAL (EL ROMPEHIELOS)
+--------------------------------------------------
+- Si en la información el cliente se identifica o figura como 'Cliente WhatsApp' o 'Desconocido', busca un momento natural y cordial al inicio (ej. al darle una cotización o bienvenida) para preguntarle su nombre:
+  "Por cierto, para darte una atención más personalizada, ¿con quién tengo el gusto?"
+
+--------------------------------------------------
+🚚 REGLA DE ORO 3: LOGÍSTICA Y RECOLECCIÓN POR ZONA
+--------------------------------------------------
+- Si el cliente solicita recolección a domicilio y menciona un municipio o zona (ej. Coacalco, Tultitlán, etc.), NO entres en bucles exigiendo la calle exacta de inmediato.
+- Informa primero de forma amable si la zona se encuentra dentro de cobertura o dale una estimación del costo del servicio de recolección según la distancia general, preguntándole si desea continuar antes de pedir todos los datos fiscales y calle exacta.
 
 --------------------------------------------------
 1. CATÁLOGO DE SERVICIOS Y PRECIOS
@@ -714,7 +734,7 @@ PASO 1: RESPUESTA A BOTONES DE ANUNCIOS META (Facebook/Instagram)
 - Si presiona "¿Cuánto cuesta la instalación de joysticks TMR (Anti-Drift)?":
   -> Explica las ventajas de la tecnología TMR (magnética, anti-drift definitivo) y entrega la tarifa exacta aclarándole que el costo es **por ambos joysticks**.
 - Si presiona "Quiero agendar una cita para entregar mi control en taller" o "Quiero agendar una cita para llevar mi laptop al taller":
-  -> Pasa directo a aplicar la REGLA DE HORARIOS Y RECEPCIÓN para acordar el día y hora dentro del rango permitido.
+  -> Pasa directo a acordar el día y hora dentro del rango permitido.
 
 PASO 2: EVALUACIÓN DE INTERVENCIÓN HUMANA PREVIA (HANDOVER)
 - Si el "Costo Total pactado por el Ingeniero Julio" es DIFERENTE a 'Por cotizar', O SI en el historial observas que el Ingeniero Julio (o Taller) ya acordó una revisión, costo o solución:
@@ -737,10 +757,11 @@ Los horarios de recepción y entrega en el laboratorio de Villas Xaltipa son:
 - Sábados: 10:00 AM a 6:00 PM.
 - Domingos: 10:00 AM a 2:00 PM (Solo entregas/recepciones programadas).
 
-⛔ REGLA STRICTA POST-CONFIRMACIÓN DE CITA:
-Si en el historial de chat YA se emitió el bloque "🎫 *Cita Confirmada en Laboratorio*" o "🎫 *Confirmación de Ruta de Recolección*", Y el usuario responde únicamente con agradecimientos, cierres o frases de cortesía (ej. "Muchas gracias", "Gracias", "Excelente", "Ok", "Perfecto", "Enterado"):
--> PROHIBIDO volver a pedir fecha, hora o solicitar datos para agendar.
--> Responde ÚNICAMENTE: "¡De nada! Quedamos al pendiente para recibirte el día de tu cita. ¡Que tengas un excelente día! 🛠️" Y NO vuelvas a pedir fecha/hora.
+⛔ REGLA STRICTA ANTI-CITAS FANTASMA POST-CONFIRMACIÓN:
+- NUNCA emitas las etiquetas de agendado si el usuario NO ha dicho explícitamente qué DÍA y qué HORA prefiere.
+- Si en el historial de chat YA se confirmó la cita o el cliente solo responde con agradecimientos o frases de cortesía (ej. "Muchas gracias", "Gracias", "Excelente", "Ok", "Perfecto", "Enterado", "Lo voy a pensar"):
+-> PROHIBIDO volver a pedir fecha, hora o emitir etiquetas de agendado.
+-> Responde ÚNICAMENTE: "¡De nada! Quedamos al pendiente para atenderte el día de tu cita. ¡Que tengas un excelente día! 🛠️"
 
 --------------------------------------------------
 5. PROTOCOLO DE FACTURACIÓN FISCAL (DOS FASES)
@@ -749,7 +770,7 @@ Si en el historial de chat YA se emitió el bloque "🎫 *Cita Confirmada en Lab
 - FASE 2: Si el usuario responde "SÍ" o proporciona datos fiscales, PROHIBIDO cerrar la cita. Solicita los 6 datos fiscales obligatorios.
 
 --------------------------------------------------
-7. ESTRUCTURA Y ETIQUETAS DE SALIDA (OBLIGATORIAS AL CONFIRMAR)
+7. ESTRUCTURA Y ETIQUETAS DE SALIDA (OBLIGATORIAS SOLO AL CONFIRMAR FECHA/HORA/NOMBRE)
 --------------------------------------------------
 Al emitir el mensaje final de confirmación de cita (Visita o Recolección), DEBES concatenar al FINAL del mensaje de forma estricta las siguientes etiquetas:
 
@@ -922,7 +943,6 @@ Etiquetas complementarias obligatorias:
 
                         await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
 
-                        // 🛑 SILENCIAR BOT Y REGISTRAR TAG [AGENDADO] EN NEON DB
                         const clienteDb = await prisma.cliente.upsert({
                             where: { telefono: telefonoParaCita },
                             update: { nombre: nombreCrm, atendidoPorBot: false },
@@ -975,7 +995,6 @@ Etiquetas complementarias obligatorias:
                     const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
                     await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
 
-                    // 🛑 SILENCIAR BOT Y REGISTRAR TAG [AGENDADO] EN NEON DB
                     const clienteDb = await prisma.cliente.upsert({
                         where: { telefono: telefonoParaCita },
                         update: { nombre: nombreCrm, atendidoPorBot: false },
@@ -1040,7 +1059,7 @@ Etiquetas complementarias obligatorias:
         // 🚀 DISPARO A WHATSAPP
         await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
 
-        // 🎯 CÁLCULO DE FINANZAS Y REGISTRO EN CRM (EJECUCIÓN INCONDICIONAL)
+        // 🎯 CÁLCULO DE FINANZAS Y REGISTRO EN CRM
         const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
         const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
 
@@ -1078,7 +1097,7 @@ Etiquetas complementarias obligatorias:
 
         const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-        // 📊 ESCRITURA INMEDIATA Y OBLIGATORIA EN GOOGLE SHEETS
+        // 📊 ESCRITURA EN GOOGLE SHEETS
         await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
         await registrarFinanzasEnFacturacion(
             codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
@@ -1192,6 +1211,9 @@ export async function POST(req: Request) {
                 console.log(`👤 [NUEVO CLIENTE]: Registrado en Neon con teléfono ${telefono10Digitos}`)
             }
 
+            // ====================================================================
+            // 🛑 RESETEO MANUAL ADMIN (COMANDO SECRETO)
+            // ====================================================================
             if (textoNormalizado === 'kanzer1986') {
                 await prisma.cliente.update({
                     where: { id: cliente.id },
@@ -1206,6 +1228,41 @@ export async function POST(req: Request) {
                 await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
                 console.log(`🧼 [RESET SUCCESS]: Hilo borrado y Bot reactivado para ${telefono10Digitos}.`)
                 return new Response('Bot reseteado', { status: 200 })
+            }
+
+            // ====================================================================
+            // 🚪 OPT-OUT CLIENTE ("NO", "YA NO", "YA LO RESOLVÍ")
+            // ====================================================================
+            const esOptOut = textoNormalizado === 'no' ||
+                textoNormalizado === 'ya no' ||
+                textoNormalizado === 'ya lo resolvi' ||
+                textoNormalizado === 'ya lo resolví' ||
+                textoNormalizado === 'no gracias' ||
+                textoNormalizado.includes('ya no quiero');
+
+            if (esOptOut) {
+                if (typeof MEMORIA_CHAT !== 'undefined') {
+                    MEMORIA_CHAT.delete(numeroCliente)
+                    MEMORIA_CHAT.delete(`B2B_${numeroCliente}`)
+                }
+
+                await prisma.ticket.updateMany({
+                    where: {
+                        clienteId: cliente.id,
+                        estado: { notIn: ['ENTREGADO', 'RECHAZADO'] }
+                    },
+                    data: { estado: 'RECHAZADO', notasInternas: '[OPT-OUT] El cliente declinó o cerró el seguimiento.' }
+                });
+
+                await prisma.mensaje.deleteMany({
+                    where: { clienteId: cliente.id }
+                });
+
+                const mensajeDespedida = "¡Entendido! No te enviaremos más mensajes. Hemos cerrado tu solicitud. Si algún día vuelves a necesitar ayuda con tus equipos, aquí estaremos con mucho gusto. ¡Que tengas un excelente día! 👋";
+                await enviarMensajeWhatsApp(numeroCliente, mensajeDespedida);
+
+                console.log(`🧼 [OPT-OUT SUCCESS]: Cliente ${telefono10Digitos} sanitizado y cerrado.`);
+                return new Response('Opt-out procesado con éxito', { status: 200 });
             }
 
             const esBotonReactivacion = message.type === 'button' ||

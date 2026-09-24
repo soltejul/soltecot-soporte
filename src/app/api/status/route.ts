@@ -1,20 +1,23 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '../../../lib/prisma' // 🔌 Importe relativo seguro a tu instancia de Postgres
+import { prisma } from '../../../lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const numeroOrden = searchParams.get('orden')
 
-        // Validamos que el usuario haya escrito algo
-        if (!numeroOrden) {
+        if (!numeroOrden || typeof numeroOrden !== 'string') {
             return NextResponse.json({ error: 'El número de orden es requerido' }, { status: 400 })
         }
 
-        // Buscamos de forma exacta e indexada en Postgres
+        const ordenLimpia = numeroOrden.toUpperCase().trim()
+
+        // Búsqueda en Postgres con proyección de campos seguros
         const ticket = await prisma.ticket.findUnique({
             where: {
-                numeroOrden: numeroOrden.toUpperCase().trim() // Evitamos errores de minúsculas o espacios
+                numeroOrden: ordenLimpia
             },
             select: {
                 numeroOrden: true,
@@ -22,25 +25,32 @@ export async function GET(request: Request) {
                 fallaReportada: true,
                 estado: true,
                 costoEstimado: true,
+                costoReparacion: true,
                 updatedAt: true,
                 cliente: {
                     select: {
-                        nombre: true // Traemos también el nombre del dueño de forma relacional
+                        nombre: true
                     }
                 }
             }
         })
 
-        // Si el folio no existe en Postgres
         if (!ticket) {
-            return NextResponse.json({ error: 'No encontramos ninguna orden con ese folio' }, { status: 404 })
+            return NextResponse.json({ error: 'No encontramos ninguna orden registrada con ese folio' }, { status: 404 })
         }
 
-        // Si todo está correcto, devolvemos el ticket con estatus 200
-        return NextResponse.json(ticket, { status: 200 })
+        // Respuesta con encabezados anti-caché para estado en tiempo real
+        return NextResponse.json(ticket, {
+            status: 200,
+            headers: {
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        })
 
     } catch (error: any) {
         console.error('🔴 [API STATUS ERROR]:', error.message)
-        return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+        return NextResponse.json({ error: 'Error interno al consultar el estatus' }, { status: 500 })
     }
 }

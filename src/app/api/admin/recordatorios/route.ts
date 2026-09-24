@@ -75,37 +75,63 @@ export async function POST() {
 
         console.log(`📡 [RECORDATORIOS CRON]: Ejecutando revisión de citas en vivo...`)
 
-        // 🐘 Buscar tickets o leads agendados en Neon DB mediante las notas o falla reportada
+        // 🐘 1. Buscar tickets agendados ACTIVOS (Ignorando Entregados y Rechazados)
+        // e incluyendo la relación de la tabla Cita para leer la fecha real
         const ticketsAgendados = await prisma.ticket.findMany({
             where: {
+                estado: { notIn: ['ENTREGADO', 'RECHAZADO'] },
                 OR: [
                     { notasInternas: { contains: '[AGENDADO]' } },
                     { fallaReportada: { contains: 'Agendad' } }
                 ]
             },
-            include: { cliente: true }
+            include: {
+                cliente: true,
+                citas: {
+                    where: { estado: { notIn: ['CANCELADA', 'COMPLETADA'] } },
+                    orderBy: { fechaCita: 'desc' },
+                    take: 1
+                }
+            }
         })
 
         if (ticketsAgendados.length === 0) {
             return NextResponse.json({
                 success: true,
                 enviados: 0,
-                mensaje: `No hay citas agendadas detectadas en Neon DB.`
+                mensaje: `No hay citas agendadas activas en Neon DB.`
             })
         }
 
         let contadorEnviados = 0
+        const h3Atras = new Date(ahora.getTime() - (4 * 60 * 60 * 1000)) // Ventana de 4 horas anti-spam
 
         for (const ticket of ticketsAgendados) {
             const cliente = ticket.cliente
             if (!cliente || !cliente.telefono) continue
 
+            // 🛑 FILTRO ANTI-SPAM: Verificar si ya se le envió un recordatorio en las últimas 4 horas
+            const ultimoRecordatorioReciente = await prisma.mensaje.findFirst({
+                where: {
+                    clienteId: cliente.id,
+                    origen: 'BOT',
+                    texto: { contains: '[RECORDATORIO AUTOMÁTICO ENVIADO]' },
+                    createdAt: { gte: h3Atras }
+                }
+            })
+
+            if (ultimoRecordatorioReciente) {
+                console.log(`⏳ [ANTI-SPAM]: Recordatorio omitido para ${cliente.telefono}. Ya se le envió uno recientemente.`)
+                continue
+            }
+
             const nombreCliente = cliente.nombre || 'Cliente'
             const equipo = ticket.equipo || 'Equipo'
             const folio = ticket.numeroOrden || 'CITA'
 
-            // 🎯 LÓGICA DE TIEMPO DINÁMICO PARA VARIABLE {{4}}
-            const fechaCitaRaw = (ticket as any).fechaCita || ticket.updatedAt || ticket.createdAt
+            // 🎯 LÓGICA DE TIEMPO DINÁMICO LEYENDO LA TABLA CITA O FALLBACK A CREATEDAT
+            const citaRelacionada = ticket.citas?.[0]
+            const fechaCitaRaw = citaRelacionada?.fechaCita || ticket.createdAt
             const horaCita = new Date(fechaCitaRaw)
 
             let paramEstatus = '📅 RECORDATORIO DE CITA EN LABORATORIO'
@@ -113,22 +139,21 @@ export async function POST() {
             if (horaCita && !isNaN(horaCita.getTime())) {
                 const diferenciaMinutos = Math.round((horaCita.getTime() - ahora.getTime()) / (1000 * 60))
 
-                if (diferenciaMinutos < 0 && diferenciaMinutos >= -45) {
-                    // 🚨 CLIENTE RETRASADO (Entre 1 y 45 min de retraso)
+                if (diferenciaMinutos < 0 && diferenciaMinutos >= -60) {
+                    // 🚨 CLIENTE RETRASADO (Hasta 60 min de tolerancia)
                     paramEstatus = '📍 ¿TUVISTE UN CONTRATIEMPO? RESPÓNDENOS SI AÚN VIENES HOY O SI REAGENDAMOS TU CITA 🗓️'
                 } else if (diferenciaMinutos >= 0 && diferenciaMinutos <= 60) {
                     // ⏰ CITA PRÓXIMA (Faltan menos de 60 minutos)
                     paramEstatus = `⏰ TE ESPERAMOS EN TU CITA EN ${diferenciaMinutos} MINUTOS`
-                } else if (horaCita.getDate() === ahora.getDate()) {
-                    // 📍 CITA HOY (Más tarde)
+                } else if (horaCita.getDate() === ahora.getDate() && horaCita.getMonth() === ahora.getMonth()) {
+                    // 📍 CITA HOY
                     paramEstatus = '📍 TE ESPERAMOS HOY EN TU CITA EN LABORATORIO'
                 } else {
                     // 📅 CITA MAÑANA O POSTERIOR
-                    paramEstatus = '📅 RECORDATORIO DE CITA MAÑANA EN LABORATORIO'
+                    paramEstatus = '📅 RECORDATORIO DE CITA PROGRAMADA EN LABORATORIO'
                 }
             }
 
-            // Disparo vía Meta Cloud API
             // Disparo vía Meta Cloud API
             const exito = await enviarPlantillaRecordatorioMeta(
                 cliente.telefono,
@@ -141,10 +166,9 @@ export async function POST() {
             if (exito) {
                 contadorEnviados++
 
-                // 👇 AGREGAR ESTE BLOQUE NUEVO 👇
-                // Guardar una copia visual del recordatorio en la base de datos para el Panel
+                // 👁️ REGISTRO DE ECO VISUAL EN EL CHAT DEL DASHBOARD
                 try {
-                    const textoVisual = `⏳ *[RECORDATORIO AUTOMÁTICO ENVIADO]*\n\nHola ${nombreCliente}, el estatus de tu equipo ${equipo} (Folio: ${folio}) ha cambiado a:\n\n👉 *${paramEstatus}*\n\n🌐 Puedes consultar los detalles de tu orden o responder a este mensaje para conectar con nuestro equipo.`
+                    const textoVisual = `⏳ *[RECORDATORIO AUTOMÁTICO ENVIADO]*\n\nHola ${nombreCliente}, el estatus de tu equipo ${equipo} (Folio: ${folio}) ha cambiado a:\n\n👉 *${paramEstatus}*`
 
                     await prisma.mensaje.create({
                         data: {
@@ -156,14 +180,13 @@ export async function POST() {
                 } catch (errDb) {
                     console.error("🔴 Error guardando eco visual en DB:", errDb)
                 }
-                // 👆 FIN DEL BLOQUE NUEVO 👆
             }
-        } // Fin del for
+        }
 
         return NextResponse.json({
             success: true,
             enviados: contadorEnviados,
-            total: ticketsAgendados.length
+            totalEvaluados: ticketsAgendados.length
         })
 
     } catch (error: any) {

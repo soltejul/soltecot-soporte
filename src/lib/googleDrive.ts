@@ -1,84 +1,100 @@
-import { google } from 'googleapis';
-import { Readable } from 'stream';
+import { google } from 'googleapis'
+import { Readable } from 'stream'
+
+const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL
+const privateKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
 
 const auth = new google.auth.GoogleAuth({
     credentials: {
-        client_email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        client_email: clientEmail,
+        private_key: privateKey,
     },
     scopes: ['https://www.googleapis.com/auth/drive.file'],
-});
+})
 
-const drive = google.drive({ version: 'v3', auth });
+const drive = google.drive({ version: 'v3', auth })
 
 /**
- * Busca si existe la carpeta del Folio (ej: "SOL-1001"). Si no existe, la crea dentro de Evidencias_Soltecot.
+ * Busca si existe la carpeta del Folio (ej: "SOL-1001"). Si no existe, la crea dentro de la carpeta raíz de Evidencias.
  */
 export async function obtenerOCrearCarpetaFolio(folio: string): Promise<string> {
     try {
-        const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+        if (!parentFolderId) {
+            throw new Error('La variable de entorno GOOGLE_DRIVE_FOLDER_ID no está configurada en el servidor.')
+        }
 
-        // 1. Buscamos si ya existe una carpeta con ese nombre
-        const query = `name = '${folio}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+        // 🛡️ Escapamos apóstrofes para evitar errores de sintaxis en la consulta de Google Drive API
+        const folioSanitizado = folio.trim().replace(/'/g, "\\'")
+        const query = `name = '${folioSanitizado}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+
+        // 1️⃣ Buscamos si ya existe la carpeta en Drive
         const res = await drive.files.list({
             q: query,
             fields: 'files(id, name)',
             supportsAllDrives: true,
             includeItemsFromAllDrives: true,
-        });
+        })
 
         if (res.data.files && res.data.files.length > 0) {
-            console.log(`📁 [Google Drive]: Carpeta existente encontrada para ${folio}`);
-            return res.data.files[0].id!;
+            console.log(`📁 [Google Drive]: Carpeta existente encontrada para ${folio}`)
+            return res.data.files[0].id!
         }
 
-        // 2. Si no existe, creamos la subcarpeta
+        // 2️⃣ Si no existe, creamos la subcarpeta para el folio
         const nuevaCarpeta = await drive.files.create({
             requestBody: {
-                name: folio,
+                name: folio.trim(),
                 mimeType: 'application/vnd.google-apps.folder',
-                parents: parentFolderId ? [parentFolderId] : [],
+                parents: [parentFolderId],
             },
             fields: 'id',
             supportsAllDrives: true,
-        });
+        })
 
-        console.log(`✨ [Google Drive]: Carpeta creada para ${folio} (ID: ${nuevaCarpeta.data.id})`);
-        return nuevaCarpeta.data.id!;
+        console.log(`✨ [Google Drive]: Carpeta creada para ${folio} (ID: ${nuevaCarpeta.data.id})`)
+        return nuevaCarpeta.data.id!
 
     } catch (error: any) {
-        console.error('🔴 Error al gestionar carpeta en Google Drive:', error.message);
-        throw new Error('No se pudo verificar o crear la carpeta del folio');
+        console.error('🔴 Error al gestionar carpeta en Google Drive:', error.message || error)
+        throw new Error(`Google Drive Error: ${error.message || 'No se pudo verificar o crear la carpeta del folio'}`)
     }
 }
 
 /**
- * Subes la foto indicando el ID de la subcarpeta del folio.
+ * Sube foto o video indicando el ID de la subcarpeta del folio.
  */
-export async function subirFotoEvidencia(buffer: Buffer, nombreArchivo: string, mimeType: string, targetFolderId: string) {
+export async function subirFotoEvidencia(
+    buffer: Buffer,
+    nombreArchivo: string,
+    mimeType: string,
+    targetFolderId: string
+) {
     try {
-        const stream = new Readable();
-        stream.push(buffer);
-        stream.push(null);
+        // 🚀 Conversión directa de Buffer a Readable Stream en Node.js
+        const stream = Readable.from(buffer)
 
         const response = await drive.files.create({
             requestBody: {
                 name: nombreArchivo,
-                parents: [targetFolderId], // Guardamos dentro de la carpeta SOL-XXXX
+                parents: [targetFolderId],
             },
             media: {
                 mimeType: mimeType,
                 body: stream,
             },
-            fields: 'id',
+            fields: 'id, webViewLink',
             supportsAllDrives: true,
-        });
+        })
 
-        console.log(`✅ [Google Drive]: Foto ${nombreArchivo} subida con éxito (ID: ${response.data.id})`);
-        return response.data.id;
+        console.log(`✅ [Google Drive]: Evidencia ${nombreArchivo} subida con éxito (ID: ${response.data.id})`)
+        return {
+            id: response.data.id,
+            webViewLink: response.data.webViewLink,
+        }
 
     } catch (error: any) {
-        console.error('🔴 Error al subir foto a Google Drive:', error.message);
-        throw new Error('Fallo al subir evidencia a Google Drive');
+        console.error('🔴 Error al subir evidencia a Google Drive:', error.message || error)
+        throw new Error(`Fallo al subir evidencia a Google Drive: ${error.message || 'Error desconocido'}`)
     }
 }

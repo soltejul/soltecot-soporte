@@ -42,24 +42,37 @@ export default function ModalBloqueos({
         if (isOpen) cargarBloqueos()
     }, [isOpen])
 
+    // Cierre al presionar la tecla Escape
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose()
+        }
+        if (isOpen) window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isOpen, onClose])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!form.fechaInicio || !form.fechaFin) return alert('Selecciona fecha de inicio y fin')
+        if (!form.fechaInicio || !form.fechaFin) {
+            return alert('Selecciona fecha de inicio y fin')
+        }
+
+        if (form.fechaFin < form.fechaInicio) {
+            return alert('La fecha de fin no puede ser anterior a la fecha de inicio')
+        }
 
         setGuardando(true)
         try {
-            // 💡 Forzamos 'T00:00:00' para asegurarnos de que la fecha se envíe limpia en hora local
+            // 🛡️ Enviamos las fechas 'YYYY-MM-DD' limpias para que la API aplique -06:00 CDMX
             const res = await fetch('/api/admin/bloqueos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...form,
-                    fechaInicio: `${form.fechaInicio}T00:00:00`,
-                    fechaFin: `${form.fechaFin}T23:59:59`
-                })
+                body: JSON.stringify(form)
             })
 
-            if (!res.ok) throw new Error('Error al guardar el bloqueo')
+            const data = await res.json()
+
+            if (!res.ok) throw new Error(data.error || 'Error al guardar el bloqueo')
 
             setForm({ fechaInicio: '', fechaFin: '', motivo: '' })
             await cargarBloqueos()
@@ -71,7 +84,7 @@ export default function ModalBloqueos({
     }
 
     const eliminarBloqueo = async (id: string) => {
-        if (!confirm('¿Deseas eliminar este periodo de inactividad? La IA volverá a agendar citas normalmente.')) return
+        if (!confirm('¿Deseas eliminar este periodo de inactividad? La IA volverá a agendar citas normalmente en esas fechas.')) return
 
         try {
             const res = await fetch(`/api/admin/bloqueos?id=${id}`, { method: 'DELETE' })
@@ -83,11 +96,11 @@ export default function ModalBloqueos({
         }
     }
 
-    // 🗓️ Función de formato de fecha blindada contra desfase UTC
+    // 🗓️ Formateador de fechas sincronizado a hora local de CDMX
     const formatearFecha = (fechaStr: string, opciones: Intl.DateTimeFormatOptions) => {
         return new Date(fechaStr).toLocaleDateString('es-MX', {
             ...opciones,
-            timeZone: 'UTC' // 👈 Mantiene el día exacto seleccionado
+            timeZone: 'America/Mexico_City'
         })
     }
 
@@ -100,7 +113,7 @@ export default function ModalBloqueos({
                 {/* ENCABEZADO */}
                 <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
                     <div>
-                        <h3 className="text-lg font-bold text-emerald-400 flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-emerald-400 flex items-center gap-2 font-mono">
                             📅 Control de Inactividad (Out of Office)
                         </h3>
                         <p className="text-zinc-500 text-xs mt-0.5">
@@ -110,6 +123,7 @@ export default function ModalBloqueos({
                     <button
                         onClick={onClose}
                         className="text-zinc-400 hover:text-white bg-zinc-900 p-2 rounded-lg text-xs font-bold transition-colors"
+                        aria-label="Cerrar modal"
                     >
                         ✕
                     </button>
@@ -129,7 +143,7 @@ export default function ModalBloqueos({
                                 required
                                 value={form.fechaInicio}
                                 onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors font-mono"
                             />
                         </div>
                         <div>
@@ -139,7 +153,7 @@ export default function ModalBloqueos({
                                 required
                                 value={form.fechaFin}
                                 onChange={(e) => setForm({ ...form, fechaFin: e.target.value })}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors font-mono"
                             />
                         </div>
                     </div>
@@ -158,7 +172,7 @@ export default function ModalBloqueos({
                     <button
                         type="submit"
                         disabled={guardando}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-xs transition-colors disabled:opacity-50"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-xs transition-colors disabled:opacity-50 shadow-lg"
                     >
                         {guardando ? 'Notificando a la IA...' : '🔒 Bloquear Fechas en Agenda'}
                     </button>
@@ -166,12 +180,12 @@ export default function ModalBloqueos({
 
                 {/* LISTA DE PERIODOS REGISTRADOS */}
                 <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 font-mono">
                         📋 Periodos Bloqueados Activos ({bloqueos.length})
                     </h4>
 
                     {cargando ? (
-                        <p className="text-xs text-zinc-500 text-center py-4">Cargando fechas...</p>
+                        <p className="text-xs text-zinc-500 text-center py-4 font-mono">Cargando fechas...</p>
                     ) : bloqueos.length === 0 ? (
                         <p className="text-xs text-zinc-500 text-center py-4 border border-dashed border-zinc-900 rounded-xl">
                             No hay bloqueos activos. Operación normal en agenda.
@@ -184,7 +198,7 @@ export default function ModalBloqueos({
                                     className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-xs"
                                 >
                                     <div>
-                                        <p className="font-bold text-amber-400">
+                                        <p className="font-bold text-amber-400 font-mono">
                                             {formatearFecha(b.fechaInicio, { day: 'numeric', month: 'short' })}
                                             {' ➔ '}
                                             {formatearFecha(b.fechaFin, { day: 'numeric', month: 'short', year: 'numeric' })}

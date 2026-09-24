@@ -6,12 +6,9 @@ export const dynamic = 'force-dynamic'
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
 
-// ⚡ Función auxiliar para disparar la plantilla de reactivación (salta el límite de 24h)
-async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equipo: string, rangoCosto: string) {
+// ⚡ Función auxiliar para disparar la plantilla de SEGUIMIENTO/REACTIVACIÓN
+async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equipo: string) {
     const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
-
-    // Formatear texto de costo para la plantilla
-    const costoFormateado = rangoCosto.includes('$') ? rangoCosto : `$${rangoCosto} MXN`
 
     const respuesta = await fetch(urlMeta, {
         method: 'POST',
@@ -24,15 +21,14 @@ async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equip
             to: toMeta,
             type: 'template',
             template: {
-                name: 'recuperacion_cotizacion',
+                name: 'seguimiento_inactivo', // 👈 Nombre EXACTO de la plantilla en Meta
                 language: { code: 'es_MX' },
                 components: [
                     {
                         type: 'body',
                         parameters: [
                             { type: 'text', text: nombre || 'Cliente' },
-                            { type: 'text', text: equipo || 'tu equipo' },
-                            { type: 'text', text: costoFormateado }
+                            { type: 'text', text: equipo || 'equipo' }
                         ]
                     }
                 ]
@@ -51,7 +47,6 @@ export async function POST(request: Request) {
         const archivo = formData.get('archivo') as File | null
         const usarPlantillaDirecta = formData.get('usarPlantilla') === 'true'
         let equipoInput = (formData.get('equipo') as string) || ''
-        let rangoCostoInput = (formData.get('rangoCosto') as string) || ''
 
         if (!telefono) {
             return NextResponse.json({ error: 'El teléfono es obligatorio' }, { status: 400 })
@@ -61,7 +56,7 @@ export async function POST(request: Request) {
         const phone10 = cleanPhone.slice(-10)
         const toMeta = `52${phone10}`
 
-        // 1️⃣ Buscar o crear al cliente en DB + Pausar Bot (Modo Humano Activo)
+        // 1️⃣ Buscar o crear al cliente en DB
         let cliente = await prisma.cliente.findFirst({
             where: {
                 OR: [{ telefono: phone10 }, { telefono: cleanPhone }]
@@ -82,12 +77,10 @@ export async function POST(request: Request) {
                     nombre: 'Cliente WhatsApp',
                     atendidoPorBot: false
                 },
-                include: {
-                    tickets: true
-                }
+                include: { tickets: true }
             })
         } else {
-            // Silenciar la IA para que el Ingeniero tome el control del chat
+            // Silenciar la IA (Modo Humano Activo)
             await prisma.cliente.update({
                 where: { id: cliente.id },
                 data: { atendidoPorBot: false }
@@ -95,21 +88,20 @@ export async function POST(request: Request) {
         }
 
         const nombreCliente = cliente.nombre && cliente.nombre !== 'Cliente WhatsApp' ? cliente.nombre : 'Cliente'
-
-        // Autocompletar datos del ticket si no vinieron en el Form
         const ticketActivo = cliente.tickets?.[0]
         if (!equipoInput) equipoInput = ticketActivo?.equipo || 'tu equipo'
-        if (!rangoCostoInput) rangoCostoInput = ticketActivo?.costoReparacion ? `$${ticketActivo.costoReparacion} MXN` : 'por cotizar'
 
-        // 2️⃣ Si el usuario forzó el envío de la plantilla oficial desde el panel
+        // 2️⃣ Si el usuario forzó el envío de la plantilla oficial
         if (usarPlantillaDirecta) {
-            const resPlantilla = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput, rangoCostoInput)
+            const resPlantilla = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput)
             if (!resPlantilla.ok) {
                 const errText = await resPlantilla.text()
                 throw new Error(`Meta rechazó la plantilla: ${errText}`)
             }
 
-            const textoRegistrado = `⚡ [Plantilla Enviada]: Cotización de ${equipoInput} (${rangoCostoInput})`
+            // 👁️ REGISTRO EXACTO PARA EL DASHBOARD
+            const textoRegistrado = `⚡ [Plantilla Enviada]:\n"¡Hola ${nombreCliente}! 👋 Hace unos días nos contactaste para revisar tu ${equipoInput}. Solo pasaba a saludarte y saber si lograste resolverlo o si aún te podemos apoyar en el laboratorio. Recuerda que nuestra revisión es 100% sin costo. 🛠️"\n\n[Botones: "Aún me interesa" / "Ya lo resolví"]`
+
             await prisma.mensaje.create({
                 data: { texto: textoRegistrado, origen: 'BOT', clienteId: cliente.id }
             })
@@ -134,8 +126,6 @@ export async function POST(request: Request) {
             if (resMedia.ok) {
                 const dataMedia = await resMedia.json()
                 mediaId = dataMedia.id
-            } else {
-                console.error("🔴 Error subiendo archivo a Meta Media API:", await resMedia.text())
             }
         }
 
@@ -175,47 +165,32 @@ export async function POST(request: Request) {
             body: JSON.stringify(payloadMeta)
         })
 
-        // 6️⃣ REINTENTO DE EMERGENCIA: Si caducó la ventana de 24h, dispara la plantilla de utilidad
+        // 6️⃣ REINTENTO DE EMERGENCIA (Si caducó la ventana de 24h)
         if (!resMeta.ok) {
-            const errorRaw = await resMeta.text()
-            console.warn(`⚠️ [VENTANA 24H CADUCADA O BLOQUEADA]: ${errorRaw}. Disparando plantilla de recuperación...`)
-
-            // Solo hacemos fallback a texto plano en plantilla si no era un archivo pesado
             if (!mediaId) {
-                const resFallback = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput, rangoCostoInput)
+                const resFallback = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput)
                 if (resFallback.ok) {
-                    const textoRegistrado = `⚡ [Reactivación Auto +24h]: Plantilla enviada tras caducar ventana`
+                    const textoRegistrado = `⚡ [Reactivación Auto +24h - Plantilla Enviada]:\n"¡Hola ${nombreCliente}! 👋 Hace unos días nos contactaste para revisar tu ${equipoInput}. Solo pasaba a saludarte y saber si lograste resolverlo o si aún te podemos apoyar... [Botones]"`
                     await prisma.mensaje.create({
                         data: { texto: textoRegistrado, origen: 'BOT', clienteId: cliente.id }
                     })
                     return NextResponse.json({ success: true, tipo: 'plantilla_fallback' })
                 }
             }
-
-            throw new Error(`Meta rechazó el mensaje: ${errorRaw}`)
+            throw new Error(`Meta rechazó el mensaje: ${await resMeta.text()}`)
         }
 
-        // 7️⃣ Registro de evidencia e historial en la base de datos Prisma
-        const esImagen = archivo?.type.startsWith('image/')
-        const esVideo = archivo?.type.startsWith('video/')
-        const prefijo = esImagen ? '📷 [Imagen]' : esVideo ? '🎥 [Video]' : '📄 [Documento]'
-
-        const textoAArchivar = mediaId
-            ? `${prefijo}: ${archivo?.name || 'Archivo'}${mensaje ? ` - ${mensaje}` : ''}`
-            : mensaje
+        // 7️⃣ Registro de evidencia e historial normal
+        const prefijo = mediaId ? (archivo?.type.startsWith('image/') ? '📷 [Imagen]' : archivo?.type.startsWith('video/') ? '🎥 [Video]' : '📄 [Documento]') : ''
+        const textoAArchivar = mediaId ? `${prefijo}: ${archivo?.name || 'Archivo'}${mensaje ? ` - ${mensaje}` : ''}` : mensaje
 
         await prisma.mensaje.create({
-            data: {
-                texto: textoAArchivar,
-                origen: 'BOT',
-                clienteId: cliente.id
-            }
+            data: { texto: textoAArchivar, origen: 'BOT', clienteId: cliente.id }
         })
 
         return NextResponse.json({ success: true, tipo: mediaId ? payloadMeta.type : 'texto' })
 
     } catch (error: any) {
-        console.error("🔴 Error crítico en Chat Directo:", error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }

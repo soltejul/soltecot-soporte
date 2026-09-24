@@ -97,7 +97,27 @@ async function enviarPlantillaMeta(
                 })
             })
 
-            if (respuesta.ok) return true
+            if (respuesta.ok) {
+                // 👁️ REGISTRO EXACTO PARA EL DASHBOARD:
+                try {
+                    const clienteDb = await prisma.cliente.findFirst({ where: { telefono: cleanPhone } });
+                    if (clienteDb) {
+                        const textoRegistrado = `🤖 [Plantilla de Estatus Taller Enviada]:\n"Hola ${paramNombre}, te notificamos que el estatus de tu equipo (${paramEquipo}) con folio ${paramFolio} ha sido actualizado a: ${paramEstatus}."`
+
+                        await prisma.mensaje.create({
+                            data: {
+                                texto: textoRegistrado,
+                                origen: 'BOT',
+                                clienteId: clienteDb.id
+                            }
+                        });
+                    }
+                } catch (errDb) {
+                    console.error("🔴 Error guardando historial de plantilla de ticket:", errDb);
+                }
+
+                return true
+            }
         } catch (err: any) {
             console.error(`🔴 [META TEMPLATE ERROR]:`, err.message)
         }

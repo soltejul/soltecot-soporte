@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/prisma'
 
-// 📥 Consultar bloqueos activos o futuros
+export const dynamic = 'force-dynamic'
+
+// 📥 Consultar bloqueos activos o futuros en hora local CDMX
 export async function GET() {
     try {
         const hoy = new Date()
-        hoy.setHours(0, 0, 0, 0)
+        // Ajuste a inicio de día en horario de México para evitar desfases
+        const hoyMexicoStr = hoy.toLocaleDateString("en-US", { timeZone: "America/Mexico_City" })
+        const hoyMexico = new Date(hoyMexicoStr)
+        hoyMexico.setHours(0, 0, 0, 0)
 
         const bloqueos = await prisma.bloqueoAgenda.findMany({
-            where: { fechaFin: { gte: hoy } },
+            where: { fechaFin: { gte: hoyMexico } },
             orderBy: { fechaInicio: 'asc' }
         })
 
@@ -27,10 +32,22 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Faltan las fechas de inicio y fin' }, { status: 400 })
         }
 
+        // 🛡️ BINDING DE ZONA HORARIA Y COBERTURA DE DÍA COMPLETO
+        // fechaInicio empieza a las 00:00:00 y fechaFin se extiende a las 23:59:59.999
+        const inicioIso = fechaInicio.includes('T') ? fechaInicio : `${fechaInicio}T00:00:00.000-06:00`
+        const finIso = fechaFin.includes('T') ? fechaFin : `${fechaFin}T23:59:59.999-06:00`
+
+        const dateInicio = new Date(inicioIso)
+        const dateFin = new Date(finIso)
+
+        if (dateFin < dateInicio) {
+            return NextResponse.json({ error: 'La fecha de fin no puede ser anterior a la de inicio' }, { status: 400 })
+        }
+
         const nuevoBloqueo = await prisma.bloqueoAgenda.create({
             data: {
-                fechaInicio: new Date(fechaInicio),
-                fechaFin: new Date(fechaFin),
+                fechaInicio: dateInicio,
+                fechaFin: dateFin,
                 motivo: motivo || 'Fuera de laboratorio'
             }
         })
