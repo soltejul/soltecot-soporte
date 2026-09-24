@@ -69,9 +69,8 @@ export async function subirFotoEvidencia(
     nombreArchivo: string,
     mimeType: string,
     targetFolderId: string
-) {
+): Promise<string> {
     try {
-        // 🚀 Conversión directa de Buffer a Readable Stream en Node.js
         const stream = Readable.from(buffer)
 
         const response = await drive.files.create({
@@ -83,15 +82,12 @@ export async function subirFotoEvidencia(
                 mimeType: mimeType,
                 body: stream,
             },
-            fields: 'id, webViewLink',
+            fields: 'id',
             supportsAllDrives: true,
         })
 
         console.log(`✅ [Google Drive]: Evidencia ${nombreArchivo} subida con éxito (ID: ${response.data.id})`)
-        return {
-            id: response.data.id,
-            webViewLink: response.data.webViewLink,
-        }
+        return response.data.id!
 
     } catch (error: any) {
         console.error('🔴 Error al subir evidencia a Google Drive:', error.message || error)
