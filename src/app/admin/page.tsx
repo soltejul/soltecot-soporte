@@ -94,11 +94,41 @@ export default function AdminDashboard() {
 
 
     // --------------------------------------------------------
-    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN ESTRICTA
+    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN
     // --------------------------------------------------------
     const listaUnificada = useMemo(() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
+
+        // 🧠 DETECTOR DE CONFIRMACIÓN REAL DE RECOLECCIÓN (Solares vs Saludos)
+        const esTextoRecoleccionConfirmada = (m: any) => {
+            if (!m || !m.texto) return false
+            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false // 🛡️ Ignorar auto-mensajes
+
+            const t = m.texto.toLowerCase()
+            return (
+                t.includes('confirmamos la cita de recolección') ||
+                t.includes('cita de recolección para') ||
+                t.includes('dirección de recolección es') ||
+                t.includes('recolección sigue programada') ||
+                t.includes('recolección confirmada') ||
+                t.includes('pasará por tu equipo')
+            )
+        }
+
+        // 🧠 DETECTOR DE CONFIRMACIÓN REAL DE CITA EN TALLER
+        const esTextoCitaConfirmada = (m: any) => {
+            if (!m || !m.texto) return false
+            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false // 🛡️ Ignorar auto-mensajes
+
+            const t = m.texto.toLowerCase()
+            return (
+                t.includes('cita está confirmada') ||
+                t.includes('confirmada para mañana') ||
+                t.includes('te esperamos en nuestro laboratorio') ||
+                t.includes('te esperamos con gusto')
+            )
+        }
 
         const extraerDireccion = (notas: string | null) => {
             if (!notas) return null
@@ -113,14 +143,14 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find((c: any) => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
-            // 🛡️ FILTRADO ESTRICTO SIN FALSOS POSITIVOS:
-            // Solo es recolección si el estado es RECOLECCION o contiene el tag expreso [RECOLECCION]
+            // Evaluar confirmación en mensajes del chat o etiquetas del ticket
             const tieneTagRecoleccion = ticket.notasInternas?.includes('[RECOLECCION]')
-            const esRecoleccion = ticket.estado === 'RECOLECCION' || Boolean(tieneTagRecoleccion)
+            const tieneConfirmacionChatRecoleccion = convAsociada?.mensajes?.some((m: any) => esTextoRecoleccionConfirmada(m))
+            const esRecoleccion = ticket.estado === 'RECOLECCION' || Boolean(tieneTagRecoleccion) || Boolean(tieneConfirmacionChatRecoleccion)
 
-            // Solo es cita si el estado es AGENDADO o contiene [AGENDADO]
             const tieneTagAgendado = ticket.notasInternas?.includes('[AGENDADO]')
-            const esAgendado = !esRecoleccion && (ticket.estado === 'AGENDADO' || Boolean(tieneTagAgendado))
+            const tieneConfirmacionChatCita = convAsociada?.mensajes?.some((m: any) => esTextoCitaConfirmada(m))
+            const esAgendado = !esRecoleccion && (ticket.estado === 'AGENDADO' || Boolean(tieneTagAgendado) || Boolean(tieneConfirmacionChatCita))
 
             const direccionRecoleccion = extraerDireccion(ticket.notasInternas)
 
@@ -155,12 +185,14 @@ export default function AdminDashboard() {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
 
-                // 🛡️ Las consultas informativas del bot se quedan como LEADS
+                const tieneConfirmacionChatRecoleccion = conv.mensajes?.some((m: any) => esTextoRecoleccionConfirmada(m))
+                const tieneConfirmacionChatCita = conv.mensajes?.some((m: any) => esTextoCitaConfirmada(m))
+
                 items.push({
                     id: conv.id,
                     tipo: 'lead',
-                    esAgendado: false,
-                    esRecoleccion: false,
+                    esAgendado: !tieneConfirmacionChatRecoleccion && Boolean(tieneConfirmacionChatCita),
+                    esRecoleccion: Boolean(tieneConfirmacionChatRecoleccion),
                     direccionRecoleccion: null,
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
@@ -168,7 +200,7 @@ export default function AdminDashboard() {
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     costo: '',
-                    estadoTaller: 'ESPERANDO_APROBACION',
+                    estadoTaller: tieneConfirmacionChatRecoleccion ? 'RECOLECCION' : (tieneConfirmacionChatCita ? 'AGENDADO' : 'ESPERANDO_APROBACION'),
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
@@ -178,7 +210,7 @@ export default function AdminDashboard() {
             }
         })
 
-        // 🕒 ORDENAMIENTO LOGÍSTICO: Citas y Recolecciones confirmadas van arriba
+        // 🕒 ORDENAMIENTO LOGÍSTICO: Recolecciones y Citas van siempre hasta arriba
         return items.sort((a, b) => {
             if (a.esRecoleccion && !b.esRecoleccion) return -1
             if (!a.esRecoleccion && b.esRecoleccion) return 1
