@@ -94,23 +94,11 @@ export default function AdminDashboard() {
 
 
     // --------------------------------------------------------
-    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN LOGÍSTICA
+    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN ESTRICTA
     // --------------------------------------------------------
     const listaUnificada = useMemo(() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
-
-        const esTextoAgendado = (m: any) => {
-            if (!m || !m.texto) return false
-            const t = m.texto.toLowerCase()
-            return t.includes('confirmad') || t.includes('reservad') || t.includes('te esperamos')
-        }
-
-        const esTextoRecoleccion = (m: any) => {
-            if (!m || !m.texto) return false
-            const t = m.texto.toLowerCase()
-            return t.includes('recolección') || t.includes('recoleccion') || t.includes('domicilio') || t.includes('pasaremos por')
-        }
 
         const extraerDireccion = (notas: string | null) => {
             if (!notas) return null
@@ -125,13 +113,14 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find((c: any) => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
+            // 🛡️ FILTRADO ESTRICTO SIN FALSOS POSITIVOS:
+            // Solo es recolección si el estado es RECOLECCION o contiene el tag expreso [RECOLECCION]
             const tieneTagRecoleccion = ticket.notasInternas?.includes('[RECOLECCION]')
-            const tieneConfirmacionRecoleccion = convAsociada?.mensajes?.some((m: any) => esTextoRecoleccion(m))
-            const esRecoleccion = ticket.estado === 'RECOLECCION' || Boolean(tieneTagRecoleccion) || Boolean(tieneConfirmacionRecoleccion)
+            const esRecoleccion = ticket.estado === 'RECOLECCION' || Boolean(tieneTagRecoleccion)
 
-            const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) => esTextoAgendado(m))
-            const tieneTagNotas = ticket.notasInternas?.includes('[AGENDADO]')
-            const esAgendado = !esRecoleccion && (ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje) || Boolean(tieneTagNotas))
+            // Solo es cita si el estado es AGENDADO o contiene [AGENDADO]
+            const tieneTagAgendado = ticket.notasInternas?.includes('[AGENDADO]')
+            const esAgendado = !esRecoleccion && (ticket.estado === 'AGENDADO' || Boolean(tieneTagAgendado))
 
             const direccionRecoleccion = extraerDireccion(ticket.notasInternas)
 
@@ -165,14 +154,13 @@ export default function AdminDashboard() {
             if (!telefonosProcesados.has(tel10)) {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
-                const tieneConfirmacionRecoleccion = conv.mensajes?.some((m: any) => esTextoRecoleccion(m))
-                const tieneConfirmacionMensaje = conv.mensajes?.some((m: any) => esTextoAgendado(m))
 
+                // 🛡️ Las consultas informativas del bot se quedan como LEADS
                 items.push({
                     id: conv.id,
                     tipo: 'lead',
-                    esAgendado: !tieneConfirmacionRecoleccion && Boolean(tieneConfirmacionMensaje),
-                    esRecoleccion: Boolean(tieneConfirmacionRecoleccion),
+                    esAgendado: false,
+                    esRecoleccion: false,
                     direccionRecoleccion: null,
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
@@ -180,7 +168,7 @@ export default function AdminDashboard() {
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     costo: '',
-                    estadoTaller: tieneConfirmacionRecoleccion ? 'RECOLECCION' : (tieneConfirmacionMensaje ? 'AGENDADO' : 'ESPERANDO_APROBACION'),
+                    estadoTaller: 'ESPERANDO_APROBACION',
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
@@ -190,7 +178,7 @@ export default function AdminDashboard() {
             }
         })
 
-        // 🕒 ORDENAMIENTO LOGÍSTICO: Recolecciones y Agendados primero
+        // 🕒 ORDENAMIENTO LOGÍSTICO: Citas y Recolecciones confirmadas van arriba
         return items.sort((a, b) => {
             if (a.esRecoleccion && !b.esRecoleccion) return -1
             if (!a.esRecoleccion && b.esRecoleccion) return 1
@@ -470,7 +458,7 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* 🍱 LAYOUT PRINCIPAL (SIDEBAR + CHAT) */}
+            {/* 🍱 LAYOUT PRINCIPAL */}
             <div className="flex-1 flex overflow-hidden relative">
 
                 <SidebarPanel

@@ -24,7 +24,6 @@ export default function SidebarPanel({
 
     const listaFiltrada = useMemo(() => {
         return listaUnificada.filter((item) => {
-            // 1. Búsqueda por texto
             const term = busqueda.toLowerCase().trim()
             const coincideBusqueda = !term ||
                 item.nombre?.toLowerCase().includes(term) ||
@@ -34,11 +33,10 @@ export default function SidebarPanel({
 
             if (!coincideBusqueda) return false
 
-            // 2. Filtro de pestañas
             if (filtroPestana === 'manual') return item.botActivo === false
             if (filtroPestana === 'agendados') return item.esAgendado && !item.esRecoleccion
             if (filtroPestana === 'recolecciones') return item.esRecoleccion
-            if (filtroPestana === 'leads') return item.tipo === 'lead'
+            if (filtroPestana === 'leads') return item.tipo === 'lead' && !item.esAgendado && !item.esRecoleccion
             if (filtroPestana === 'taller') return item.tipo === 'taller'
 
             return true
@@ -125,10 +123,10 @@ export default function SidebarPanel({
                 </div>
             </div>
 
-            {/* 📜 LISTADO DE REGISTROS LOGÍSTICOS */}
+            {/* 📜 LISTADO LOGÍSTICO */}
             <div className="flex-1 overflow-y-auto divide-y divide-zinc-900">
                 {listaFiltrada.length === 0 ? (
-                    <p className="text-center text-zinc-600 text-xs py-10 font-mono">No hay prospectos ni órdenes en este filtro.</p>
+                    <p className="text-center text-zinc-600 text-xs py-10 font-mono">No hay registros en este filtro.</p>
                 ) : (
                     listaFiltrada.map((item) => {
                         const estaSeleccionado = telefonoRescate.endsWith(item.telefono?.slice(-10) || 'xyz')
@@ -164,7 +162,7 @@ export default function SidebarPanel({
                                     💻 {item.equipo}
                                 </p>
 
-                                {/* 🏷️ BADGES LOGÍSTICOS */}
+                                {/* 🏷️ BADGES REALES */}
                                 <div className="flex items-center justify-between gap-2 pt-1">
                                     {item.esRecoleccion ? (
                                         <span className="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -180,7 +178,6 @@ export default function SidebarPanel({
                                         </span>
                                     )}
 
-                                    {/* 🗺️ BOTÓN NAVEGAR CON MAPS */}
                                     {item.esRecoleccion && (
                                         <a
                                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.direccionRecoleccion || 'Cuautitlan Izcalli Edo Mex')}`}
