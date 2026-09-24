@@ -32,7 +32,6 @@ function FormularioLogin() {
                 throw new Error(data.error || 'Credenciales incorrectas')
             }
 
-            // Redirección exitosa respetando el callbackUrl
             router.push(callbackUrl)
             router.refresh()
         } catch (err: any) {
@@ -44,8 +43,10 @@ function FormularioLogin() {
 
     return (
         <div className="w-full max-w-md p-8 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl space-y-6 font-sans">
-            <div className="text-center space-y-2">
-                <div className="relative w-48 h-16 mx-auto">
+            <div className="text-center space-y-3">
+
+                {/* 🎨 LOGO REDIMENSIONADO Y CON GLOW ESMERALDA */}
+                <div className="relative w-full max-w-[280px] h-20 sm:h-24 mx-auto transition-all duration-300 hover:scale-105 drop-shadow-[0_0_25px_rgba(16,185,129,0.3)]">
                     <Image
                         src="/logo-soltecot.png"
                         alt="SOLTECOT Logo"
@@ -54,13 +55,16 @@ function FormularioLogin() {
                         priority
                     />
                 </div>
-                <h2 className="text-xl font-bold text-white tracking-tight">Acceso Administrativo</h2>
-                <p className="text-xs text-zinc-500 font-mono">SOLTECOT_ OS v2 • Control Center</p>
+
+                <div>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">Acceso Administrativo</h2>
+                    <p className="text-xs text-zinc-500 font-mono mt-1">SOLTECOT_ OS v2 • Control Center</p>
+                </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block text-xs font-semibold text-zinc-400 mb-1 font-mono uppercase">
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5 font-mono uppercase">
                         Usuario
                     </label>
                     <input
@@ -69,12 +73,12 @@ function FormularioLogin() {
                         value={usuario}
                         onChange={(e) => setUsuario(e.target.value)}
                         placeholder="Ingresa tu usuario"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-mono"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-xs font-semibold text-zinc-400 mb-1 font-mono uppercase">
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5 font-mono uppercase">
                         Contraseña
                     </label>
                     <input
@@ -83,7 +87,7 @@ function FormularioLogin() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••••••"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-mono"
                     />
                 </div>
 
@@ -96,7 +100,7 @@ function FormularioLogin() {
                 <button
                     type="submit"
                     disabled={cargando}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 active:scale-95"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-sm transition-all shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 active:scale-95 mt-2"
                 >
                     {cargando ? 'Verificando firmas...' : 'Iniciar Sesión 🔐'}
                 </button>
