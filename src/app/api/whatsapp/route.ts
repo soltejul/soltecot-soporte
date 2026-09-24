@@ -139,21 +139,33 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const sheets = google.sheets({ version: 'v4', auth })
         const fechaActual = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })
 
+        // Limpieza de saltos de línea para proteger el JSON
         const mensajeLimpio = String(mensaje || '').replace(/[\r\n]+/g, ' ').trim()
         const respuestaLimpia = String(respuesta || '').replace(/[\r\n]+/g, ' ').trim()
         const fallaLimpia = String(falla || '').replace(/[\r\n]+/g, ' ').trim()
 
         const valoresFila = [fechaActual, telefono, mensajeLimpio, respuestaLimpia, status, nombre, dispositivo, fallaLimpia]
 
-        console.log(`📊 [GOOGLE SHEETS HOJA1]: Registrando fila (RAW)...`)
-
-        await sheets.spreadsheets.values.append({
+        // 1. Leer las filas actuales para calcular la primera fila libre real (ej. 271)
+        const respuestaHoja = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: "'Hoja 1'!A:H",
-            valueInputOption: 'RAW', // 👈 ¡ESTE ES EL CAMBIO CLAVE! 
+            range: "'Hoja 1'!A:H"
+        })
+
+        const filasExistentes = respuestaHoja.data.values || []
+        const numeroFilaDestino = filasExistentes.length + 1
+
+        console.log(`📊 [GOOGLE SHEETS HOJA1]: Escribiendo mensaje directamente en la fila ${numeroFilaDestino}...`)
+
+        // 2. Forzar la escritura en la fila exacta destino mediante UPDATE
+        await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `'Hoja 1'!A${numeroFilaDestino}:H${numeroFilaDestino}`,
+            valueInputOption: 'USER_ENTERED',
             requestBody: { values: [valoresFila] }
         })
-        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila agregada correctamente.`)
+
+        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila ${numeroFilaDestino} registrada correctamente.`)
     } catch (error: any) {
         console.error('🔴 [ERROR CRÍTICO HOJA 1 SHEETS]:', error.message)
     }
