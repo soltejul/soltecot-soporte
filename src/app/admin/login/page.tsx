@@ -43,15 +43,16 @@ function FormularioLogin() {
 
     return (
         <div className="w-full max-w-md p-8 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl space-y-6 font-sans">
-            <div className="text-center space-y-3">
+            <div className="text-center space-y-4">
 
-                {/* 🎨 LOGO REDIMENSIONADO Y CON GLOW ESMERALDA */}
-                <div className="relative w-full max-w-[280px] h-20 sm:h-24 mx-auto transition-all duration-300 hover:scale-105 drop-shadow-[0_0_25px_rgba(16,185,129,0.3)]">
+                {/* 🎨 LOGO REESCALADO Y CENTRADO SIN RESTRICCIONES DE CAJA */}
+                <div className="flex justify-center items-center py-2">
                     <Image
                         src="/logo-soltecot.png"
                         alt="SOLTECOT Logo"
-                        fill
-                        className="object-contain"
+                        width={360}
+                        height={90}
+                        className="w-auto h-14 sm:h-16 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.35)] hover:scale-105 transition-transform duration-300"
                         priority
                     />
                 </div>
