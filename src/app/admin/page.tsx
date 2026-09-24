@@ -3,14 +3,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import useSWR from 'swr' // 🚀 El motor de caché y polling en tiempo real
+import useSWR from 'swr'
 
 import ModalBloqueos from '../../components/ModalBloqueos'
 import ModalTicket from '../../components/ModalTicket'
 import SidebarPanel from '../../components/SidebarPanel'
 import ChatPanel from '../../components/ChatPanel'
 
-// Función Fetcher global para SWR
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 export default function AdminDashboard() {
@@ -20,7 +19,7 @@ export default function AdminDashboard() {
     // 🧠 ESTADOS GLOBALES DE LA INTERFAZ
     // --------------------------------------------------------
     const [busqueda, setBusqueda] = useState('')
-    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'agendados' | 'leads' | 'taller'>('todos')
+    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'manual' | 'agendados' | 'recolecciones' | 'leads' | 'taller'>('todos')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
@@ -40,8 +39,6 @@ export default function AdminDashboard() {
     // --------------------------------------------------------
     // 🚀 SWR: FETCHING INTELIGENTE Y POLLING
     // --------------------------------------------------------
-
-    // 1. Obtener Tickets de Taller (Refetch cada 10s)
     const {
         data: ticketsBrutos = [],
         mutate: reloadTickets
@@ -50,13 +47,11 @@ export default function AdminDashboard() {
         revalidateOnFocus: true
     })
 
-    // Filtrar solo tickets activos
     const tickets = useMemo(() => {
         if (!Array.isArray(ticketsBrutos)) return []
         return ticketsBrutos.filter((t: any) => t.estado !== 'ENTREGADO' && t.estado !== 'RECHAZADO')
     }, [ticketsBrutos])
 
-    // 2. Obtener Lista de Conversaciones (Leads) (Refetch cada 10s)
     const {
         data: conversacionesData,
         mutate: reloadConversaciones
@@ -65,7 +60,6 @@ export default function AdminDashboard() {
     })
     const conversaciones = conversacionesData?.conversaciones || []
 
-    // 3. Obtener Historial del Chat Activo (Refetch rápido cada 5s solo si hay chat abierto)
     const {
         data: chatActivoData,
         mutate: reloadChatDirecto,
@@ -79,14 +73,12 @@ export default function AdminDashboard() {
     const historialDirecto = chatActivoData?.comparableMensajes || chatActivoData?.mensajes || []
     const [estadoBotOptimista, setEstadoBotOptimista] = useState<boolean | null>(null)
 
-    // Actualizar el estado optimista del bot cuando cambian los datos reales de la DB
     useEffect(() => {
         if (chatActivoData?.cliente) {
             setEstadoBotOptimista(chatActivoData.cliente.atendidoPorBot)
         }
     }, [chatActivoData])
 
-    // Auto-scroll al abrir un chat por primera vez
     useEffect(() => {
         if (telefonoRescate) {
             esPrimeraCargaChat.current = true
@@ -102,7 +94,7 @@ export default function AdminDashboard() {
 
 
     // --------------------------------------------------------
-    // 🧬 LÓGICA DE UNIFICACIÓN (MEMORIZADA)
+    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN LOGÍSTICA
     // --------------------------------------------------------
     const listaUnificada = useMemo(() => {
         const items: any[] = []
@@ -111,7 +103,19 @@ export default function AdminDashboard() {
         const esTextoAgendado = (m: any) => {
             if (!m || !m.texto) return false
             const t = m.texto.toLowerCase()
-            return t.includes('confirmad') || t.includes('reservad') || t.includes('te esperamos') || t.includes('agendad')
+            return t.includes('confirmad') || t.includes('reservad') || t.includes('te esperamos')
+        }
+
+        const esTextoRecoleccion = (m: any) => {
+            if (!m || !m.texto) return false
+            const t = m.texto.toLowerCase()
+            return t.includes('recolección') || t.includes('recoleccion') || t.includes('domicilio') || t.includes('pasaremos por')
+        }
+
+        const extraerDireccion = (notas: string | null) => {
+            if (!notas) return null
+            const match = notas.match(/\[RECOLECCION:\s*([^\]]+)\]/i)
+            return match ? match[1] : null
         }
 
         tickets.forEach((ticket: any) => {
@@ -121,9 +125,15 @@ export default function AdminDashboard() {
             const convAsociada = conversaciones.find((c: any) => c.telefono?.endsWith(tel10))
             const esTallerOficial = ticket.numeroOrden && !ticket.numeroOrden.startsWith('LEAD-')
 
+            const tieneTagRecoleccion = ticket.notasInternas?.includes('[RECOLECCION]')
+            const tieneConfirmacionRecoleccion = convAsociada?.mensajes?.some((m: any) => esTextoRecoleccion(m))
+            const esRecoleccion = ticket.estado === 'RECOLECCION' || Boolean(tieneTagRecoleccion) || Boolean(tieneConfirmacionRecoleccion)
+
             const tieneConfirmacionMensaje = convAsociada?.mensajes?.some((m: any) => esTextoAgendado(m))
             const tieneTagNotas = ticket.notasInternas?.includes('[AGENDADO]')
-            const esAgendado = ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje) || Boolean(tieneTagNotas)
+            const esAgendado = !esRecoleccion && (ticket.estado === 'AGENDADO' || Boolean(tieneConfirmacionMensaje) || Boolean(tieneTagNotas))
+
+            const direccionRecoleccion = extraerDireccion(ticket.notasInternas)
 
             const botActivoCalculado = convAsociada?.atendidoPorBot === false
                 ? false
@@ -133,6 +143,8 @@ export default function AdminDashboard() {
                 id: ticket.id,
                 tipo: esTallerOficial ? 'taller' : 'lead',
                 esAgendado,
+                esRecoleccion,
+                direccionRecoleccion,
                 folio: ticket.numeroOrden,
                 nombre: ticket.cliente?.nombre || convAsociada?.nombre || 'Cliente WhatsApp',
                 telefono: ticket.cliente?.telefono || convAsociada?.telefono || '',
@@ -143,7 +155,8 @@ export default function AdminDashboard() {
                 botActivo: botActivoCalculado,
                 ultimoMensaje: convAsociada?.mensajes?.[0] || null,
                 ticketOriginal: ticket,
-                clienteId: ticket.clienteId
+                clienteId: ticket.clienteId,
+                updatedAt: ticket.updatedAt
             })
         })
 
@@ -152,34 +165,44 @@ export default function AdminDashboard() {
             if (!telefonosProcesados.has(tel10)) {
                 telefonosProcesados.add(tel10)
                 const ultimoMsg = conv.mensajes?.[0]
+                const tieneConfirmacionRecoleccion = conv.mensajes?.some((m: any) => esTextoRecoleccion(m))
                 const tieneConfirmacionMensaje = conv.mensajes?.some((m: any) => esTextoAgendado(m))
 
                 items.push({
                     id: conv.id,
                     tipo: 'lead',
-                    esAgendado: Boolean(tieneConfirmacionMensaje),
+                    esAgendado: !tieneConfirmacionRecoleccion && Boolean(tieneConfirmacionMensaje),
+                    esRecoleccion: Boolean(tieneConfirmacionRecoleccion),
+                    direccionRecoleccion: null,
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
                     telefono: conv.telefono,
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     costo: '',
-                    estadoTaller: tieneConfirmacionMensaje ? 'AGENDADO' : 'ESPERANDO_APROBACION',
+                    estadoTaller: tieneConfirmacionRecoleccion ? 'RECOLECCION' : (tieneConfirmacionMensaje ? 'AGENDADO' : 'ESPERANDO_APROBACION'),
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
-                    clienteId: conv.id
+                    clienteId: conv.id,
+                    updatedAt: conv.updatedAt || new Date().toISOString()
                 })
             }
         })
 
-        return items
+        // 🕒 ORDENAMIENTO LOGÍSTICO: Recolecciones y Agendados primero
+        return items.sort((a, b) => {
+            if (a.esRecoleccion && !b.esRecoleccion) return -1
+            if (!a.esRecoleccion && b.esRecoleccion) return 1
+            if (a.esAgendado && !b.esAgendado) return -1
+            if (!a.esAgendado && b.esAgendado) return 1
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        })
     }, [tickets, conversaciones])
 
     const itemSeleccionadoActual = listaUnificada.find(i => i.telefono?.endsWith(telefonoRescate.slice(-10)))
     const ticketSeleccionado = tickets.find((t: any) => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10))) || null
 
-    // Sincronizar el costo inicial del input si cambiamos de chat
     useEffect(() => {
         if (ticketSeleccionado?.costoReparacion) {
             setCostoReparacion(ticketSeleccionado.costoReparacion.toString())
@@ -204,7 +227,6 @@ export default function AdminDashboard() {
             formData.append('mensaje', mensajeRescate)
             if (archivoAdjunto) formData.append('archivo', archivoAdjunto)
 
-            // Mutación optimista en UI (Simula que el mensaje ya se envió)
             const mensajeSimulado = {
                 id: 'temp-' + Date.now(),
                 texto: mensajeRescate || `📎 Archivo adjunto`,
@@ -212,7 +234,7 @@ export default function AdminDashboard() {
                 createdAt: new Date().toISOString()
             }
             reloadChatDirecto({ ...chatActivoData, mensajes: [...historialDirecto, mensajeSimulado] }, false)
-            setEstadoBotOptimista(false) // Apagar bot visualmente rápido
+            setEstadoBotOptimista(false)
 
             const res = await fetch('/api/admin/chat-directo', { method: 'POST', body: formData })
             const data = await res.json()
@@ -220,7 +242,7 @@ export default function AdminDashboard() {
             if (res.ok) {
                 setMensajeRescate('')
                 setArchivoAdjunto(null)
-                reloadChatDirecto() // Validar datos reales con el servidor
+                reloadChatDirecto()
                 reloadConversaciones()
 
                 if (data.tipo === 'plantilla_fallback') {
@@ -228,7 +250,7 @@ export default function AdminDashboard() {
                 }
             } else {
                 alert('Error al enviar: ' + (data.error || 'Rechazado'))
-                reloadChatDirecto() // Revertir mutación optimista
+                reloadChatDirecto()
             }
         } catch (err) {
             alert('Error de conexión')
@@ -276,7 +298,6 @@ export default function AdminDashboard() {
         if (!telefonoRescate) return
         const nuevoEstado = !estadoBotOptimista
 
-        // Mutación Optimista inmediata en UI
         setEstadoBotOptimista(nuevoEstado)
 
         try {
@@ -289,7 +310,7 @@ export default function AdminDashboard() {
                 reloadConversaciones()
                 reloadTickets()
             } else {
-                setEstadoBotOptimista(!nuevoEstado) // Revertir si falla
+                setEstadoBotOptimista(!nuevoEstado)
             }
         } catch (err) {
             setEstadoBotOptimista(!nuevoEstado)
@@ -310,7 +331,7 @@ export default function AdminDashboard() {
                 const formData = new FormData()
                 formData.append('telefono', telefonoRescate)
                 formData.append('equipo', 'Consulta WhatsApp')
-                formData.append('fallaReportada', 'Cita Agendada')
+                formData.append('fallaReportada', nuevoEstado === 'RECOLECCION' ? 'Recolección a Domicilio' : 'Cita Agendada')
 
                 const resCreate = await fetch('/api/tickets', { method: 'POST', body: formData })
                 const dataCreate = await resCreate.json()
@@ -319,20 +340,28 @@ export default function AdminDashboard() {
 
             if (!targetTicketId) return alert("Error identificando ficha.")
 
+            let direccionPrompt: string | undefined = undefined
+            if (nuevoEstado === 'RECOLECCION') {
+                const promptRes = prompt('Confirma o ingresa la dirección completa de recolección:')
+                if (promptRes === null) return
+                direccionPrompt = promptRes.trim()
+            }
+
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ticketId: targetTicketId,
                     nuevoEstado,
-                    botActivo: nuevoEstado === 'AGENDADO' ? false : undefined
+                    direccionRecoleccion: direccionPrompt,
+                    botActivo: (nuevoEstado === 'AGENDADO' || nuevoEstado === 'RECOLECCION') ? false : undefined
                 })
             })
 
             if (res.ok) {
                 reloadTickets()
                 reloadConversaciones()
-                if (nuevoEstado === 'AGENDADO') setEstadoBotOptimista(false)
+                if (nuevoEstado === 'AGENDADO' || nuevoEstado === 'RECOLECCION') setEstadoBotOptimista(false)
                 alert(`✅ Estatus actualizado a ${nuevoEstado}.`)
             }
         } catch (err) {
@@ -395,7 +424,6 @@ export default function AdminDashboard() {
         if (res.ok) router.push('/admin/login')
     }
 
-    // Loader Inicial Suave
     if (!ticketsBrutos.length && !conversacionesData && !cargandoHistorial && esPrimeraCargaChat.current) {
         return <div className="h-screen bg-black text-emerald-400 flex flex-col items-center justify-center font-mono">
             <span className="text-4xl mb-4 animate-bounce">⚡</span>
@@ -406,12 +434,12 @@ export default function AdminDashboard() {
     return (
         <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
 
-            {/* 🔝 CABECERA PRINCIPAL (NAVBAR) */}
+            {/* 🔝 CABECERA PRINCIPAL */}
             <header className="h-auto min-h-[3.5rem] py-2 bg-zinc-950 border-b border-zinc-900 px-3 sm:px-4 flex items-center justify-between shrink-0 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <h1 className="text-base sm:text-lg font-bold text-emerald-400 font-mono tracking-wider">SOLTECOT_ OS</h1>
                     <span className="hidden sm:inline bg-zinc-900 text-zinc-400 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded border border-zinc-800">
-                        Panel Híbrido
+                        Control Center
                     </span>
                 </div>
 

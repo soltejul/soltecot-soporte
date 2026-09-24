@@ -2,11 +2,23 @@ import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
+const WHATSAPP_TOKEN = (
+    process.env.WHATSAPP_TOKEN ||
+    process.env.NEXT_PUBLIC_WHATSAPP_TOKEN ||
+    process.env.META_TOKEN
+)?.trim()
 
+const PHONE_NUMBER_ID = (
+    process.env.PHONE_NUMBER_ID ||
+    process.env.WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.META_PHONE_NUMBER_ID
+)?.trim()
+
+// 🚚 MAPEO EXPANDIDO CON DISTINCIÓN DE LOGÍSTICA
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
-    AGENDADO: '📅 CITA CONFIRMADA EN LABORATORIO',
+    AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO',
+    RECOLECCION: '🚚 RECOLECCIÓN A DOMICILIO AGENDADA',
     RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO',
     EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO',
     ESPERANDO_APROBACION: '⏳ PENDIENTE DE APROBACIÓN',
@@ -23,7 +35,7 @@ async function enviarMensajeMeta(to: string, texto: string) {
     const toMeta = `52${cleanPhone}`
 
     try {
-        const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+        const urlMeta = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`
         const respuesta = await fetch(urlMeta, {
             method: 'POST',
             headers: {
@@ -41,7 +53,7 @@ async function enviarMensajeMeta(to: string, texto: string) {
 
         return respuesta.ok
     } catch (err: any) {
-        console.error(`🔴 [META FETCH ERROR]:`, err.message)
+        console.error(`🔴 [META FETCH ERROR]:`, err.message || err)
         return false
     }
 }
@@ -68,7 +80,7 @@ async function enviarPlantillaMeta(
 
     for (const codigoIdioma of idiomasATrobar) {
         try {
-            const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+            const urlMeta = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`
             const respuesta = await fetch(urlMeta, {
                 method: 'POST',
                 headers: {
@@ -98,9 +110,8 @@ async function enviarPlantillaMeta(
             })
 
             if (respuesta.ok) {
-                // 👁️ REGISTRO EXACTO PARA EL DASHBOARD:
                 try {
-                    const clienteDb = await prisma.cliente.findFirst({ where: { telefono: cleanPhone } });
+                    const clienteDb = await prisma.cliente.findFirst({ where: { telefono: cleanPhone } })
                     if (clienteDb) {
                         const textoRegistrado = `🤖 [Plantilla de Estatus Taller Enviada]:\n"Hola ${paramNombre}, te notificamos que el estatus de tu equipo (${paramEquipo}) con folio ${paramFolio} ha sido actualizado a: ${paramEstatus}."`
 
@@ -110,16 +121,16 @@ async function enviarPlantillaMeta(
                                 origen: 'BOT',
                                 clienteId: clienteDb.id
                             }
-                        });
+                        })
                     }
                 } catch (errDb) {
-                    console.error("🔴 Error guardando historial de plantilla de ticket:", errDb);
+                    console.error("🔴 Error guardando historial de plantilla de ticket:", errDb)
                 }
 
                 return true
             }
         } catch (err: any) {
-            console.error(`🔴 [META TEMPLATE ERROR]:`, err.message)
+            console.error(`🔴 [META TEMPLATE ERROR]:`, err.message || err)
         }
     }
 
@@ -278,8 +289,8 @@ export async function POST(request: Request) {
         }, { status: esUnificacion ? 200 : 201 })
 
     } catch (error: any) {
-        console.error("🔴 [POST TICKETS ERROR]:", error.message)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error("🔴 [POST TICKETS ERROR]:", error.message || error)
+        return NextResponse.json({ error: error.message || 'Error en servidor' }, { status: 500 })
     }
 }
 
@@ -291,14 +302,14 @@ export async function GET() {
         })
         return NextResponse.json(tickets, { status: 200 })
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: error.message || 'Error en servidor' }, { status: 500 })
     }
 }
 
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
-        const { ticketId, nuevoEstado, costoReparacion, notasDiagnostico, botActivo, telefonoNuevo, reenviarNotificacion } = body
+        const { ticketId, nuevoEstado, costoReparacion, notasDiagnostico, botActivo, telefonoNuevo, reenviarNotificacion, direccionRecoleccion } = body
 
         if (!ticketId) return NextResponse.json({ error: 'Ticket ID requerido' }, { status: 400 })
 
@@ -321,9 +332,12 @@ export async function PATCH(request: Request) {
             }
         }
 
+        const esRecoleccion = nuevoEstado === 'RECOLECCION'
         const esCitaAgendada = nuevoEstado === 'AGENDADO'
-        const estadoDbValido = esCitaAgendada ? 'ESPERANDO_APROBACION' : (nuevoEstado || undefined)
-        const botActivoFinal = esCitaAgendada ? false : (botActivo !== undefined ? botActivo : undefined)
+        const esCitaOAgendado = esCitaAgendada || esRecoleccion
+
+        const estadoDbValido = esCitaOAgendado ? 'ESPERANDO_APROBACION' : (nuevoEstado || undefined)
+        const botActivoFinal = esCitaOAgendado ? false : (botActivo !== undefined ? botActivo : undefined)
 
         if (botActivoFinal !== undefined) {
             await prisma.cliente.update({
@@ -332,10 +346,18 @@ export async function PATCH(request: Request) {
             })
         }
 
-        // Formatear notas internas para registrar el tag de agendado
+        // Formatear notas internas con la etiqueta logística correspondiente
         let notasInternasActualizadas = ticket.notasInternas || ''
-        if (esCitaAgendada && !notasInternasActualizadas.includes('[AGENDADO]')) {
-            notasInternasActualizadas = `[AGENDADO] ${notasInternasActualizadas}`.trim()
+
+        if (esRecoleccion) {
+            const tagRecoleccion = direccionRecoleccion ? `[RECOLECCION: ${direccionRecoleccion}]` : '[RECOLECCION]'
+            if (!notasInternasActualizadas.includes('[RECOLECCION]')) {
+                notasInternasActualizadas = `${tagRecoleccion} ${notasInternasActualizadas}`.trim()
+            }
+        } else if (esCitaAgendada) {
+            if (!notasInternasActualizadas.includes('[AGENDADO]')) {
+                notasInternasActualizadas = `[AGENDADO] ${notasInternasActualizadas}`.trim()
+            }
         }
 
         const ticketActualizado = await prisma.ticket.update({
@@ -362,8 +384,8 @@ export async function PATCH(request: Request) {
 
         return NextResponse.json({ success: true, ticket: ticketActualizado })
     } catch (error: any) {
-        console.error('🔴 Error en PATCH /api/tickets:', error.message)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error('🔴 Error en PATCH /api/tickets:', error.message || error)
+        return NextResponse.json({ error: error.message || 'Error en servidor' }, { status: 500 })
     }
 }
 
@@ -385,7 +407,7 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ success: true, message: 'Prospecto e historial purgados con éxito.' }, { status: 200 })
 
     } catch (error: any) {
-        console.error("🔴 [DELETE TICKETS ERROR]:", error.message)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error("🔴 [DELETE TICKETS ERROR]:", error.message || error)
+        return NextResponse.json({ error: error.message || 'Error en servidor' }, { status: 500 })
     }
 }
