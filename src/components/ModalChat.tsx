@@ -18,6 +18,42 @@ interface ModalChatProps {
     ticketId?: string
 }
 
+// 📅 FORMATEADOR INTELIGENTE DE FECHA Y HORA (CDMX)
+function formatearFechaHora(fechaIso: string) {
+    if (!fechaIso) return ''
+    const fecha = new Date(fechaIso)
+    if (isNaN(fecha.getTime())) return ''
+
+    const horaFormateada = fecha.toLocaleTimeString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    })
+
+    const hoy = new Date()
+    const esHoy = fecha.toDateString() === hoy.toDateString()
+
+    const ayer = new Date()
+    ayer.setDate(hoy.getDate() - 1)
+    const esAyer = fecha.toDateString() === ayer.toDateString()
+
+    if (esHoy) {
+        return `Hoy, ${horaFormateada}`
+    }
+    if (esAyer) {
+        return `Ayer, ${horaFormateada}`
+    }
+
+    const fechaCorta = fecha.toLocaleDateString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: 'numeric',
+        month: 'short'
+    })
+
+    return `${fechaCorta}, ${horaFormateada}`
+}
+
 export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, telefono, ticketId }: ModalChatProps) {
     const [mensajes, setMensajes] = useState<Mensaje[]>([])
     const [nuevoMensaje, setNuevoMensaje] = useState('')
@@ -182,13 +218,15 @@ export default function ModalChat({ isOpen, onClose, clienteId, nombreCliente, t
                                         {msg.origen === 'BOT' ? '🤖 IA Soltecot' : msg.origen === 'HUMANO' ? '👨‍💻 Tú (Taller)' : '📱 Cliente'}
                                     </span>
                                     <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-xs shadow-md whitespace-pre-wrap leading-relaxed ${msg.origen === 'HUMANO' ? 'bg-emerald-600 text-white rounded-br-none font-medium' :
-                                            msg.origen === 'BOT' ? 'bg-zinc-900 text-emerald-300 border border-emerald-900/50 rounded-br-none' :
-                                                'bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-bl-none'
+                                        msg.origen === 'BOT' ? 'bg-zinc-900 text-emerald-300 border border-emerald-900/50 rounded-br-none' :
+                                            'bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-bl-none'
                                         }`}>
                                         {msg.texto}
                                     </div>
+
+                                    {/* 🕒 FECHA Y HORA DETALLADAS */}
                                     <span className="text-[9px] text-zinc-600 mt-1 font-mono">
-                                        {new Date(msg.createdAt).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}
+                                        {formatearFechaHora(msg.createdAt)}
                                     </span>
                                 </div>
                             )
