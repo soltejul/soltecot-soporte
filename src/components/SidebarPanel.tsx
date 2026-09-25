@@ -33,7 +33,13 @@ export default function SidebarPanel({
 
             if (!coincideBusqueda) return false
 
+            // 🛡️ REGLA DE EXCLUSIVIDAD: Bandeja Manual Aislada
             if (filtroPestana === 'manual') return item.botActivo === false
+
+            // Si el bot está apagado y NO estamos en "Todos" ni en "Manual",
+            // lo OCULTAMOS de las demás pestañas para no duplicarlo.
+            if (item.botActivo === false && filtroPestana !== 'todos') return false
+
             if (filtroPestana === 'agendados') return item.esAgendado && !item.esRecoleccion
             if (filtroPestana === 'recolecciones') return item.esRecoleccion
             if (filtroPestana === 'leads') return item.tipo === 'lead' && !item.esAgendado && !item.esRecoleccion
@@ -43,8 +49,9 @@ export default function SidebarPanel({
         })
     }, [listaUnificada, busqueda, filtroPestana])
 
-    const conteoRecolecciones = useMemo(() => listaUnificada.filter(i => i.esRecoleccion).length, [listaUnificada])
-    const conteoAgendados = useMemo(() => listaUnificada.filter(i => i.esAgendado && !i.esRecoleccion).length, [listaUnificada])
+    // 🔢 Contadores ajustados para ignorar los chats que están en "Manual"
+    const conteoRecolecciones = useMemo(() => listaUnificada.filter(i => i.esRecoleccion && i.botActivo !== false).length, [listaUnificada])
+    const conteoAgendados = useMemo(() => listaUnificada.filter(i => i.esAgendado && !i.esRecoleccion && i.botActivo !== false).length, [listaUnificada])
     const conteoManual = useMemo(() => listaUnificada.filter(i => i.botActivo === false).length, [listaUnificada])
 
     return (
