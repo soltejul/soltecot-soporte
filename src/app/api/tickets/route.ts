@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
+export const dynamic = 'force-dynamic'
+
 const WHATSAPP_TOKEN = (
     process.env.WHATSAPP_TOKEN ||
     process.env.NEXT_PUBLIC_WHATSAPP_TOKEN ||
@@ -15,7 +17,7 @@ const PHONE_NUMBER_ID = (
     process.env.META_PHONE_NUMBER_ID
 )?.trim()
 
-// 🚚 MAPEO EXPANDIDO CON DISTINCIÓN DE LOGÍSTICA
+// 🚚 MAPEO DE ESTATUS HUMANIZADO PARA PARÁMETRO DE PLANTILLA META
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO',
     RECOLECCION: '🚚 RECOLECCIÓN A DOMICILIO AGENDADA',
@@ -111,7 +113,14 @@ async function enviarPlantillaMeta(
 
             if (respuesta.ok) {
                 try {
-                    const clienteDb = await prisma.cliente.findFirst({ where: { telefono: cleanPhone } })
+                    const clienteDb = await prisma.cliente.findFirst({
+                        where: {
+                            OR: [
+                                { telefono: cleanPhone },
+                                { telefono: { endsWith: cleanPhone } }
+                            ]
+                        }
+                    })
                     if (clienteDb) {
                         const textoRegistrado = `🤖 [Plantilla de Estatus Taller Enviada]:\n"Hola ${paramNombre}, te notificamos que el estatus de tu equipo (${paramEquipo}) con folio ${paramFolio} ha sido actualizado a: ${paramEstatus}."`
 
@@ -278,7 +287,7 @@ export async function POST(request: Request) {
         )
 
         if (!exitoPlantilla) {
-            const textoMensaje = `🔬 *SOLTECOT_ WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO EN TALLER\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
+            const textoMensaje = `🔬 *SOLTECOT WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO EN TALLER\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
             await enviarMensajeMeta(cliente.telefono, textoMensaje)
         }
 
@@ -336,8 +345,8 @@ export async function PATCH(request: Request) {
         const esCitaAgendada = nuevoEstado === 'AGENDADO'
         const esCitaOAgendado = esCitaAgendada || esRecoleccion
 
-        const estadoDbValido = esCitaOAgendado ? 'ESPERANDO_APROBACION' : (nuevoEstado || undefined)
-        const botActivoFinal = esCitaOAgendado ? false : (botActivo !== undefined ? botActivo : undefined)
+        const estadoDbValido = esCitaOAgendado ? 'ESPERANDO_APROBACION' : (nuevoEstado || ticket.estado)
+        const botActivoFinal = esCitaOAgendado ? false : (botActivo !== undefined ? botActivo : ticket.botActivo)
 
         if (botActivoFinal !== undefined) {
             await prisma.cliente.update({
@@ -365,20 +374,24 @@ export async function PATCH(request: Request) {
             data: {
                 estado: estadoDbValido,
                 notasInternas: notasInternasActualizadas,
-                costoReparacion: costoReparacion !== undefined ? costoReparacion : undefined,
+                costoReparacion: costoReparacion !== undefined ? (costoReparacion ? parseFloat(costoReparacion) : null) : undefined,
                 notasDiagnostico: notasDiagnostico !== undefined ? notasDiagnostico : undefined,
                 botActivo: botActivoFinal
             },
             include: { cliente: true }
         })
 
-        if (reenviarNotificacion || telefonoNuevo) {
+        // 🚀 DISPARO DE PLANTILLA OFICIAL AL CAMBIAR ESTADO O REENVIAR NOTIFICACIÓN
+        const estadoNotificar = nuevoEstado || ticketActualizado.estado
+        const estadoCambio = nuevoEstado && nuevoEstado !== ticket.estado
+
+        if (estadoCambio || reenviarNotificacion || telefonoNuevo) {
             await enviarPlantillaMeta(
                 telefonoFinal,
                 ticketActualizado.cliente.nombre || 'Cliente',
                 ticketActualizado.equipo,
                 ticketActualizado.numeroOrden,
-                nuevoEstado || ticketActualizado.estado
+                estadoNotificar
             )
         }
 
@@ -398,13 +411,23 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'El parámetro clienteId es obligatorio' }, { status: 400 })
         }
 
+        const cliente = await prisma.cliente.findUnique({
+            where: { id: clienteId }
+        })
+
+        if (!cliente) {
+            return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+        }
+
+        // 🧼 PURGA COMPLETA Y LIMPIA DE Neon DB (Cita, Mensaje, Ticket, Cliente)
         await prisma.$transaction([
+            prisma.cita.deleteMany({ where: { telefono: cliente.telefono } }),
             prisma.mensaje.deleteMany({ where: { clienteId: clienteId } }),
             prisma.ticket.deleteMany({ where: { clienteId: clienteId } }),
             prisma.cliente.delete({ where: { id: clienteId } })
         ])
 
-        return NextResponse.json({ success: true, message: 'Prospecto e historial purgados con éxito.' }, { status: 200 })
+        return NextResponse.json({ success: true, message: 'Prospecto, citas e historial purgados con éxito.' }, { status: 200 })
 
     } catch (error: any) {
         console.error("🔴 [DELETE TICKETS ERROR]:", error.message || error)

@@ -696,7 +696,7 @@ Ejemplo de salida de la IA:
 --------------------------------------------------
 🚚 REGLA DE ORO 3: LOGÍSTICA Y RECOLECCIÓN POR ZONA
 --------------------------------------------------
-- Nuestro rango de cobertura para recolección a domicilio es estrictamente de máximo 10 km a la redonda desde el laboratorio.
+- Nuestro rango de cobertura para recolección a domicilio es strictly de máximo 10 km a la redonda desde el laboratorio.
 - PROHIBIDO inventar, calcular o dar estimaciones de costo de envío/recolección.
 - Si el cliente solicita recolección a domicilio, pídele su dirección completa, colonia o municipio para que el sistema valide la cobertura. 
 - Si el cliente de antemano menciona un municipio o zona que está muy lejos, o pide que hagamos una excepción fuera de rango, infórmale amablemente la situación y transfiérelo a un agente humano con la etiqueta: __TRANSFERIR_HUMANO__ para que el Ingeniero Julio evalúe la viabilidad de la ruta.
@@ -1244,12 +1244,67 @@ export async function POST(req: Request) {
             }
 
             // ====================================================================
-            // 🚪 OPT-OUT CLIENTE ("NO", "YA NO", "YA LO RESOLVÍ")
+            // 🟢 RESPUESTA A BOTÓN PLANTILLA: "AÚN ME INTERESA"
+            // ====================================================================
+            const esAunMeInteresa = textoNormalizado.includes('aún me interesa') ||
+                textoNormalizado.includes('aun me interesa') ||
+                mensajeCliente.includes('Aún me interesa');
+
+            if (esAunMeInteresa) {
+                await prisma.cliente.update({
+                    where: { id: cliente.id },
+                    data: { atendidoPorBot: true }
+                });
+
+                await prisma.ticket.updateMany({
+                    where: { clienteId: cliente.id, estado: 'ESPERANDO_APROBACION' },
+                    data: { botActivo: true }
+                });
+
+                const mensajeReactivacion = `¡Excelente! Qué gusto saludarte de nuevo. 😊\n\nPara el servicio de tu equipo, ¿te gustaría agendar una **visita presencial** en nuestro laboratorio o prefieres coordinar una **recolección a domicilio**? 🛠️`;
+
+                await enviarMensajeWhatsApp(numeroCliente, mensajeReactivacion);
+
+                await prisma.mensaje.create({
+                    data: { texto: `⚡ [Respuesta Plantilla]: ${mensajeCliente}`, origen: 'CLIENTE', clienteId: cliente.id }
+                });
+                await prisma.mensaje.create({
+                    data: { texto: mensajeReactivacion, origen: 'BOT', clienteId: cliente.id }
+                });
+
+                return new Response('Reactivación procesada', { status: 200 });
+            }
+
+            // ====================================================================
+            // 🔴 RESPUESTA A BOTÓN PLANTILLA: "YA LO RESOLVÍ" (PURGA COMPLETA EN NEON DB)
+            // ====================================================================
+            const esYaLoResolvi = textoNormalizado.includes('ya lo resolví') ||
+                textoNormalizado.includes('ya lo resolvi') ||
+                mensajeCliente.includes('Ya lo resolví');
+
+            if (esYaLoResolvi) {
+                const mensajeDespedida = "¡Entendido! Agradecemos mucho que nos avises. Guardamos tu atención y quedamos a la orden para cualquier servicio futuro. ¡Que tengas un excelente día! 👋";
+                await enviarMensajeWhatsApp(numeroCliente, mensajeDespedida);
+
+                if (typeof MEMORIA_CHAT !== 'undefined') {
+                    MEMORIA_CHAT.delete(numeroCliente);
+                    MEMORIA_CHAT.delete(`B2B_${numeroCliente}`);
+                }
+
+                await prisma.mensaje.deleteMany({ where: { clienteId: cliente.id } });
+                await prisma.cita.deleteMany({ where: { telefono: cliente.telefono } });
+                await prisma.ticket.deleteMany({ where: { clienteId: cliente.id } });
+                await prisma.cliente.delete({ where: { id: cliente.id } });
+
+                console.log(`🧼 [PURGA TOTAL SUCCESS]: Cliente ${cliente.telefono} purgado por completo tras presionar 'Ya lo resolví'.`);
+                return new Response('Purga procesada', { status: 200 });
+            }
+
+            // ====================================================================
+            // 🚪 OPT-OUT CLIENTE GENÉRICO ("NO", "YA NO", "NO GRACIAS")
             // ====================================================================
             const esOptOut = textoNormalizado === 'no' ||
                 textoNormalizado === 'ya no' ||
-                textoNormalizado === 'ya lo resolvi' ||
-                textoNormalizado === 'ya lo resolví' ||
                 textoNormalizado === 'no gracias' ||
                 textoNormalizado.includes('ya no quiero');
 
@@ -1278,6 +1333,9 @@ export async function POST(req: Request) {
                 return new Response('Opt-out procesado con éxito', { status: 200 });
             }
 
+            // ====================================================================
+            // 🚨 BOTONES DE ATENCIÓN HUMANA
+            // ====================================================================
             const esBotonReactivacion = message.type === 'button' ||
                 message.type === 'interactive' ||
                 textoNormalizado.includes('hablar con el ing. julio') ||
