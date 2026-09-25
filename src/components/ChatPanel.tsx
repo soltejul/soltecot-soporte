@@ -27,6 +27,42 @@ interface ChatPanelProps {
     handleEnviarMensaje: () => Promise<void>
 }
 
+// 📅 FORMATEADOR INTELIGENTE DE FECHA Y HORA (CDMX)
+function formatearFechaHora(fechaIso: string) {
+    if (!fechaIso) return ''
+    const fecha = new Date(fechaIso)
+    if (isNaN(fecha.getTime())) return ''
+
+    const horaFormateada = fecha.toLocaleTimeString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    })
+
+    const hoy = new Date()
+    const esHoy = fecha.toDateString() === hoy.toDateString()
+
+    const ayer = new Date()
+    ayer.setDate(hoy.getDate() - 1)
+    const esAyer = fecha.toDateString() === ayer.toDateString()
+
+    if (esHoy) {
+        return `Hoy, ${horaFormateada}`
+    }
+    if (esAyer) {
+        return `Ayer, ${horaFormateada}`
+    }
+
+    const fechaCorta = fecha.toLocaleDateString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: 'numeric',
+        month: 'short'
+    })
+
+    return `${fechaCorta}, ${horaFormateada}`
+}
+
 export default function ChatPanel({
     telefonoRescate,
     setTelefonoRescate,
@@ -168,7 +204,7 @@ export default function ChatPanel({
                 </div>
             </div>
 
-            {/* 💬 HISTORIAL DE MENSAJES */}
+            {/* 💬 HISTORIAL DE MENSAJES CON FECHA INTELIGENTE */}
             <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 text-xs bg-[url('/bg-chat.png')] bg-cover bg-center">
                 {cargandoHistorial ? (
                     <p className="text-zinc-500 text-center py-8 font-mono">Sincronizando chat...</p>
@@ -192,8 +228,10 @@ export default function ChatPanel({
                                         <span className="font-bold">{esCliente ? '👤 Cliente' : '🛠️ Taller'}</span>
                                     </div>
                                     <p className="text-xs">{m.texto}</p>
+
+                                    {/* 🕒 FECHA Y HORA FORMATEADAS */}
                                     <div className="flex items-center justify-end gap-1 text-[9px] font-mono mt-1 opacity-60">
-                                        <span>{new Date(m.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                                        <span>{formatearFechaHora(m.createdAt)}</span>
                                         {!esCliente && <span className="text-emerald-400 font-bold" title="Mensaje enviado vía Meta Cloud API">✓✓</span>}
                                     </div>
                                 </div>
