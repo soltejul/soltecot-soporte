@@ -251,16 +251,28 @@ export default function ChatPanel({
                     ⚡ Plantilla de Cotización (+24h)
                 </button>
                 <button
-                    onClick={() => setMensajeRescate("📍 *Ubicación del Laboratorio Soltecot:*\nEstamos en Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México.\n\n🗺️ Google Maps: https://maps.google.com/?q=19.68430387588073,-99.15870193124036\n\n🕒 *Horarios con Cita Previa:*\nLunes a Viernes: 7:00 PM a 9:30 PM\nSábados: 10:00 AM a 6:00 PM")}
+                    onClick={() => setMensajeRescate("📍 *Ubicación del Laboratorio Soltecot:*\nEstamos en Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México.\n\n🗺️ Google Maps: https://maps.google.com/?q=19.68430387588073,-99.15870193124036\n\n🕒 *Horarios con Cita Previa:*\nLunes a Viernes: 7:00 PM a 9:00 PM\nSábados y Domingos: 11:00 AM a 2:00 PM")}
                     className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-full border border-zinc-800 whitespace-nowrap transition-colors"
                 >
                     📍 Ubicación
                 </button>
+
+                {/* 💳 BOTÓN 1: PAGO MERCADO PAGO (SIN FACTURA) */}
                 <button
-                    onClick={() => setMensajeRescate("💳 *Datos Bancarios Oficiales Soltecot:*\n\nBanco: BBVA\nCuenta CLABE: 0121 8001 2345 6789 01\nBeneficiario: Solutions & Technology On Time\n\nPor favor, envíame tu comprobante por aquí una vez realizado el pago para ingresarlo al sistema. 🧾")}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-full border border-zinc-800 whitespace-nowrap transition-colors"
+                    onClick={() => setMensajeRescate("💳 *Datos Bancarios Oficiales Soltecot:*\n\nInstitución: Mercado Pago\nCLABE: 722969010772346142\nBeneficiario: Julio Cesar Lopez Castro\n\nPor favor, envíame tu comprobante por aquí una vez realizado el pago para ingresarlo al sistema. 🧾")}
+                    className="bg-blue-950/30 hover:bg-blue-900/50 text-blue-300 px-3 py-1.5 rounded-full border border-blue-900/50 whitespace-nowrap transition-colors"
+                    title="Enviar cuenta de Mercado Pago para servicios estándar (Sin Factura)"
                 >
-                    💳 Pago BBVA
+                    💳 Mercado Pago (Sin Factura)
+                </button>
+
+                {/* 💳 BOTÓN 2: PAGO BBVA (CON FACTURA) */}
+                <button
+                    onClick={() => setMensajeRescate("💳 *Datos Bancarios Oficiales (Para Facturación):*\n\nBanco: BBVA\nCuenta CLABE: 0121 8001 2345 6789 01\nBeneficiario: Julio César López Castro\n\nPor favor, envíame tu comprobante por aquí una vez realizado el pago para ingresarlo al sistema. 🧾")}
+                    className="bg-indigo-950/30 hover:bg-indigo-900/50 text-indigo-300 px-3 py-1.5 rounded-full border border-indigo-900/50 whitespace-nowrap transition-colors"
+                    title="Enviar cuenta BBVA para servicios que requieren Factura Fiscal"
+                >
+                    💳 BBVA (Requiere Factura)
                 </button>
             </div>
 
