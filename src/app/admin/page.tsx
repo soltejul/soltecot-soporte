@@ -94,16 +94,16 @@ export default function AdminDashboard() {
 
 
     // --------------------------------------------------------
-    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN
+    // 🚚 LÓGICA DE UNIFICACIÓN Y CLASIFICACIÓN LOGÍSTICA
     // --------------------------------------------------------
     const listaUnificada = useMemo(() => {
         const items: any[] = []
         const telefonosProcesados = new Set<string>()
 
-        // 🧠 DETECTOR DE CONFIRMACIÓN REAL DE RECOLECCIÓN (Solares vs Saludos)
+        // 🧠 DETECTOR DE CONFIRMACIÓN REAL DE RECOLECCIÓN
         const esTextoRecoleccionConfirmada = (m: any) => {
             if (!m || !m.texto) return false
-            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false // 🛡️ Ignorar auto-mensajes
+            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false
 
             const t = m.texto.toLowerCase()
             return (
@@ -119,7 +119,7 @@ export default function AdminDashboard() {
         // 🧠 DETECTOR DE CONFIRMACIÓN REAL DE CITA EN TALLER
         const esTextoCitaConfirmada = (m: any) => {
             if (!m || !m.texto) return false
-            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false // 🛡️ Ignorar auto-mensajes
+            if (m.texto.includes('RECORDATORIO AUTOMÁTICO')) return false
 
             const t = m.texto.toLowerCase()
             return (
@@ -329,6 +329,7 @@ export default function AdminDashboard() {
             if (res.ok) {
                 reloadConversaciones()
                 reloadTickets()
+                reloadChatDirecto()
             } else {
                 setEstadoBotOptimista(!nuevoEstado)
             }
@@ -338,54 +339,31 @@ export default function AdminDashboard() {
     }
 
     const cambiarEstatusTaller = async (nuevoEstado: string) => {
-        if (!ticketSeleccionado && !telefonoRescate) return
-        if (nuevoEstado === 'ESPERANDO_APROBACION') {
-            setMostrarModalPresupuesto(true)
-            return
-        }
+        if (!ticketSeleccionado?.id) return
+
+        // Estados donde el taller toma el control físico y el bot debe silenciarse
+        const estadosManuales = ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION', 'AGENDADO', 'RECOLECCION']
+        const apagarBot = estadosManuales.includes(nuevoEstado)
 
         try {
-            let targetTicketId = ticketSeleccionado?.id
-
-            if (!targetTicketId && telefonoRescate) {
-                const formData = new FormData()
-                formData.append('telefono', telefonoRescate)
-                formData.append('equipo', 'Consulta WhatsApp')
-                formData.append('fallaReportada', nuevoEstado === 'RECOLECCION' ? 'Recolección a Domicilio' : 'Cita Agendada')
-
-                const resCreate = await fetch('/api/tickets', { method: 'POST', body: formData })
-                const dataCreate = await resCreate.json()
-                if (resCreate.ok && dataCreate.ticket) targetTicketId = dataCreate.ticket.id
-            }
-
-            if (!targetTicketId) return alert("Error identificando ficha.")
-
-            let direccionPrompt: string | undefined = undefined
-            if (nuevoEstado === 'RECOLECCION') {
-                const promptRes = prompt('Confirma o ingresa la dirección completa de recolección:')
-                if (promptRes === null) return
-                direccionPrompt = promptRes.trim()
-            }
-
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ticketId: targetTicketId,
-                    nuevoEstado,
-                    direccionRecoleccion: direccionPrompt,
-                    botActivo: (nuevoEstado === 'AGENDADO' || nuevoEstado === 'RECOLECCION') ? false : undefined
+                    ticketId: ticketSeleccionado.id,
+                    nuevoEstado: nuevoEstado,
+                    botActivo: !apagarBot,
+                    reenviarNotificacion: true
                 })
             })
 
             if (res.ok) {
                 reloadTickets()
                 reloadConversaciones()
-                if (nuevoEstado === 'AGENDADO' || nuevoEstado === 'RECOLECCION') setEstadoBotOptimista(false)
-                alert(`✅ Estatus actualizado a ${nuevoEstado}.`)
+                reloadChatDirecto()
             }
-        } catch (err) {
-            alert("Error al actualizar estatus")
+        } catch (error) {
+            console.error('Error cambiando estatus:', error)
         }
     }
 
@@ -400,14 +378,17 @@ export default function AdminDashboard() {
                     ticketId: ticketSeleccionado.id,
                     nuevoEstado: 'ESPERANDO_APROBACION',
                     costoReparacion: parseFloat(costoReparacion),
-                    notasDiagnostico
+                    notasDiagnostico,
+                    botActivo: true
                 })
             })
 
             if (res.ok) {
                 setMostrarModalPresupuesto(false)
                 reloadTickets()
-                alert(`💰 Cotización inyectada.`)
+                reloadConversaciones()
+                reloadChatDirecto()
+                alert(`💰 Cotización inyectada. IA Reactivada.`)
             }
         } catch (err) {
             alert("Error al guardar presupuesto")
@@ -415,7 +396,7 @@ export default function AdminDashboard() {
     }
 
     const handleDesecharLead = async (clienteId: string) => {
-        if (!confirm("¿Estás seguro de purgar este prospecto de Neon?")) return
+        if (!confirm("¿Estás seguro de purgar este prospecto de Neon DB?")) return
         try {
             const res = await fetch(`/api/tickets?clienteId=${clienteId}`, { method: 'DELETE' })
             if (res.ok) {
@@ -429,13 +410,20 @@ export default function AdminDashboard() {
         }
     }
 
+    // ⚡ BARRIDO DE 72 HORAS DE SEGUIMIENTO A INACTIVOS
     const dispararRecordatoriosManual = async () => {
         try {
-            const res = await fetch('/api/admin/recordatorios', { method: 'POST' })
+            const res = await fetch('/api/admin/seguimiento-72h', { method: 'POST' })
             const data = await res.json()
-            if (res.ok) alert(`🔔 Procesados ${data.enviados} recordatorios.`)
+            if (res.ok) {
+                alert(`⚡ Barrido de 72h completado. Se enviaron ${data.enviados} plantillas de seguimiento.`)
+                reloadTickets()
+                reloadConversaciones()
+            } else {
+                alert(`🔴 Error en barrido: ${data.error || 'No se pudo completar'}`)
+            }
         } catch (err) {
-            alert("Error de conexión")
+            alert("Error de conexión al ejecutar el barrido de 72h")
         }
     }
 
@@ -476,8 +464,12 @@ export default function AdminDashboard() {
                         📜 Historial
                     </Link>
 
-                    <button onClick={dispararRecordatoriosManual} className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1">
-                        <span>🔔</span><span className="hidden sm:inline">Recordatorios</span>
+                    <button
+                        onClick={dispararRecordatoriosManual}
+                        className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1"
+                        title="Ejecutar barrido automático de plantillas para prospectos con 72h sin respuesta"
+                    >
+                        <span>🔔</span><span className="hidden sm:inline">Sweep 72h</span>
                     </button>
 
                     <button onClick={() => setModalInactividadAbierto(true)} className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-2 py-1.5 rounded transition-colors flex items-center gap-1">

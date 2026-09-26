@@ -135,11 +135,18 @@ export default function ChatPanel({
 
                 <div className="flex items-center gap-2">
                     <select
-                        value={itemSeleccionadoActual?.esAgendado ? 'AGENDADO' : (ticketSeleccionado?.estado || 'ESPERANDO_APROBACION')}
+                        value={
+                            itemSeleccionadoActual?.esRecoleccion
+                                ? 'RECOLECCION'
+                                : itemSeleccionadoActual?.esAgendado
+                                    ? 'AGENDADO'
+                                    : (ticketSeleccionado?.estado || 'ESPERANDO_APROBACION')
+                        }
                         onChange={(e) => cambiarEstatusTaller(e.target.value)}
                         className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold outline-none cursor-pointer focus:border-amber-500 font-mono transition-colors"
                     >
                         <option value="AGENDADO">📅 CITA AGENDADA</option>
+                        <option value="RECOLECCION">🚚 RECOLECCIÓN A DOMICILIO</option>
                         <option value="RECIBIDO">🛠️ RECIBIDO EN TALLER</option>
                         <option value="EN_DIAGNOSTICO">🔬 EN DIAGNÓSTICO</option>
                         <option value="ESPERANDO_APROBACION">⏳ APROBACIÓN PENDIENTE</option>
@@ -161,7 +168,7 @@ export default function ChatPanel({
                 </div>
             </div>
 
-            {/* 💵 BARRA DE ACCIONES RÁPIDAS Y MONTO */}
+            {/* 💵 BARRA DE ACCIONES RÁPIDAS, MONTO Y RECORDATORIO INDIVIDUAL */}
             <div className="bg-zinc-950/80 border-b border-zinc-900 px-3 sm:px-4 py-2 flex items-center justify-between text-xs flex-wrap gap-2">
                 <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
                     <span className="text-zinc-400 font-semibold hidden sm:inline">Costo:</span>
@@ -184,6 +191,35 @@ export default function ChatPanel({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* 🔔 BOTÓN DE RECORDATORIO INDIVIDUAL */}
+                    <button
+                        onClick={async () => {
+                            if (!telefonoRescate) return
+                            try {
+                                const res = await fetch('/api/admin/recordatorios', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        ticketId: ticketSeleccionado?.id,
+                                        telefono: telefonoRescate
+                                    })
+                                })
+                                const data = await res.json()
+                                if (data.success) {
+                                    alert(`✅ ${data.mensaje}`)
+                                } else {
+                                    alert(`🔴 Error: ${data.error || 'No se pudo enviar el recordatorio.'}`)
+                                }
+                            } catch (e: any) {
+                                alert('🔴 Error de conexión con el servidor.')
+                            }
+                        }}
+                        className="bg-amber-950/40 hover:bg-amber-900/60 text-amber-400 text-[10px] sm:text-[11px] px-2.5 py-1 rounded border border-amber-900/50 transition-colors font-bold flex items-center gap-1"
+                        title="Enviar plantilla de recordatorio únicamente a este cliente"
+                    >
+                        🔔 Recordatorio
+                    </button>
+
                     {itemSeleccionadoActual?.clienteId && (
                         <button
                             onClick={() => handleDesecharLead(itemSeleccionadoActual.clienteId)}
