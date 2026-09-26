@@ -206,17 +206,21 @@ export async function POST(request: Request) {
         let folioAsignado = ''
         let esUnificacion = false
 
+        // 🛡️ GENERADOR ANTI-DUPLICADOS (Busca el número mayor real en la DB)
         const obtenerSiguienteFolioOficial = async () => {
-            const ultimoTicketOficial = await prisma.ticket.findFirst({
+            const todosLosTicketsSOL = await prisma.ticket.findMany({
                 where: { numeroOrden: { startsWith: 'SOL-' } },
-                orderBy: { createdAt: 'desc' },
                 select: { numeroOrden: true }
             })
-            if (ultimoTicketOficial?.numeroOrden) {
-                const numero = parseInt(ultimoTicketOficial.numeroOrden.split('-')[1])
-                if (!isNaN(numero)) return `SOL-${numero + 1}`
+
+            let maxNumero = 1000
+            for (const t of todosLosTicketsSOL) {
+                const num = parseInt(t.numeroOrden.replace('SOL-', ''), 10)
+                if (!isNaN(num) && num > maxNumero) {
+                    maxNumero = num
+                }
             }
-            return 'SOL-1001'
+            return `SOL-${maxNumero + 1}`
         }
 
         if (ticketExistente) {
