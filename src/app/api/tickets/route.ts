@@ -19,15 +19,15 @@ const PHONE_NUMBER_ID = (
 
 // 🚚 MAPEO DE ESTATUS HUMANIZADO PARA PARÁMETRO DE PLANTILLA META
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
-    AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO',
-    RECOLECCION: '🚚 RECOLECCIÓN A DOMICILIO AGENDADA',
-    RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO',
-    EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO',
-    ESPERANDO_APROBACION: '⏳ PENDIENTE DE APROBACIÓN',
-    EN_REPARACION: '🛠️ EN PROCESO DE REPARACIÓN',
-    LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER',
-    ENTREGADO: '📦 ENTREGADO CON ÉXITO',
-    RECHAZADO: '❌ REPARACIÓN CANCELADA'
+    AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO - Responde "ENTERADO" para enviarte la ficha de recepción.',
+    RECOLECCION: '🚚 RECOLECCIÓN AGENDADA - Responde "OK" para enviarte los datos del chofer y horario.',
+    RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO - Responde "VER" para enviarte las fotos de ingreso de tu equipo.',
+    EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO - Responde "REPORTE" para enviarte las fotos en microscopio.',
+    ESPERANDO_APROBACION: '⏳ APROBACIÓN PENDIENTE - Responde "DETALLES" para enviarte la cotización y piezas a reemplazar.',
+    EN_REPARACION: '🛠️ EN PROCESO DE REPARACIÓN - Responde "AVANCE" para enviarte fotos del banco de trabajo.',
+    LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER - Responde "HORARIOS" para agendar tu entrega.',
+    ENTREGADO: '📦 ENTREGADO CON ÉXITO - Agradecemos tu confianza. ¡Que disfrutes tu equipo!',
+    RECHAZADO: '❌ REPARACIÓN CANCELADA - Responde "ENTREGAR" para coordinar la devolución sin costo.'
 }
 
 async function enviarMensajeMeta(to: string, texto: string) {
