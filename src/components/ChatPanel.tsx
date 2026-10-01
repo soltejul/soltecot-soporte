@@ -90,7 +90,7 @@ export default function ChatPanel({
 
     if (telefonoRescate.length < 10) {
         return (
-            <main className="flex-1 bg-zinc-900/30 flex flex-col h-full overflow-hidden w-full relative">
+            <main className={`flex-1 bg-zinc-900/30 flex-col h-full overflow-hidden w-full relative ${telefonoRescate ? 'flex' : 'hidden md:flex'}`}>
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-600 space-y-2">
                     <span className="text-4xl">💬</span>
                     <p className="text-xs font-mono">Selecciona un equipo u orden de la izquierda para comenzar a gestionar.</p>
@@ -100,17 +100,18 @@ export default function ChatPanel({
     }
 
     return (
-        <main className="flex-1 bg-zinc-900/30 flex flex-col h-full overflow-hidden w-full relative">
+        <main className={`flex-1 bg-zinc-900/30 flex-col h-full overflow-hidden w-full relative ${telefonoRescate ? 'flex' : 'hidden md:flex'}`}>
 
             {/* 🔝 CABECERA DEL CHAT */}
             <div className="h-16 bg-zinc-950 border-b border-zinc-900 px-2 sm:px-4 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3">
                     <button
                         onClick={() => setTelefonoRescate('')}
-                        className="md:hidden text-zinc-400 p-1 hover:text-white"
-                        title="Volver a la lista"
+                        className="md:hidden text-zinc-400 p-2 hover:text-white font-bold text-xs flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg"
+                        title="Volver a la lista de chats"
                     >
-                        ⬅️
+                        <span>⬅️</span>
+                        <span>Volver</span>
                     </button>
                     <div className="hidden sm:flex w-10 h-10 rounded-full bg-zinc-800 items-center justify-center font-bold text-emerald-400 border border-zinc-700">
                         {telefonoRescate.slice(-2)}
@@ -287,7 +288,7 @@ export default function ChatPanel({
                     ⚡ Plantilla de Cotización (+24h)
                 </button>
                 <button
-                    onClick={() => setMensajeRescate("📍 *Ubicación del Laboratorio Soltecot:*\nEstamos en Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México.\n\n🗺️ Google Maps: https://maps.google.com/?q=19.68430387588073,-99.15870193124036\n\n🕒 *Horarios con Cita Previa:*\nLunes a Viernes: 7:00 PM a 9:00 PM\nSábados y Domingos: 11:00 AM a 2:00 PM")}
+                    onClick={() => setMensajeRescate("📍 *Ubicación del Laboratorio Soltecot:*\nEstamos en Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México.\n\n🗺️ Google Maps: https://maps.google.com/?q=19.68430387588073,-99.15870193124036\n\n🕒 *Horarios con Cita Previa:*\nLunes a Jueves: 7:00 PM a 9:00 PM\nSábados: 11:00 AM a 2:00 PM")}
                     className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-full border border-zinc-800 whitespace-nowrap transition-colors"
                 >
                     📍 Ubicación

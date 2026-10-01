@@ -51,7 +51,8 @@ export default function SidebarPanel({
     const conteoManual = useMemo(() => listaUnificada.filter(i => !i.botActivo).length, [listaUnificada])
 
     return (
-        <aside className="w-full md:w-80 lg:w-96 bg-zinc-950 border-r border-zinc-900 flex flex-col h-full shrink-0 font-sans">
+        <aside className={`w-full md:w-80 lg:w-96 bg-zinc-950 border-r border-zinc-900 flex-col h-full shrink-0 font-sans ${telefonoRescate ? 'hidden md:flex' : 'flex'
+            }`}>
 
             {/* 🔍 BUSCADOR & BARRA DE PESTAÑAS */}
             <div className="p-3 border-b border-zinc-900 space-y-2.5 bg-zinc-900/40">
@@ -67,8 +68,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('todos')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors ${filtroPestana === 'todos'
-                                ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
-                                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                            ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
+                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
                             }`}
                     >
                         Todos ({listaUnificada.length})
@@ -77,8 +78,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('recolecciones')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors flex items-center gap-1 ${filtroPestana === 'recolecciones'
-                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 font-bold'
-                                : 'text-amber-500/70 border-transparent hover:text-amber-400'
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 font-bold'
+                            : 'text-amber-500/70 border-transparent hover:text-amber-400'
                             }`}
                     >
                         🚚 Recolecciones ({conteoRecolecciones})
@@ -87,8 +88,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('agendados')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors flex items-center gap-1 ${filtroPestana === 'agendados'
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-bold'
-                                : 'text-emerald-500/70 border-transparent hover:text-emerald-400'
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-bold'
+                            : 'text-emerald-500/70 border-transparent hover:text-emerald-400'
                             }`}
                     >
                         📍 Citas ({conteoAgendados})
@@ -97,8 +98,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('manual')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors ${filtroPestana === 'manual'
-                                ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 font-bold'
-                                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                            ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 font-bold'
+                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
                             }`}
                     >
                         🔴 Manual ({conteoManual})
@@ -107,8 +108,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('leads')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors ${filtroPestana === 'leads'
-                                ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
-                                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                            ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
+                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
                             }`}
                     >
                         Leads
@@ -117,8 +118,8 @@ export default function SidebarPanel({
                     <button
                         onClick={() => setFiltroPestana('taller')}
                         className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-colors ${filtroPestana === 'taller'
-                                ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
-                                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                            ? 'bg-zinc-800 text-white border-zinc-700 font-bold'
+                            : 'text-zinc-500 border-transparent hover:text-zinc-300'
                             }`}
                     >
                         Taller
@@ -139,10 +140,10 @@ export default function SidebarPanel({
                                 key={item.id}
                                 onClick={() => setTelefonoRescate(item.telefono)}
                                 className={`p-3.5 cursor-pointer transition-all flex flex-col gap-1.5 ${estaSeleccionado
-                                        ? 'bg-zinc-900 border-l-4 border-emerald-500'
-                                        : item.esRecoleccion
-                                            ? 'bg-amber-500/[0.03] hover:bg-amber-500/[0.07]'
-                                            : 'hover:bg-zinc-900/50'
+                                    ? 'bg-zinc-900 border-l-4 border-emerald-500'
+                                    : item.esRecoleccion
+                                        ? 'bg-amber-500/[0.03] hover:bg-amber-500/[0.07]'
+                                        : 'hover:bg-zinc-900/50'
                                     }`}
                             >
                                 <div className="flex justify-between items-start gap-2">
