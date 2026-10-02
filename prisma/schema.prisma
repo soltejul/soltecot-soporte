@@ -66,6 +66,12 @@ model Ticket {
   notasDiagnostico String?
   citas            Cita[]
   cliente          Cliente      @relation(fields: [clienteId], references: [id])
+  tipoLogistica   TipoLogistica @default(VISITA)
+  guiaEntrada     String?       // Número de rastreo de llegada al taller
+  guiaSalida      String?       // Número de rastreo de devolución al cliente
+  paqueteraNombre String?       // Ej. "Paquetexpress", "FedEx"
+  cpCliente       String?       // Código Postal del remitente
+  urlGuiaPdf      String?       // Link directo a la guía en PDF
 
   @@index([numeroOrden])
 }
@@ -137,6 +143,13 @@ enum EstadoTicket {
   ENTREGADO
   RECHAZADO
 }
+
+enum TipoLogistica {
+  VISITA
+  RECOLECCION_LOCAL
+  ENVIO_PAQUETERIA
+}
+
 // ==========================================
 // 📅 BLOQUEOS Y PERIODOS DE INACTIVIDAD
 // ==========================================

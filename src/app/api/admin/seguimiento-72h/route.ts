@@ -59,8 +59,9 @@ export async function POST() {
     try {
         const ahora = new Date()
         const limite72Horas = new Date(ahora.getTime() - (72 * 60 * 60 * 1000))
+        const limite10Dias = new Date(ahora.getTime() - (10 * 24 * 60 * 60 * 1000))
 
-        // Buscar leads en APROBACION_PENDIENTE que no han tenido actualización en > 72 horas
+        // 1. BARRIDO 72H: Buscar leads inactivos para enviar plantilla
         const leadsInactivos = await prisma.ticket.findMany({
             where: {
                 estado: 'ESPERANDO_APROBACION',
@@ -83,7 +84,7 @@ export async function POST() {
 
             if (exito) {
                 contadorEnviados++
-                // Actualizar timestamp para no reenviar antes de otras 72h
+                // Actualizar timestamp para evitar reenvíos inmediatos
                 await prisma.ticket.update({
                     where: { id: ticket.id },
                     data: { updatedAt: ahora }
@@ -91,10 +92,31 @@ export async function POST() {
             }
         }
 
+        // 2. PURGA +10 DÍAS: Depurar prospectos antiguos abandonados con filtro de seguridad
+        const purgaLeads = await prisma.ticket.deleteMany({
+            where: {
+                numeroOrden: { startsWith: 'LEAD-' },
+                updatedAt: { lte: limite10Dias },
+                NOT: {
+                    OR: [
+                        { estado: 'AGENDADO' },
+                        { estado: 'RECOLECCION' },
+                        { estado: 'RECIBIDO' },
+                        { estado: 'EN_DIAGNOSTICO' },
+                        { estado: 'EN_REPARACION' },
+                        { estado: 'LISTO_PARA_ENTREGA' },
+                        { notasInternas: { contains: '[AGENDADO]' } },
+                        { notasInternas: { contains: '[RECOLECCION]' } }
+                    ]
+                }
+            }
+        })
+
         return NextResponse.json({
             success: true,
             enviados: contadorEnviados,
-            evaluados: leadsInactivos.length
+            evaluados: leadsInactivos.length,
+            purgados10d: purgaLeads.count
         })
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 })

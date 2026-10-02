@@ -1,6 +1,6 @@
 'use client'
 
-import { RefObject } from 'react'
+import { RefObject, useState, useEffect } from 'react'
 
 interface ChatPanelProps {
     telefonoRescate: string
@@ -88,6 +88,58 @@ export default function ChatPanel({
     handleEnviarMensaje
 }: ChatPanelProps) {
 
+    // 🗓️ ESTADO LOCAL PARA SELECTOR MANUAL DE FECHA Y HORA DE CITA
+    const [fechaCitaInput, setFechaCitaInput] = useState('')
+    const [guardandoCita, setGuardandoCita] = useState(false)
+
+    useEffect(() => {
+        if (ticketSeleccionado?.fechaAgendada) {
+            try {
+                const d = new Date(ticketSeleccionado.fechaAgendada)
+                if (!isNaN(d.getTime())) {
+                    // Formato local para input datetime-local (YYYY-MM-DDTHH:mm)
+                    const isoLocal = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
+                    setFechaCitaInput(isoLocal)
+                }
+            } catch (e) {
+                setFechaCitaInput('')
+            }
+        } else {
+            setFechaCitaInput('')
+        }
+    }, [ticketSeleccionado])
+
+    const handleGuardarFechaCita = async () => {
+        if (!fechaCitaInput) return alert("Selecciona una fecha y hora válidas.")
+        if (!ticketSeleccionado?.id) return alert("Selecciona una orden de taller válida para asignar la cita.")
+
+        setGuardandoCita(true)
+        try {
+            const fechaIsoObj = new Date(fechaCitaInput).toISOString()
+            const res = await fetch('/api/tickets', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticketId: ticketSeleccionado.id,
+                    fechaAgendada: fechaIsoObj,
+                    nuevoEstado: 'AGENDADO',
+                    notasInternas: `[AGENDADO: ${fechaIsoObj}]`,
+                    botActivo: true
+                })
+            })
+
+            if (res.ok) {
+                alert("📅 Cita registrada con éxito en Neon DB. IA sincronizada.")
+            } else {
+                alert("🔴 Error al guardar la fecha de cita.")
+            }
+        } catch (err) {
+            alert("🔴 Error de conexión con el servidor.")
+        } finally {
+            setGuardandoCita(false)
+        }
+    }
+
     if (telefonoRescate.length < 10) {
         return (
             <main className={`flex-1 bg-zinc-900/30 flex-col h-full overflow-hidden w-full relative ${telefonoRescate ? 'flex' : 'hidden md:flex'}`}>
@@ -169,25 +221,50 @@ export default function ChatPanel({
                 </div>
             </div>
 
-            {/* 💵 BARRA DE ACCIONES RÁPIDAS, MONTO Y RECORDATORIO INDIVIDUAL */}
+            {/* 💵 BARRA DE ACCIONES RÁPIDAS, MONTO, CITA Y RECORDATORIO */}
             <div className="bg-zinc-950/80 border-b border-zinc-900 px-3 sm:px-4 py-2 flex items-center justify-between text-xs flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                    <span className="text-zinc-400 font-semibold hidden sm:inline">Costo:</span>
-                    <span className="text-zinc-500 font-bold">$</span>
-                    <input
-                        type="number"
-                        placeholder="Monto"
-                        value={costoReparacion}
-                        onChange={(e) => setCostoReparacion(e.target.value)}
-                        className="w-20 sm:w-24 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-amber-400 font-mono font-bold text-center outline-none focus:border-amber-500 transition-colors"
-                    />
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* COSTO DE REPARACIÓN */}
+                    <div className="flex items-center gap-1">
+                        <span className="text-zinc-400 font-semibold hidden sm:inline">Costo:</span>
+                        <span className="text-zinc-500 font-bold">$</span>
+                        <input
+                            type="number"
+                            placeholder="Monto"
+                            value={costoReparacion}
+                            onChange={(e) => setCostoReparacion(e.target.value)}
+                            className="w-20 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-amber-400 font-mono font-bold text-center outline-none focus:border-amber-500 transition-colors"
+                        />
+                        {ticketSeleccionado && (
+                            <button
+                                onClick={guardarPresupuestoYEnviar}
+                                className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-2 py-1 rounded transition-colors text-[10px] whitespace-nowrap"
+                                title="Inyectar costo al ticket y reactivar el seguimiento de la IA"
+                            >
+                                🚀 Inyectar
+                            </button>
+                        )}
+                    </div>
+
+                    {/* 📅 SELECTOR MANUAL DE CITA / FECHA */}
                     {ticketSeleccionado && (
-                        <button
-                            onClick={guardarPresupuestoYEnviar}
-                            className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-2 sm:px-3 py-1 rounded transition-colors text-[10px] sm:text-xs whitespace-nowrap"
-                        >
-                            🚀 Inyectar y Reactivar IA
-                        </button>
+                        <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5">
+                            <span className="text-emerald-400 font-bold text-[10px]">📅 Cita:</span>
+                            <input
+                                type="datetime-local"
+                                value={fechaCitaInput}
+                                onChange={(e) => setFechaCitaInput(e.target.value)}
+                                className="bg-transparent text-emerald-400 font-mono text-[10px] outline-none cursor-pointer"
+                            />
+                            <button
+                                onClick={handleGuardarFechaCita}
+                                disabled={guardandoCita}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[9px] px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                                title="Fijar fecha oficial de cita en Neon DB"
+                            >
+                                {guardandoCita ? '...' : 'Fijar'}
+                            </button>
+                        </div>
                     )}
                 </div>
 
