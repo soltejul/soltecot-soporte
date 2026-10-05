@@ -99,14 +99,13 @@ export async function POST() {
                 updatedAt: { lte: limite10Dias },
                 NOT: {
                     OR: [
-                        { estado: 'AGENDADO' },
-                        { estado: 'RECOLECCION' },
+                        { estado: 'AGENDADO' as any },
+                        { estado: 'RECOLECCION' as any },
                         { estado: 'RECIBIDO' },
                         { estado: 'EN_DIAGNOSTICO' },
                         { estado: 'EN_REPARACION' },
                         { estado: 'LISTO_PARA_ENTREGA' },
-                        { notasInternas: { contains: '[AGENDADO]' } },
-                        { notasInternas: { contains: '[RECOLECCION]' } }
+                        { notasInternas: { contains: '[SEGUIMIENTO_DESECHADO]' } }
                     ]
                 }
             }
