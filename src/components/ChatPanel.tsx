@@ -88,12 +88,14 @@ export default function ChatPanel({
     const [fechaCitaInput, setFechaCitaInput] = useState('')
     const [guardandoCita, setGuardandoCita] = useState(false)
 
-    // 📦 ESTADOS: COTIZADOR SKYDROPS
+    // 📦 ESTADOS: COTIZADOR Y GENERADOR SKYDROPS
     const [modalCotizadorAbierto, setModalCotizadorAbierto] = useState(false)
     const [zipCodeDestino, setZipCodeDestino] = useState('')
     const [tipoPreset, setTipoPreset] = useState('controles')
+    const [sentido, setSentido] = useState<'entrada' | 'salida'>('entrada')
     const [cargandoCotizacion, setCargandoCotizacion] = useState(false)
     const [cotizacionGanadora, setCotizacionGanadora] = useState<any>(null)
+    const [generandoGuia, setGenerandoGuia] = useState(false)
 
     useEffect(() => {
         if (ticketSeleccionado?.fechaAgendada) {
@@ -149,7 +151,7 @@ export default function ChatPanel({
             const res = await fetch('/api/shipping/quote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ zipCodeDestino, tipoPreset })
+                body: JSON.stringify({ zipCodeDestino, tipoPreset, sentido })
             })
             const data = await res.json()
 
@@ -166,6 +168,44 @@ export default function ChatPanel({
             alert("Error de conexión con la API de Skydrops.")
         } finally {
             setCargandoCotizacion(false)
+        }
+    }
+
+    // 🚀 FUNCIÓN: GENERAR Y DESCARGAR GUÍA EN PDF
+    const handleGenerarGuia = async () => {
+        const rateId = cotizacionGanadora?.rateId
+
+        if (!rateId) {
+            return alert("No hay una tarifa válida seleccionada para generar la guía.")
+        }
+
+        setGenerandoGuia(true)
+
+        try {
+            const res = await fetch('/api/shipping/label', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rateId })
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Error al procesar la guía con Skydrops.')
+            }
+
+            if (data.labelUrl) {
+                // Abrir PDF de la etiqueta directamente en una pestaña nueva
+                window.open(data.labelUrl, '_blank')
+                alert(`¡Guía de ${data.carrierName || 'Paquetexpress'} creada con éxito!\n\nNúmero de rastreo: ${data.trackingNumber}`)
+            } else {
+                alert(`¡Guía creada con éxito!\n\nNúmero de rastreo: ${data.trackingNumber}`)
+            }
+
+        } catch (error: any) {
+            alert(`🔴 Error al generar guía: ${error.message}`)
+        } finally {
+            setGenerandoGuia(false)
         }
     }
 
@@ -349,7 +389,7 @@ export default function ChatPanel({
 
                     <div className="flex flex-wrap gap-3 items-end">
                         <div>
-                            <label className="block text-[10px] text-zinc-400 mb-1">C.P. Destino</label>
+                            <label className="block text-[10px] text-zinc-400 mb-1">C.P. Cliente</label>
                             <input
                                 type="text"
                                 placeholder="Ej. 04600"
@@ -359,6 +399,19 @@ export default function ChatPanel({
                                 className="w-24 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-white outline-none focus:border-blue-500 font-mono"
                             />
                         </div>
+
+                        <div>
+                            <label className="block text-[10px] text-zinc-400 mb-1">Tipo de Envío</label>
+                            <select
+                                value={sentido}
+                                onChange={(e) => setSentido(e.target.value as 'entrada' | 'salida')}
+                                className="w-44 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-white outline-none focus:border-blue-500 font-mono"
+                            >
+                                <option value="entrada">📥 Recepción (Cliente ➔ Taller)</option>
+                                <option value="salida">📤 Retorno (Taller ➔ Cliente)</option>
+                            </select>
+                        </div>
+
                         <div>
                             <label className="block text-[10px] text-zinc-400 mb-1">Tipo de Paquete</label>
                             <select
@@ -372,6 +425,7 @@ export default function ChatPanel({
                                 <option value="laptops">💻 Laptop / PC</option>
                             </select>
                         </div>
+
                         <button
                             onClick={handleCotizarEnvio}
                             disabled={cargandoCotizacion || zipCodeDestino.length < 5}
@@ -386,12 +440,21 @@ export default function ChatPanel({
                         <div className="mt-4 p-3 bg-blue-950/20 border border-blue-900/50 rounded-lg flex items-center justify-between">
                             <div>
                                 <p className="text-blue-400 font-bold uppercase">{cotizacionGanadora.proveedor}</p>
-                                <p className="text-zinc-400 text-[10px]">{cotizacionGanadora.servicio} • Entrega estim. {cotizacionGanadora.diasEstimados} días hábiles</p>
+                                <p className="text-zinc-400 text-[10px]">
+                                    {cotizacionGanadora.servicio} • Entrega estim. {cotizacionGanadora.diasEstimados} días hábiles
+                                    <span className="ml-2 font-mono text-emerald-400 font-bold">
+                                        [{sentido === 'entrada' ? '📥 Recepción' : '📤 Retorno'}]
+                                    </span>
+                                </p>
                             </div>
                             <div className="text-right">
                                 <p className="text-lg font-bold text-white font-mono">${cotizacionGanadora.precio} <span className="text-[10px] text-zinc-500">MXN</span></p>
-                                <button className="mt-1 bg-emerald-600/50 text-emerald-300 border border-emerald-500/50 px-3 py-1 rounded text-[10px] font-bold cursor-not-allowed" title="Endpoint de compra en construcción">
-                                    Generar Guía (Pronto)
+                                <button
+                                    onClick={handleGenerarGuia}
+                                    disabled={generandoGuia}
+                                    className="mt-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white border border-emerald-500 px-3 py-1 rounded text-[10px] font-bold transition-colors cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    {generandoGuia ? '⏳ Generando Guía...' : '📄 Generar y Descargar Guía PDF'}
                                 </button>
                             </div>
                         </div>
@@ -400,7 +463,7 @@ export default function ChatPanel({
             )}
 
             {/* 💬 HISTORIAL DE MENSAJES CON FECHA INTELIGENTE */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 text-xs bg-zinc-950/50')] bg-cover bg-center">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 text-xs bg-zinc-950/50 bg-cover bg-center">
                 {cargandoHistorial ? (
                     <p className="text-zinc-500 text-center py-8 font-mono">Sincronizando chat...</p>
                 ) : historialDirecto.length === 0 ? (

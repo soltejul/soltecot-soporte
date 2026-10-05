@@ -56,16 +56,24 @@ async function obtenerUbicacionCompleta(zipCode: string, token: string) {
     return { country_code: 'MX', postal_code: String(zipCode), area_level1: 'MEX', area_level2: 'Ciudad de México', area_level3: 'Centro' }
 }
 
-// ⏰ FUNCIÓN DE ESPERA (Delay) PARA POLLING ASÍNCRONO
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { zipCodeDestino, tipoPreset = 'controles' } = body
+        const { zipCodeDestino, tipoPreset = 'controles', sentido = 'entrada' } = body
 
-        const cleanDestino = String(zipCodeDestino || '').replace(/\D/g, '').trim()
-        const cleanOrigen = String(ORIGIN_CP || '54850').replace(/\D/g, '').trim()
+        const cleanClienteCP = String(zipCodeDestino || '').replace(/\D/g, '').trim()
+        const cleanTallerCP = String(ORIGIN_CP || '54850').replace(/\D/g, '').trim()
+
+        const cleanOrigen = sentido === 'entrada' ? cleanClienteCP : cleanTallerCP
+        const cleanDestino = sentido === 'entrada' ? cleanTallerCP : cleanClienteCP
+
+        if (cleanOrigen.length !== 5 || cleanDestino.length !== 5) {
+            return NextResponse.json({
+                error: 'Tanto el C.P. de origen como el de destino deben tener 5 dígitos válidos.'
+            }, { status: 400 })
+        }
 
         const dims = PRESETS_PAQUETE[tipoPreset] || PRESETS_PAQUETE.controles
         const bearerToken = await obtenerBearerToken()
@@ -75,6 +83,8 @@ export async function POST(request: Request) {
 
         const skydropxPayload = {
             quotation: {
+                zip_code_from: cleanOrigen,
+                zip_code_to: cleanDestino,
                 address_from: addressFrom,
                 address_to: addressTo,
                 parcel: {
@@ -88,7 +98,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // 1. PRIMER LLAMADO A COTIZACIÓN
+        // 1. Solicitud inicial
         const resSkydropx = await fetch('https://api-pro.skydropx.com/api/v1/quotations', {
             method: 'POST',
             headers: {
@@ -101,20 +111,22 @@ export async function POST(request: Request) {
         let dataResult = await resSkydropx.json()
         let quotationId = dataResult.id || dataResult.data?.id
 
-        // 2. EXTRAER TARIFAS (FILTRANDO LAS PENDING)
         let listaTarifas: any[] = []
         if (dataResult.included) listaTarifas = dataResult.included
         else if (dataResult.rates) listaTarifas = dataResult.rates
         else if (dataResult.data) listaTarifas = dataResult.data
         else if (Array.isArray(dataResult)) listaTarifas = dataResult
 
-        // Verificar si las tarifas tienen precios reales o siguen en null (pending)
-        let hayPreciosReales = listaTarifas.some((t: any) => parseFloat(t.total || t.amount || t.total_pricing || '0') > 0)
+        // Verificar si Paquetexpress ya devolvió precio exitoso
+        let paquetexpressListo = listaTarifas.some((t: any) => {
+            const prov = String(t.provider_name || t.provider || '').toLowerCase()
+            return prov.includes('paquetexpress') && t.success === true && parseFloat(t.total || t.total_pricing || '0') > 0
+        })
 
-        // 3. ESTRATEGIA DE REINTENTO (POLLING) SI ESTÁN EN "PENDING"
-        if (!hayPreciosReales && quotationId) {
-            console.log(`⏳ [SKYDROPS ASYNC]: Tarifas pendientes. Esperando 1.5s para consultar de nuevo el ID: ${quotationId}`)
-            await delay(1500) // Esperamos a que Skydropx termine de calcular los precios con las paqueterías
+        // 2. Polling de respaldo si Paquetexpress sigue calculando
+        if (!paquetexpressListo && quotationId) {
+            console.log(`⏳ [SKYDROPS POLLING]: Esperando actualización de tarifas para ID ${quotationId}...`)
+            await delay(1500)
 
             const resPolling = await fetch(`https://api-pro.skydropx.com/api/v1/quotations/${quotationId}`, {
                 method: 'GET',
@@ -132,33 +144,32 @@ export async function POST(request: Request) {
             }
         }
 
-        // 4. MAPEO EXHAUSTIVO FINAL
-        const tarifasNormalizadas = listaTarifas.map((item: any) => {
-            const a = item.attributes || item
+        // 3. Normalización estricta: Únicamente tarifas con success === true
+        const tarifasNormalizadas = listaTarifas
+            .filter((item: any) => item && item.success === true)
+            .map((item: any) => {
+                const a = item.attributes || item
 
-            // Las llaves que detectamos en el error: provider_name y provider_service_name
-            const proveedor = a.provider_name || a.provider || 'Paquetexpress'
-            const servicio = a.provider_service_name || a.service_level_name || 'Express'
+                const proveedor = a.provider_name || a.provider_display_name || a.provider || 'PAQUETEXPRESS'
+                const servicio = a.provider_service_name || a.service_level_name || 'Express'
 
-            // Las llaves de monto: total, amount o total_pricing
-            const precioRaw = a.total ?? a.amount ?? a.total_pricing ?? 0
-            const precioNum = parseFloat(String(precioRaw)) || 0
+                const precioRaw = a.total ?? a.total_pricing ?? a.amount ?? 0
+                const precioNum = parseFloat(String(precioRaw)) || 0
+                const dias = a.days ?? a.estimated_days ?? 3
 
-            const dias = a.days ?? a.estimated_days ?? 3
+                return {
+                    rateId: item.id || a.id || 'N/A',
+                    proveedor: String(proveedor).toUpperCase(),
+                    servicio: String(servicio),
+                    precioNum,
+                    diasEstimados: Number(dias) || 3
+                }
+            })
+            .filter(t => t.precioNum > 0)
 
-            return {
-                rateId: item.id || a.id || 'N/A',
-                proveedor: String(proveedor).toUpperCase(),
-                servicio: String(servicio),
-                precioNum,
-                diasEstimados: Number(dias) || 3
-            }
-        }).filter(t => t.precioNum > 0) // Descartar permanentemente las que se hayan quedado en null o 0
-
-        // Si después del reintento no hay nada válido
         if (tarifasNormalizadas.length === 0) {
             return NextResponse.json({
-                error: `SKYDROPS ASYNC REJECT: Skydropx no devolvió precios reales en el tiempo esperado.`
+                error: `SKYDROPS: No se encontraron tarifas válidas para este CP.`
             }, { status: 400 })
         }
 
@@ -168,6 +179,8 @@ export async function POST(request: Request) {
         const tarifaGanadora = paqueteriasPaquetexpress.length > 0
             ? paqueteriasPaquetexpress.sort((a, b) => a.precioNum - b.precioNum)[0]
             : tarifasNormalizadas.sort((a, b) => a.precioNum - b.precioNum)[0]
+
+        console.log('🏆 [WINNER SELECTED]:', tarifaGanadora)
 
         return NextResponse.json({
             success: true,

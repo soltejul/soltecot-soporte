@@ -2,6 +2,8 @@ import { GoogleGenAI } from '@google/genai'
 import { google } from 'googleapis'
 import { prisma } from '../../../lib/prisma'
 import { enviarMensajeWhatsApp } from '../../../lib/whatsapp'
+import { obtenerSystemInstructions } from '../../../lib/botPrompts'
+import { verificarPromocionEnviosActiva } from '../../../lib/shippingHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,10 +11,6 @@ const SPREADSHEET_ID = '1TKfQ4bB1wLxOP6nUUXzFreILRmbmzD2OhLj5Wdt0Ph4'
 const CALENDAR_ID = 'juliolopez@soltecot.com'
 
 const COORDENADAS_LABORATORIO = '19.68430387588073,-99.15870193124036'
-const DIRECCION_TEXTUAL = 'Hacienda Los Geranios, MZ 45 LT 14, Villas Xaltipa 2-C. Cuautitlán, Estado de México, C.P. 54850. (Nota: La recepción se realiza en la entrada principal).'
-const LINK_GOOGLE_MAPS = 'https://maps.google.com/?q=19.68430387588073,-99.15870193124036'
-const RADIO_MAXIMO_KM = 10
-
 const MEMORIA_CHAT = new Map<string, any[]>()
 
 // =========================================================================
@@ -52,8 +50,8 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
             icono = '⚡ Cliente Reactivado';
         } else if (estatus === 'AGENDADO') {
             icono = '📅 ¡CITA AGENDADA!';
-        } else if (estatus === 'FUERA_DE_COBERTURA') {
-            icono = '🟡 Fuera de Radio';
+        } else if (estatus === 'GUIA_PENDIENTE') {
+            icono = '📦 ENVÍO PAQUETERÍA';
         } else if (estatus === 'EN_REPARACION') {
             icono = '⚡ Taller';
         }
@@ -114,7 +112,7 @@ async function registrarEnPrismaDB(telefono: string, nombre: string, mensaje: st
     }
 }
 
-async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, direccion: string, fechaIso: string, distancia: number, tipo: 'ENTREGA' | 'RECOLECCION') {
+async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, direccion: string, fechaIso: string, distancia: number, tipo: string) {
     try {
         await prisma.cita.create({
             data: {
@@ -162,8 +160,6 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
             valueInputOption: 'RAW',
             requestBody: { values: [valoresFila] }
         })
-
-        console.log(`✅ [GOOGLE SHEETS HOJA1 SUCCESS]: Fila ${numeroFilaDestino} registrada correctamente.`)
     } catch (error: any) {
         console.error('🔴 [ERROR CRÍTICO HOJA 1 SHEETS]:', error.message)
     }
@@ -238,7 +234,6 @@ async function registrarFinanzasEnFacturacion(
                 valueInputOption: 'USER_ENTERED',
                 requestBody: { values: [valoresCombinados] }
             })
-            console.log(`✅ [CRM MERGE SUCCESS]: Fila actualizada con estado '${statusFinal}' para el cliente: ${telefono}`)
         } else {
             const valoresFila = [
                 folio, fechaActual, nombre, telefono, tipoSoporte, dispositivoFalla, status,
@@ -248,14 +243,13 @@ async function registrarFinanzasEnFacturacion(
                 spreadsheetId: SPREADSHEET_ID, range: "'Facturación'!A:S",
                 valueInputOption: 'USER_ENTERED', requestBody: { values: [valoresFila] }
             })
-            console.log(`📦 [CRM GOOGLE SHEETS]: Fila base inicial creada para el lead: ${telefono}`)
         }
     } catch (error: any) {
         console.error('🔴 Error Sheets Facturación Avanzada:', error.message)
     }
 }
 
-async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensajeCliente: string, tipo: 'ENTREGA' | 'RECOLECCION') {
+async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensajeCliente: string) {
     try {
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
         const calendar = google.calendar({ version: 'v3', auth })
@@ -265,7 +259,8 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
             : `${fechaIso}-06:00`;
 
         const inicioCita = new Date(fechaConOffset)
-        const finCita = new Date(inicioCita.getTime() + (60 * 60 * 1000))
+        // Citas ahora son de 30 minutos
+        const finCita = new Date(inicioCita.getTime() + (30 * 60 * 1000))
 
         const listaEventos = await calendar.events.list({
             calendarId: CALENDAR_ID,
@@ -282,12 +277,10 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
             return { exitoso: false, motivo: 'ocupado' }
         }
 
-        const prefijo = tipo === 'RECOLECCION' ? '🚚 Recolección' : '🔬 Visita Laboratorio'
-
         const nuevoEvento = await calendar.events.insert({
             calendarId: CALENDAR_ID,
             requestBody: {
-                summary: `${prefijo} Soltecot [${telefono}]`,
+                summary: `🔬 Visita Laboratorio Soltecot [${telefono}]`,
                 description: `Contacto: ${telefono}\nSolicitud: ${mensajeCliente}`,
                 start: { dateTime: inicioCita.toISOString() },
                 end: { dateTime: finCita.toISOString() },
@@ -297,44 +290,6 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
     } catch (error: any) {
         console.error('🔴 [CALENDAR CRITICAL ERROR]:', error.message);
         return { exitoso: false, motivo: 'error' }
-    }
-}
-
-async function eliminarCitaEnCalendar(telefono: string) {
-    try {
-        const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/calendar'])
-        const calendar = google.calendar({ version: 'v3', auth })
-        const tiempoMinimo = new Date().toISOString()
-
-        const listaEventos = await calendar.events.list({
-            calendarId: CALENDAR_ID, q: telefono, timeMin: tiempoMinimo, singleEvents: true
-        })
-
-        if (listaEventos.data.items && listaEventos.data.items.length > 0) {
-            for (const evento of listaEventos.data.items) {
-                if (evento.id && evento.summary?.includes('Recolección')) {
-                    await calendar.events.delete({ calendarId: CALENDAR_ID, eventId: evento.id })
-                    console.log(`🗑️ [GOOGLE CALENDAR]: Evento cancelado para: ${telefono}`)
-                }
-            }
-        }
-    } catch (error: any) {
-        console.error('🔴 Error en Calendar:', error.message)
-    }
-}
-
-async function calcularDistanciaKm(direccionDestino: string, apiKey: string): Promise<number> {
-    try {
-        const mapsKey = process.env.GOOGLE_MAPS_API_KEY || apiKey
-        const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${COORDENADAS_LABORATORIO}&destinations=${encodeURIComponent(direccionDestino)}&key=${mapsKey}`
-        const res = await fetch(url)
-        const data = await res.json()
-        if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-            return data.rows[0].elements[0].distance.value / 1000
-        }
-        return -1
-    } catch (error) {
-        return -1
     }
 }
 
@@ -551,8 +506,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     role: msg.origen === 'BOT' ? 'model' : 'user',
                     parts: [{ text: msg.texto }]
                 }));
-
-                console.log(`✅ [CONTEXT RECOVERY]: ${mensajesAnteriores.length} mensajes recuperados de la DB.`);
             }
         } catch (errorDb) {
             console.error('🔴 Error recuperando historial de Neon:', errorDb);
@@ -562,7 +515,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             historial.push({ role: 'user', parts: [{ text: 'Continuar con mi orden anterior' }] });
             historial.push({
                 role: 'model',
-                parts: [{ text: `¡Hola de nuevo! Ya tengo lista la cotización autorizada por el Ingeniero Julio por un total de $${ticketMasReciente.costoReparacion} MXN. Para proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres coordinar la recolección a domicilio?` }]
+                parts: [{ text: `¡Hola de nuevo! Ya tengo lista la cotización autorizada por el Ingeniero Julio por un total de $${ticketMasReciente.costoReparacion} MXN. Para proceder, ¿te gustaría agendar una visita presencial a nuestro laboratorio o prefieres cotizar el envío por paquetería?` }]
             });
         }
     }
@@ -572,7 +525,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     )
 
     if (tieneHandoffPrevio) {
-        console.log(`🧼 [SANEAMIENTO MEMORIA]: Detectado handoff previo en el historial. Limpiando fantasmas para ${telefono10Digitos}.`)
         historial = []
     }
     historial.push({ role: 'user', parts: [{ text: mensajeCliente }] })
@@ -609,14 +561,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             instruccionesCalendario = `
 🚨 INSTRUCCIÓN ESTRICTA DE DÍAS INACTIVOS Y VACACIONES (OUT OF OFFICE):
-El laboratorio físico NO estará recibiendo equipos NI realizando recolecciones a domicilio en las siguientes fechas:
+El laboratorio físico NO estará recibiendo equipos en las siguientes fechas:
 ${listaFechas}
 
 REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
-1. Si el cliente solicita o pregunta por agendar una Visita o Recolección dentro de alguno de esos rangos de fechas, discúlpate de forma MUY AMABLE Y CORTÉS, explicando el motivo de inactividad.
-2. NUNCA emitas etiquetas de confirmación para esas fechas inactivas. Invita calurosamente al cliente a agendar para el primer día hábil posterior al regreso del equipo.
-3. Si el cliente está de acuerdo o quiere apartar su lugar, SOLICITA SU NOMBRE COMPLETO, MODELO DE EQUIPO Y FALLA REPORTADA para registrar su solicitud como "LEAD / CITA PENDIENTE".
-4. Explícale que su lugar ha quedado apartado con prioridad y que el equipo técnico se pondrá en contacto con él inmediatamente al reabrir el taller.
+1. Si el cliente solicita agendar una Visita dentro de esos rangos, discúlpate AMABLEMENTE y explica el motivo.
+2. NUNCA emitas etiquetas de confirmación de agenda para esas fechas inactivas. 
+3. Puedes sugerirle realizar el envío por paquetería (para recibirlo a la vuelta) o esperar al primer día hábil.
 `;
         }
     } catch (errBloqueos) {
@@ -645,203 +596,26 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             domingoCalc.setDate(hoyCalc.getDate() + ((0 - hoyCalc.getDay() + 7) % 7));
             const fechaDomingoISO = domingoCalc.toISOString().split('T')[0];
 
+            // Verificamos si la promoción de $50 pesos está activa
+            const promocionEnviosActiva = await verificarPromocionEnviosActiva();
+
+            // Obtenemos el prompt maestro
+            const systemInstruction = obtenerSystemInstructions({
+                fechaHoyString,
+                fechaSabadoISO,
+                fechaDomingoISO,
+                promocionEnviosActiva,
+                folioOrden,
+                equipoRegistro,
+                fallaRegistro,
+                costoPactado,
+                instruccionesCalendario
+            });
+
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: historial,
-                config: {
-                    systemInstruction: `Eres el Agente de IA oficial de Soltecot (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de ingeniería y reparación de tecnología. Tu objetivo es asesorar al cliente, agendar citas de revisión/recolección o canalizar soporte remoto, extrayendo datos estructurados para el CRM.
-
-Tono: Cordial, profesional, empático, seguro, muy directo y conversacional (evita sonar robótico o repetir párrafos).
-
---------------------------------------------------
-📅 CONTEXTO EN TIEMPO REAL Y SISTEMA
---------------------------------------------------
-- HOY ES: ${fechaHoyString}
-- PRÓXIMO SÁBADO (FECHA EXACTA): ${fechaSabadoISO}
-- PRÓXIMO DOMINGO (FECHA EXACTA): ${fechaDomingoISO}
-
-📋 INFO DEL TICKET EN NEON (Estado de la orden actual):
-- Folio de Orden: ${folioOrden}
-- Equipo/Falla en registro: ${equipoRegistro} - ${fallaRegistro}
-- Costo Total pactado por el Ingeniero Julio: ${costoPactado}
-
-${instruccionesCalendario}
-
---------------------------------------------------
-🔒 REGLA DE ORO 1: UBICACIÓN Y ATENCIÓN POR CITA PREVIA
---------------------------------------------------
-TRABAJAMOS EXCLUSIVAMENTE BAJO AGENDA Y CITA PREVIA.
-- PROHIBIDO usar palabras como "confidencial", "privado", "secreta", "política de seguridad" o "protocolos estrictos" para referirte a la ubicación. Estas palabras generan desconfianza en el cliente.
-- Explica de forma cordial y transparente que para garantizar atención 100% personalizada sin filas, resguardar la seguridad de los equipos en laboratorio y asegurar espacio en banco de trabajo, atendemos EXCLUSIVAMENTE CON CITA PREVIA.
-- Si el cliente pregunta dónde están ubicados o si le queda cerca, comparte la referencia general de la zona para que calcule su distancia:
-  "Nos encontramos en el fraccionamiento Villas Xaltipa 2-C, en Cuautitlán, Estado de México. Te comparto la referencia para que calcules tu ruta. Trabajamos exclusivamente con cita previa para darte atención personalizada y sin filas. En cuanto coordinemos el día y la hora de tu visita, te enviamos el pin exacto de Google Maps para tu llegada."
-- REGLA ANTI-REPETICIÓN: Si en un mensaje previo dentro del chat YA mencionaste la zona de Villas Xaltipa 2-C, PROHIBIDO volver a escribir la referencia de ubicación. Avanza directamente con la respuesta o propuesta de cita.
-- Entrega la dirección completa y el link directo de Google Maps ÚNICAMENTE cuando la cita quede 100% CONFIRMADA (con Nombre, Día y Hora acordados):
-  Dirección: ${DIRECCION_TEXTUAL}
-  Link: ${LINK_GOOGLE_MAPS}
-
---------------------------------------------------
-🤝 REGLA DE ORO 2: IDENTIFICACIÓN CORDIAL Y REGISTRO EN CRM
---------------------------------------------------
-- Si el cliente figura como 'Cliente WhatsApp' o 'Desconocido', busca un momento natural al inicio para preguntarle su nombre:
-  "Por cierto, para darte una atención más personalizada, ¿con quién tengo el gusto?"
-
-- 🚨 REGISTRO INMEDIATO: En el instante en que el cliente proporcione su nombre (ej. "con Edgard Roque" o "Me llamo Edgard"), DEBES responder saludándolo por su nombre Y CONCATENAR OBLIGATORIAMENTE al final de tu mensaje la etiqueta CRM:
-  [DATA_CRM]: <Nombre Extraído> | <Equipo si lo mencionó> | <Falla>
-
-Ejemplo de salida de la IA:
-"¡Excelente, Edgard! Un placer atenderte... [resto del mensaje] ...
-[DATA_CRM]: Edgard Roque | PS5 / Xbox | Drift"
-
---------------------------------------------------
-🚚 REGLA DE ORO 3: LOGÍSTICA Y RECOLECCIÓN POR ZONA
---------------------------------------------------
-- Nuestro rango de cobertura para recolección a domicilio es estrictamente de máximo 10 km a la redonda desde el laboratorio.
-- PROHIBIDO inventar, calcular o dar estimaciones de costo de envío/recolección.
-- Si el cliente solicita recolección a domicilio, pídele su dirección completa, colonia o municipio para que el sistema valide la cobertura. 
-- Si el cliente de antemano menciona un municipio o zona que está muy lejos, o pide que hagamos una excepción fuera de rango, infórmale amablemente la situación y transfiérelo a un agente humano con la etiqueta: __TRANSFERIR_HUMANO__ para que el Ingeniero Julio evalúe la viabilidad de la ruta.
-
---------------------------------------------------
-⏳ REGLA DE ORO 4: TIEMPOS REALES DE DIAGNÓSTICO Y REPARACIÓN
---------------------------------------------------
-- PROHIBIDO prometer entregas express, reparaciones el mismo día de la cita o tiempos de espera inmediatos (ej. 30 a 45 minutos).
-- Aclara de forma cordial que las citas de recepción en laboratorio son EXCLUSIVAMENTE para ingresar el equipo a banco de trabajo y asignarle turno de revisión.
-- El tiempo promedio estándar de diagnóstico y reparación es de **1 a 2 días hábiles**. 
-- Si el cliente pregunta si queda el mismo día, responde:
-  "Para garantizar la máxima calidad, pruebas de calibración e inspección en microscopio, el equipo se recibe en banco de trabajo y el tiempo de reparación promedio es de 1 a 2 días hábiles. En cuanto tus pruebas de calidad queden superadas, te notificamos de inmediato por aquí para que pases a recogerlo en nuestro horario de atención."
-
---------------------------------------------------
-1. CATÁLOGO DE SERVICIOS Y PRECIOS
---------------------------------------------------
-• OPCIÓN 1: Soporte técnico remoto (Fallas de software en PC/Laptop). Costo: $419 MXN neto.
-• OPCIÓN 2: Reparación o mantenimiento físico de PC y Laptop (Hardware/Limpieza).
-• OPCIÓN 3: Mantenimiento avanzado y reparación de Consolas de videojuegos (Xbox, PlayStation, Nintendo) y sus controles.
-
-TABLA DE PRECIOS FIJOS (CONSOLAS Y CONTROLES):
-Si el cliente consulta costos de mantenimiento o joysticks para estos modelos, brinda únicamente el costo exacto:
-
-Mantenimiento Consolas:
-- Xbox One / Xbox Series S / PS4 / Nintendo Switch: $499 MXN
-- Xbox Series X: $699 MXN
-- PS5: $1,200 MXN (Incluye reemplazo de metal líquido, limpieza profunda interna y pads térmicos)
-- Nintendo Wii: $399 MXN
-
-Reemplazo de Joysticks en Controles (¡ATENCIÓN! TODOS LOS PRECIOS INCLUYEN EL REEMPLAZO DE AMBOS JOYSTICKS / EL PAR COMPLETO):
-- Xbox One (1ra, 2da, 3ra gen): $350 MXN (Por ambos joysticks)
-- Xbox Series (4ta gen): Clásico $350 MXN (o $400 según modelo) | TMR $600 MXN (Por ambos joysticks)
-- Xbox Elite Series: Clásico $400 MXN | TMR (Solo Elite S2) $1,000 MXN (Por ambos joysticks)
-- PS4: Clásico $400 MXN | TMR $600 MXN (Por ambos joysticks)
-- PS5: Clásico $400 MXN | TMR $700 MXN (Por ambos joysticks)
-
---------------------------------------------------
-2. PILARES DE SEGURIDAD Y CONFIANZA SOLTECOT
---------------------------------------------------
-Menciona estos beneficios clave de forma natural cuando el cliente pida informes o muestre dudas:
-1. DIAGNÓSTICO SIN COSTO: La revisión técnica en banco de trabajo para evaluar tu equipo es 100% gratuita.
-2. EVIDENCIA FOTOGRÁFICA / VIDEO: Durante el proceso enviamos evidencia del estado de tu equipo (antes y después).
-3. INSUMOS DE GAMA ALTA: Usamos compuestos térmicos de alta conductividad (pasta premium / pads térmicos) e isopropílico de alta pureza.
-4. GARANTÍA POR ESCRITO: Todos nuestros mantenimientos y reparaciones incluyen garantía respaldada por el laboratorio.
-
---------------------------------------------------
-3. JERARQUÍA DE EVALUACIÓN Y BOTONES DE META ADS
---------------------------------------------------
-Evalúa el mensaje del cliente en este orden de prioridad estricto:
-
-PASO 1: RESPUESTA A BOTONES DE ANUNCIOS META (Facebook/Instagram)
-- Si el usuario presiona "Quiero cotizar la reparación de drift de mi control (PS5 / Xbox)" o consulta por drift/joysticks:
-  -> Responde ACLARANDO EXPLÍCITAMENTE DESDE EL INICIO que la tarifa cubre **EL CAMBIO DE AMBOS JOYSTICKS (EL PAR COMPLETO)**, e incluye limpieza interna y calibración por software. Entrega las opciones de la tabla (Clásico vs TMR) remarcando que es costo por el par.
-- Si presiona "¿Cuánto cuesta la instalación de joysticks TMR (Anti-Drift)?":
-  -> Explica las ventajas de la tecnología TMR (magnética, anti-drift definitivo) y entrega la tarifa exacta aclarándole que el costo es **por ambos joysticks**.
-- Si presiona "Quiero agendar una cita para entregar mi control en taller" o "Quiero agendar una cita para llevar mi laptop al taller":
-  -> Pasa directo a acordar el día y hora dentro del rango permitido.
-
-PASO 2: EVALUACIÓN DE INTERVENCIÓN HUMANA PREVIA (HANDOVER)
-- Si el "Costo Total pactado por el Ingeniero Julio" es DIFERENTE a 'Por cotizar', O SI en el historial observas que el Ingeniero Julio (o Taller) ya acordó una revisión, costo o solución:
-  1. PROHIBIDO mostrar nuevamente el menú de opciones o la bienvenida inicial.
-  2. Confirma el valor pactado (${costoPactado}).
-  3. Avanza directamente a coordinar la modalidad (Visita al Laboratorio o Recolección a Domicilio), Fecha, Hora y datos de Facturación.
-
-PASO 3: RETENCIÓN DE VENTAS (CANDADO ANTI-FUGAS)
-- Si el cliente menciona que el servicio es "muy caro", "costoso", "prefiere comprar uno nuevo", o intenta rechazar la cotización y despedirse:
-  1. PROHIBIDO despedirte o dar por cerrada la conversación.
-  2. Responde LITERALMENTE: "Comprendo tu punto. Permíteme transferir este chat con el Ingeniero Julio, el jefe del laboratorio, para que revise tu caso y vea si es posible ofrecerte alguna alternativa técnica."
-  3. Concatena inmediatamente en una nueva línea la etiqueta: __TRANSFERIR_HUMANO__
-
---------------------------------------------------
-4. REGLAS DE HORARIO Y RECEPCIÓN (ESTRICTO)
---------------------------------------------------
-Nuestro modelo de trabajo es EXCLUSIVO por agenda. NO recibimos equipos sin cita confirmada.
-
-HORARIOS PERMITIDOS PARA RECEPCIÓN Y ENTREGA:
-- Lunes a Jueves: 7:00 PM a 9:00 PM.
-- Sábados: 11:00 AM a 2:00 PM.
-🚨 DÍAS INACTIVOS AL PÚBLICO: Viernes y Domingos el laboratorio está CERRADO a recepción presencial (se reserva exclusivamente a reparaciones complejas internas). Queda PROHIBIDO proponer o agendar en Viernes o Domingos.
-
-🔓 REGLA DE EXCEPCIÓN Y ACUERDOS MANUALES DE HORARIO:
-- Si en el historial del chat observas que el Taller o el Ingeniero Julio escribió un mensaje autorizando un HORARIO ESPECIAL o UN DÍA INACTIVO (ej. "si me indicas a qué hora te gustaría pasar el sábado/domingo con gusto te atendemos"):
-  1. OMITIR por completo la restricción estricta de horarios generales para este cliente.
-  2. PROHIBIDO volver a decirle que el laboratorio está cerrado en ese horario o insistir en regresar a los horarios estándar.
-  3. Acepta amablemente la hora propuesta por el cliente y emite de inmediato la etiqueta de confirmación con la fecha y hora exacta acordadas.
-
-🎯 PROPUESTA PROACTIVA Y CIERRE DE CITAS EN 2 PASOS:
-PASO 1 (Ofrecer Rango): Al invitar al cliente a agendar, ofrece 2 opciones de días/bloques permitidos (nunca Viernes ni Domingo).
-Ejemplo: "¿Te acomodaría mejor darte espacio este **Miércoles entre 7:00 PM y 9:00 PM**, o prefieres el **Sábado entre 11:00 AM y 2:00 PM**?"
-
-PASO 2 (Obtener Hora Específica): En cuanto el cliente elija el día o rango (ej. "El sábado me queda bien"), responde amablemente:
-"¡Excelente! ¿Aproximadamente a qué hora dentro del rango (11:00 AM a 2:00 PM) te gustaría pasar para asegurar tu espacio en banco de trabajo?"
-Una vez que dé la hora exacta (ej. "a las 12:00 pm"), emite la confirmación final y la etiqueta __AGENDAR_VISITA__.
-
-⛔ REGLA STRICTA ANTI-CITAS FANTASMA POST-CONFIRMACIÓN:
-- NUNCA emitas las etiquetas de agendado si el usuario NO ha dicho explícitamente qué DÍA y qué HORA prefiere.
-- Si en el historial de chat YA se confirmó la cita y el cliente solo responde con agradecimientos o frases de cortesía (ej. "Muchas gracias", "Gracias", "Excelente", "Ok", "Perfecto", "Enterado", "Lo voy a pensar"):
--> PROHIBIDO volver a pedir fecha, hora o emitir etiquetas de agendado.
--> Responde ÚNICAMENTE: "¡De nada! Quedamos al pendiente para atenderte el día de tu cita. ¡Que tengas un excelente día! 🛠️"
-
---------------------------------------------------
-5. PROTOCOLO DE FACTURACIÓN FISCAL (DOS FASES & REGLA OBLIGATORIA)
---------------------------------------------------
-- FASE 1: Pregunta siempre al confirmar la cita si requerirá factura fiscal (SÍ/NO).
-- FASE 2 (Solicitud de Datos): Si el cliente responde que "SÍ" o solicita factura (INCLUSO SI LA CITA YA HABÍA QUEDADO CONFIRMADA EN EL MENSAJE ANTERIOR):
-  1. OBLIGATORIO: Pídele amablemente sus 6 datos fiscales para registrar su solicitud:
-     • RFC
-     • Razón Social / Nombre Fiscal
-     • Código Postal (CP)
-     • Régimen Fiscal
-     • Uso de CFDI
-     • Correo Electrónico
-  2. DEBES concatenar al final de tu respuesta la etiqueta fiscal con el estado activo:
-     [DATA_FISCAL]: SI | <RFC o Pendiente> | <Razón Social o Pendiente> | <CP o Pendiente> | <Régimen o Pendiente> | <Uso CFDI o Pendiente> | <Correo o Pendiente>
---------------------------------------------------
-📌 REGLA DE ORO: REGISTRO DE CITAS Y RECOLECCIONES (ISO 8601)
---------------------------------------------------
-- Siempre que confirmes una Cita en Laboratorio o una Recolección con el cliente, DEBES incluir al final de tu mensaje la etiqueta en formato ISO 8601:
-
-  __AGENDAR_VISITA__: YYYY-MM-DDTHH:mm:00
-  [ISO_DATE: YYYY-MM-DDTHH:mm:00]
-
-- Ejemplo: Si el cliente confirma para el viernes 2 de octubre a las 7:00 PM (19:00 hrs):
-  "¡Excelente! Queda confirmada tu cita en laboratorio para el viernes 2 de octubre a las 7:00 PM.
-  [ISO_DATE: 2026-10-02T19:00:00]"
-
-- NUNCA omitas la etiqueta [ISO_DATE: ...] al confirmar un horario.
-
---------------------------------------------------
-7. ESTRUCTURA Y ETIQUETAS DE SALIDA (OBLIGATORIAS SOLO AL CONFIRMAR FECHA/HORA/NOMBRE)
---------------------------------------------------
-Al emitir el mensaje final de confirmación de cita (Visita o Recolección), DEBES concatenar al FINAL del mensaje de forma estricta las siguientes etiquetas:
-
-Para Visita en Laboratorio:
-__AGENDAR_VISITA__: YYYY-MM-DDTHH:mm:ss
-
-Para Recolección a Domicilio:
-__AGENDAR_RECOLECCION__: YYYY-MM-DDTHH:mm:ss
-__DIRECCION_CLIENTE__: <Dirección completa>
-
-Etiquetas complementarias obligatorias:
-[DATA_CRM]: <Nombre Completo> | <Equipo> | <Falla>
-[DATA_FISCAL]: <SI/NO> | <RFC> | <Razón Social> | <CP> | <Régimen> | <Uso CFDI> | <Correo>
-`
-                }
+                config: { systemInstruction }
             })
             respuestaRaw = response.text || ''
             break
@@ -863,34 +637,20 @@ Etiquetas complementarias obligatorias:
         let tipoSoporteCalculado = 'Remoto'
 
         const matchAgente = respuestaRaw.includes('__TRANSFERIR_HUMANO__');
-        const matchRemoteHandoff = respuestaRaw.includes('__TRANSFERIR_REMOTO__');
-
         const matchVisita = respuestaRaw.match(/_?_?AGENDAR_VISITA_?_?:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?FECHA_CITA_?_?:\s*([^\n\r]+)/i)
-        const matchRecoleccion = respuestaRaw.match(/_?_?AGENDAR_RECOLECCION_?_?:\s*([^\n\r]+)/i)
-        const matchDireccion = respuestaRaw.match(/_?_?DIRECCION_CLIENTE_?_?:\s*([^\n\r]+)/i)
-
+        const matchGuiaEnvio = respuestaRaw.match(/_?_?GENERAR_GUIA_?_?:\s*([^\n\r]+)/i)
         const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?DATOS_CRM_?_?:\s*([^\n\r]+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:\s*([^\n\r]+)/i)
 
         let respuestaWhatsApp = respuestaRaw
             .replace(/_?_?AGENDAR_VISITA_?_?:[^\n]*/gi, '')
-            .replace(/_?_?AGENDAR_RECOLECCION_?_?:[^\n]*/gi, '')
+            .replace(/_?_?GENERAR_GUIA_?_?:[^\n]*/gi, '')
             .replace(/_?_?FECHA_CITA_?_?:[^\n]*/gi, '')
-            .replace(/_?_?HORA_CITA_?_?:[^\n]*/gi, '')
-            .replace(/_?_?MODALIDAD_?_?:[^\n]*/gi, '')
-            .replace(/_?_?NOMBRE_CLIENTE_?_?:[^\n]*/gi, '')
-            .replace(/_?_?TIPO_SERVICIO_?_?:[^\n]*/gi, '')
-            .replace(/_?_?FACTURA_?_?:[^\n]*/gi, '')
-            .replace(/_?_?FOLIO_ORDEN_?_?:[^\n]*/gi, '')
-            .replace(/_?_?COSTO_PACTADO_?_?:[^\n]*/gi, '')
-            .replace(/_?_?ESTADO_ORDEN_?_?:[^\n]*/gi, '')
-            .replace(/_?_?DIRECCION_CLIENTE_?_?:[^\n]*/gi, '')
             .replace(/\[DATA_CRM\]:[^\n]*/gi, '')
             .replace(/_?_?DATOS_CRM_?_?:[^\n]*/gi, '')
             .replace(/\[DATA_FISCAL\]:[^\n]*/gi, '')
             .replace(/_*DATOS_FISCAL(ES)?_*:[^\n]*/gi, '')
             .replace(/__TRANSFERIR_HUMANO__/gi, '')
-            .replace(/__TRANSFERIR_REMOTO__/gi, '')
             .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General'
@@ -931,52 +691,47 @@ Etiquetas complementarias obligatorias:
 
         await registrarEnPrismaDB(telefonoParaCita, nombreCrm, mensajeCliente, respuestaWhatsApp)
 
-        if (matchAgente || matchRemoteHandoff) {
+        if (matchAgente) {
             const clienteActualizado = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
                 update: { atendidoPorBot: false },
                 create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
             })
 
-            if (matchAgente) {
-                estatusLead = 'REVISION_MANUAL'
+            estatusLead = 'REVISION_MANUAL'
 
-                let ticketLead = ticketMasReciente;
-                if (!ticketLead || ticketLead.estado === 'ENTREGADO' || ticketLead.estado === 'RECHAZADO') {
-                    ticketLead = await prisma.ticket.create({
-                        data: {
-                            numeroOrden: `LEAD-${telefonoParaCita}`,
-                            equipo: dispositivoCrm,
-                            fallaReportada: `${fallaCrm} (Solicitó Humano)`,
-                            estado: 'ESPERANDO_APROBACION',
-                            clienteId: clienteActualizado.id,
-                            notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el rango base. Último mensaje: "${mensajeCliente}"`
-                        }
-                    });
-                    ticketMasReciente = ticketLead;
-                } else {
-                    ticketLead = await prisma.ticket.update({
-                        where: { id: ticketLead.id },
-                        data: { estado: 'ESPERANDO_APROBACION' }
-                    });
-                    ticketMasReciente = ticketLead;
-                }
-
-                await dispararAlertaInmediata(
-                    telefonoParaCita,
-                    '🚨 S.O.S. AGENTE',
-                    `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Folio Lead:* ${ticketLead.numeroOrden}\n*Último mensaje:* "${mensajeCliente}"\n¡Disponible en tu Bandeja de Leads!`
-                )
+            let ticketLead = ticketMasReciente;
+            if (!ticketLead || ticketLead.estado === 'ENTREGADO' || ticketLead.estado === 'RECHAZADO') {
+                ticketLead = await prisma.ticket.create({
+                    data: {
+                        numeroOrden: `LEAD-${telefonoParaCita}`,
+                        equipo: dispositivoCrm,
+                        fallaReportada: `${fallaCrm} (Solicitó Humano)`,
+                        estado: 'ESPERANDO_APROBACION',
+                        clienteId: clienteActualizado.id,
+                        notasInternas: `[LEAD EN ESPERA]: El cliente solicita atención humana u objetó el precio. Último mensaje: "${mensajeCliente}"`
+                    }
+                });
+                ticketMasReciente = ticketLead;
             } else {
-                estatusLead = 'EN_REPARACION'
-                await dispararAlertaInmediata(telefonoParaCita, '⚡ EN_REPARACION', `¡Sesión Remota Solicitada!`)
+                ticketLead = await prisma.ticket.update({
+                    where: { id: ticketLead.id },
+                    data: { estado: 'ESPERANDO_APROBACION' }
+                });
+                ticketMasReciente = ticketLead;
             }
+
+            await dispararAlertaInmediata(
+                telefonoParaCita,
+                '🚨 S.O.S. AGENTE',
+                `¡Julio, entra al chat! El cliente solicitó un humano o rechazó el precio.\n*Cliente:* ${nombreCrm} (${telefonoParaCita})\n*Folio:* ${ticketLead.numeroOrden}\n*Último mensaje:* "${mensajeCliente}"`
+            )
         }
 
         if (matchVisita || ticketMasReciente?.equipo?.toLowerCase().includes('laboratorio')) {
             tipoSoporteCalculado = 'Visita Física'
-        } else if (matchRecoleccion || matchDireccion || ticketMasReciente?.equipo?.toLowerCase().includes('recolección')) {
-            tipoSoporteCalculado = 'Recolección'
+        } else if (matchGuiaEnvio || ticketMasReciente?.equipo?.toLowerCase().includes('paquete')) {
+            tipoSoporteCalculado = 'Envío Paquetería'
         } else if (ticketMasReciente?.costoReparacion && parseFloat(ticketMasReciente.costoReparacion) !== 419) {
             tipoSoporteCalculado = 'Reparación Física'
         }
@@ -989,15 +744,15 @@ Etiquetas complementarias obligatorias:
             const fechaParseada = new Date(fechaExtraida)
 
             if (isNaN(fechaParseada.getTime())) {
-                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora de forma un poco más clara? 🗓️`
+                respuestaWhatsApp = `¡Entendido! Para poder agendar tu visita, ¿podrías indicarme la fecha y hora exacta? 🗓️`
                 estatusLead = 'POR_AGENDAR'
             } else {
-                const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'ENTREGA')
+                const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente)
                 if (resultadoAgenda.exitoso) {
                     if (!resultadoAgenda.yaExistia) {
                         respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Cita Confirmada en Laboratorio*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\n¡Tu espacio de recepción ha quedado reservado con éxito! 🛠️⚙️`
 
-                        await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Laboratorio', fechaExtraida, 0, 'ENTREGA')
+                        await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, 'Entrega Presencial en Caseta Principal', fechaExtraida, 0, 'ENTREGA')
 
                         const clienteDb = await prisma.cliente.upsert({
                             where: { telefono: telefonoParaCita },
@@ -1009,7 +764,7 @@ Etiquetas complementarias obligatorias:
                             where: { numeroOrden: `LEAD-${telefonoParaCita}` },
                             update: {
                                 equipo: dispositivoCrm,
-                                fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
+                                fallaReportada: `${fallaCrm} (Cita Presencial)`,
                                 estado: 'ESPERANDO_APROBACION',
                                 notasInternas: '[AGENDADO] Cita presencial agendada por IA',
                                 botActivo: false
@@ -1017,7 +772,7 @@ Etiquetas complementarias obligatorias:
                             create: {
                                 numeroOrden: `LEAD-${telefonoParaCita}`,
                                 equipo: dispositivoCrm,
-                                fallaReportada: `${fallaCrm} (Cita Presencial Agendada)`,
+                                fallaReportada: `${fallaCrm} (Cita Presencial)`,
                                 estado: 'ESPERANDO_APROBACION',
                                 clienteId: clienteDb.id,
                                 notasInternas: '[AGENDADO] Cita presencial agendada por IA',
@@ -1025,7 +780,7 @@ Etiquetas complementarias obligatorias:
                             }
                         });
 
-                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita Presencial para el ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`)
+                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita para el ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`)
                     }
                     estatusLead = 'AGENDADO'
                 } else {
@@ -1036,76 +791,43 @@ Etiquetas complementarias obligatorias:
         }
 
         // =========================================================================
-        // 🎯 PROCESAMIENTO Y REGISTRO DIRECTO DE RECOLECCIÓN A DOMICILIO
+        // 📦 PROCESAMIENTO Y REGISTRO DIRECTO DE GUÍA PAQUETEXPRESS
         // =========================================================================
-        if (matchRecoleccion) {
-            const fechaExtraida = matchRecoleccion[1].trim()
-            const fechaParseada = new Date(fechaExtraida.includes('-06:00') ? fechaExtraida : `${fechaExtraida}-06:00`)
+        if (matchGuiaEnvio) {
+            const datosGuiaExtraidos = matchGuiaEnvio[1].trim() // ej: 64000 | Dirección... | Seguro SI
 
-            const resultadoAgenda = await procesarCitaEnCalendar(telefonoParaCita, fechaExtraida, mensajeCliente, 'RECOLECCION')
+            const clienteDb = await prisma.cliente.upsert({
+                where: { telefono: telefonoParaCita },
+                update: { nombre: nombreCrm, atendidoPorBot: false },
+                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+            });
 
-            if (resultadoAgenda.exitoso) {
-                if (!resultadoAgenda.yaExistia) {
-                    respuestaWhatsApp = `${respuestaWhatsApp}\n\n🎫 *Confirmación de Ruta de Recolección*\n📅 *Fecha:* ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}\n⏰ *Hora:* ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}\n\nHe apartado tu espacio en nuestro sistema de logística y asignado tu folio fiscal de manera exitosa. 🚚`
-
-                    const direccionAsignar = matchDireccion ? matchDireccion[1].trim() : 'Pendiente de dirección';
-                    await registrarCitaEnPrismaDB(telefonoParaCita, nombreCrm, direccionAsignar, fechaExtraida, 0, 'RECOLECCION')
-
-                    const clienteDb = await prisma.cliente.upsert({
-                        where: { telefono: telefonoParaCita },
-                        update: { nombre: nombreCrm, atendidoPorBot: false },
-                        create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
-                    });
-
-                    await prisma.ticket.upsert({
-                        where: { numeroOrden: `LEAD-${telefonoParaCita}` },
-                        update: {
-                            equipo: dispositivoCrm,
-                            fallaReportada: `${fallaCrm} (Recolección Agendada)`,
-                            estado: 'ESPERANDO_APROBACION',
-                            notasInternas: '[AGENDADO] Recolección a domicilio agendada por IA',
-                            botActivo: false
-                        },
-                        create: {
-                            numeroOrden: `LEAD-${telefonoParaCita}`,
-                            equipo: dispositivoCrm,
-                            fallaReportada: `${fallaCrm} (Recolección Agendada)`,
-                            estado: 'ESPERANDO_APROBACION',
-                            clienteId: clienteDb.id,
-                            notasInternas: '[AGENDADO] Recolección a domicilio agendada por IA',
-                            botActivo: false
-                        }
-                    });
-
-                    await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Recolección a Domicilio`)
+            await prisma.ticket.upsert({
+                where: { numeroOrden: `LEAD-${telefonoParaCita}` },
+                update: {
+                    equipo: dispositivoCrm,
+                    fallaReportada: `${fallaCrm} (Requiere Envío)`,
+                    estado: 'ESPERANDO_APROBACION',
+                    notasInternas: `[GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`,
+                    botActivo: false
+                },
+                create: {
+                    numeroOrden: `LEAD-${telefonoParaCita}`,
+                    equipo: dispositivoCrm,
+                    fallaReportada: `${fallaCrm} (Requiere Envío)`,
+                    estado: 'ESPERANDO_APROBACION',
+                    clienteId: clienteDb.id,
+                    notasInternas: `[GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`,
+                    botActivo: false
                 }
-                estatusLead = 'AGENDADO'
-            } else {
-                respuestaWhatsApp = `¡Hola! Ese horario en la ruta ya no tiene cupo. ¿Tendrás algún otro espacio libre?`
-                estatusLead = 'POR_AGENDAR'
-            }
-        }
+            });
 
-        if (matchDireccion && !matchRecoleccion) {
-            const direccionExtraida = matchDireccion[1].trim()
-            const ultimaCitaPrisma = await prisma.cita.findFirst({ where: { telefono: telefonoParaCita }, orderBy: { createdAt: 'desc' } })
-
-            if (ultimaCitaPrisma?.tipo === 'ENTREGA') {
-                estatusLead = 'AGENDADO'
-            } else {
-                const kilometrosReal = await calcularDistanciaKm(direccionExtraida, apiKey)
-
-                if (kilometrosReal === -1) {
-                    respuestaWhatsApp = `¡Gracias por tu dirección! Un agente la va a revisar manualmente.`
-                    estatusLead = 'REVISION_MANUAL'
-                } else if (kilometrosReal <= RADIO_MAXIMO_KM) {
-                    estatusLead = 'AGENDADO'
-                } else {
-                    await eliminarCitaEnCalendar(telefonoParaCita)
-                    respuestaWhatsApp = `¡Gracias por los datos! Sin embargo, nuestro sistema detectó que tu dirección se encuentra a ${kilometrosReal.toFixed(1)} km, lo cual supera nuestro rango máximo...`
-                    estatusLead = 'FUERA_DE_COBERTURA'
-                }
-            }
+            await dispararAlertaInmediata(
+                telefonoParaCita,
+                'GUIA_PENDIENTE',
+                `¡El cliente ${nombreCrm} aceptó el envío y mandó sus datos!\n📋 ${datosGuiaExtraidos}\n\n👉 Entra a tu Dashboard, cotiza el C.P., y genérale la guía PDF.`
+            );
+            estatusLead = 'GUIA_PENDIENTE';
         }
 
         historial.push({ role: 'model', parts: [{ text: respuestaWhatsApp }] })
@@ -1304,7 +1026,7 @@ export async function POST(req: Request) {
                     data: { botActivo: true }
                 });
 
-                const mensajeReactivacion = `¡Excelente! Qué gusto saludarte de nuevo. 😊\n\nPara el servicio de tu equipo, ¿te gustaría agendar una **visita presencial** en nuestro laboratorio o prefieres coordinar una **recolección a domicilio**? 🛠️`;
+                const mensajeReactivacion = `¡Excelente! Qué gusto saludarte de nuevo. 😊\n\nPara el servicio de tu equipo, ¿te gustaría agendar una **visita presencial** en nuestro laboratorio o prefieres **cotizar el envío por paquetería**? 🛠️`;
 
                 await enviarMensajeWhatsApp(numeroCliente, mensajeReactivacion);
 
