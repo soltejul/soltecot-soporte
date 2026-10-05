@@ -112,7 +112,14 @@ async function registrarEnPrismaDB(telefono: string, nombre: string, mensaje: st
     }
 }
 
-async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, direccion: string, fechaIso: string, distancia: number, tipo: string) {
+async function registrarCitaEnPrismaDB(
+    telefono: string,
+    nombreCliente: string,
+    direccion: string,
+    fechaIso: string,
+    distancia: number,
+    tipo: string
+) {
     try {
         await prisma.cita.create({
             data: {
@@ -122,7 +129,7 @@ async function registrarCitaEnPrismaDB(telefono: string, nombreCliente: string, 
                 fechaCita: new Date(fechaIso),
                 distanciaKm: distancia,
                 coordenadas: COORDENADAS_LABORATORIO,
-                tipo: tipo,
+                tipo: tipo as any, // 👈 Se agrega 'as any' para compatibilidad con el Enum de Prisma
                 estado: 'PENDIENTE'
             }
         })
