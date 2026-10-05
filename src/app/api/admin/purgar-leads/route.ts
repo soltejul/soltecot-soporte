@@ -1,38 +1,44 @@
-
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/prisma'
 
-export async function DELETE() {
-    try {
-        const haceDiezDias = new Date()
-        haceDiezDias.setDate(haceDiezDias.getDate() - 10)
+export const dynamic = 'force-dynamic'
 
-        // 🛡️ CANDADO DE SEGURIDAD: Solo purga si no tiene cita, recolección u orden oficial de taller
-        const resultado = await prisma.cliente.deleteMany({
+export async function POST(request: Request) {
+    try {
+        const body = await request.json()
+        const { clienteId } = body
+
+        if (clienteId) {
+            // Eliminar un lead específico
+            await prisma.mensaje.deleteMany({ where: { clienteId } })
+            await prisma.ticket.deleteMany({ where: { clienteId } })
+            await prisma.cliente.delete({ where: { id: clienteId } })
+
+            return NextResponse.json({ success: true, mensaje: 'Lead eliminado correctamente.' })
+        }
+
+        // Purga masiva de leads sin tickets activos
+        const borrados = await prisma.cliente.deleteMany({
             where: {
-                updatedAt: { lte: haceDiezDias },
                 tickets: {
                     none: {
                         OR: [
-                            { estado: 'AGENDADO' },
-                            { estado: 'RECOLECCION' },
+                            { estado: 'AGENDADO' as any },
+                            { estado: 'RECOLECCION' as any },
                             { estado: 'RECIBIDO' },
                             { estado: 'EN_DIAGNOSTICO' },
                             { estado: 'EN_REPARACION' },
-                            { estado: 'LISTO_PARA_ENTREGA' },
-                            { notasInternas: { contains: '[AGENDADO]' } },
-                            { notasInternas: { contains: '[RECOLECCION]' } }
+                            { estado: 'LISTO_PARA_ENTREGA' }
                         ]
                     }
                 }
             }
         })
 
-        console.log(`🧹 [PURGA 10D COMPLETADA]: Se eliminaron ${resultado.count} leads inactivos de Neon DB.`)
-        return NextResponse.json({ success: true, purgados: resultado.count }, { status: 200 })
+        return NextResponse.json({ success: true, borrados: borrados.count })
 
     } catch (error: any) {
-        console.error('🔴 [PURGA ERROR]:', error.message)
+        console.error('🔴 Error al purgar leads:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
