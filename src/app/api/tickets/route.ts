@@ -22,15 +22,15 @@ const CALENDAR_ID = 'juliolopez@soltecot.com'
 
 // 🚚 MAPEO DE ESTATUS HUMANIZADO PARA PARÁMETRO DE PLANTILLA META
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
-    AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO - Responde "ENTERADO" para enviarte la ficha de recepción.',
-    RECOLECCION: '🚚 RECOLECCIÓN AGENDADA - Responde "OK" para enviarte los datos del chofer y horario.',
-    RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO - Responde "VER" para enviarte las fotos de ingreso de tu equipo.',
-    EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO - Responde "REPORTE" para enviarte las fotos en microscopio.',
-    ESPERANDO_APROBACION: '⏳ APROBACIÓN PENDIENTE - Responde "DETALLES" para enviarte la cotización y piezas a reemplazar.',
-    EN_REPARACION: '🛠️ EN PROCESO DE REPARACIÓN - Responde "AVANCE" para enviarte fotos del banco de trabajo.',
-    LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER - Responde "HORARIOS" para agendar tu entrega.',
+    AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO - Responde "CONFIRMAR" para registrar tu visita.',
+    RECOLECCION: '🚚 RECOLECCIÓN AGENDADA - Responde "OK" para validar tu solicitud de envío.',
+    RECIBIDO: '⚙️ RECIBIDO EN LABORATORIO - Responde "ENTERADO" para confirmar la recepción de tu equipo.',
+    EN_DIAGNOSTICO: '🔬 EN DIAGNÓSTICO TÉCNICO - Responde "OK" para dar seguimiento.',
+    ESPERANDO_APROBACION: '⏳ APROBACIÓN PENDIENTE - Responde "VER" para revisar el presupuesto.',
+    EN_REPARACION: '🛠️ EN PROCESO DE REPARACIÓN - Responde "OK" para dar seguimiento.',
+    LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER - Responde "CONFIRMAR" para coordinar tu entrega.',
     ENTREGADO: '📦 ENTREGADO CON ÉXITO - Agradecemos tu confianza. ¡Que disfrutes tu equipo!',
-    RECHAZADO: '❌ REPARACIÓN CANCELADA - Responde "ENTREGAR" para coordinar la devolución sin costo.'
+    RECHAZADO: '❌ REPARACIÓN CANCELADA - Responde "OK" para coordinar la devolución.'
 }
 
 function obtenerAuthGoogle() {

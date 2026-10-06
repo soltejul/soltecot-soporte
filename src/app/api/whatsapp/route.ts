@@ -767,13 +767,16 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                             create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
                         });
 
+                        // 🏷️ Etiqueta obligatoria para que el Dashboard formatee el botón verde con fecha/hora
+                        const tagIso = `[ISO_DATE: ${fechaExtraida}]`
+
                         await prisma.ticket.upsert({
                             where: { numeroOrden: `LEAD-${telefonoParaCita}` },
                             update: {
                                 equipo: dispositivoCrm,
                                 fallaReportada: `${fallaCrm} (Cita Presencial)`,
                                 estado: 'ESPERANDO_APROBACION',
-                                notasInternas: '[AGENDADO] Cita presencial agendada por IA',
+                                notasInternas: `${tagIso} [AGENDADO] Cita presencial agendada por IA`,
                                 botActivo: false
                             },
                             create: {
@@ -782,7 +785,7 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                                 fallaReportada: `${fallaCrm} (Cita Presencial)`,
                                 estado: 'ESPERANDO_APROBACION',
                                 clienteId: clienteDb.id,
-                                notasInternas: '[AGENDADO] Cita presencial agendada por IA',
+                                notasInternas: `${tagIso} [AGENDADO] Cita presencial agendada por IA`,
                                 botActivo: false
                             }
                         });
