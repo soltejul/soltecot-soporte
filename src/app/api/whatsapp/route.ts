@@ -804,7 +804,7 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         // 📦 PROCESAMIENTO Y REGISTRO DIRECTO DE GUÍA PAQUETEXPRESS
         // =========================================================================
         if (matchGuiaEnvio) {
-            const datosGuiaExtraidos = matchGuiaEnvio[1].trim() // ej: 64000 | Dirección... | Seguro SI
+            const datosGuiaExtraidos = matchGuiaEnvio[1].trim()
 
             const clienteDb = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
@@ -812,13 +812,16 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                 create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
             });
 
+            // 🏷️ Agregamos la etiqueta [RECOLECCION] para que el Dashboard lo mande directo a la pestaña Logística
+            const notasConEtiquetaLogistica = `[RECOLECCION] [GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`
+
             await prisma.ticket.upsert({
                 where: { numeroOrden: `LEAD-${telefonoParaCita}` },
                 update: {
                     equipo: dispositivoCrm,
                     fallaReportada: `${fallaCrm} (Requiere Envío)`,
                     estado: 'ESPERANDO_APROBACION',
-                    notasInternas: `[GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`,
+                    notasInternas: notasConEtiquetaLogistica,
                     botActivo: false
                 },
                 create: {
@@ -827,7 +830,7 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                     fallaReportada: `${fallaCrm} (Requiere Envío)`,
                     estado: 'ESPERANDO_APROBACION',
                     clienteId: clienteDb.id,
-                    notasInternas: `[GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`,
+                    notasInternas: notasConEtiquetaLogistica,
                     botActivo: false
                 }
             });
