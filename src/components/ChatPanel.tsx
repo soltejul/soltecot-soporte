@@ -125,15 +125,21 @@ export default function ChatPanel({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ticketId: ticketSeleccionado.id,
+                    fechaIso: fechaIsoObj,
                     fechaAgendada: fechaIsoObj,
                     nuevoEstado: 'AGENDADO',
-                    notasInternas: `[AGENDADO: ${fechaIsoObj}]`,
+                    notasInternas: `[ISO_DATE: ${fechaIsoObj}] [AGENDADO]`,
                     botActivo: true
                 })
             })
 
-            if (res.ok) alert("📅 Cita registrada con éxito en Neon DB.")
-            else alert("🔴 Error al guardar la fecha de cita.")
+            if (res.ok) {
+                alert("📅 Cita registrada con éxito en Neon DB y Google Calendar.")
+                // 🔄 Refresca la interfaz para que el badge verde con fecha aparezca de inmediato
+                window.location.reload()
+            } else {
+                alert("🔴 Error al guardar la fecha de cita.")
+            }
         } catch (err) {
             alert("🔴 Error de conexión con el servidor.")
         } finally {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { google } from 'googleapis'
 import { prisma } from '../../../lib/prisma'
 import { obtenerOCrearCarpetaFolio, subirFotoEvidencia } from '@/src/lib/googleDrive'
 
@@ -17,6 +18,8 @@ const PHONE_NUMBER_ID = (
     process.env.META_PHONE_NUMBER_ID
 )?.trim()
 
+const CALENDAR_ID = 'juliolopez@soltecot.com'
+
 // 🚚 MAPEO DE ESTATUS HUMANIZADO PARA PARÁMETRO DE PLANTILLA META
 const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     AGENDADO: '📍 CITA CONFIRMADA EN LABORATORIO - Responde "ENTERADO" para enviarte la ficha de recepción.',
@@ -28,6 +31,50 @@ const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     LISTO_PARA_ENTREGA: '✅ LISTO PARA ENTREGA EN TALLER - Responde "HORARIOS" para agendar tu entrega.',
     ENTREGADO: '📦 ENTREGADO CON ÉXITO - Agradecemos tu confianza. ¡Que disfrutes tu equipo!',
     RECHAZADO: '❌ REPARACIÓN CANCELADA - Responde "ENTREGAR" para coordinar la devolución sin costo.'
+}
+
+function obtenerAuthGoogle() {
+    const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
+    if (!credencialesRaw) return null
+    try {
+        return new google.auth.GoogleAuth({
+            credentials: JSON.parse(credencialesRaw),
+            scopes: ['https://www.googleapis.com/auth/calendar']
+        })
+    } catch (e) {
+        return null
+    }
+}
+
+async function agendarEnGoogleCalendar(telefono: string, nombreCliente: string, fechaIso: string, equipo: string) {
+    try {
+        const auth = obtenerAuthGoogle()
+        if (!auth) return null
+
+        const calendar = google.calendar({ version: 'v3', auth })
+
+        const fechaConOffset = fechaIso.includes('-06:00') || fechaIso.includes('Z')
+            ? fechaIso
+            : `${fechaIso}-06:00`
+
+        const inicioCita = new Date(fechaConOffset)
+        const finCita = new Date(inicioCita.getTime() + (30 * 60 * 1000)) // Slot de 30 minutos
+
+        const nuevoEvento = await calendar.events.insert({
+            calendarId: CALENDAR_ID,
+            requestBody: {
+                summary: `🔬 Visita Presencial Soltecot [${telefono}]`,
+                description: `Cliente: ${nombreCliente}\nTeléfono: ${telefono}\nEquipo: ${equipo}\nOrigen: Fijado desde Dashboard Admin`,
+                start: { dateTime: inicioCita.toISOString() },
+                end: { dateTime: finCita.toISOString() },
+            },
+        })
+
+        return nuevoEvento.data.id
+    } catch (error: any) {
+        console.error('🔴 [CALENDAR ERROR TICKETS]:', error.message)
+        return null
+    }
 }
 
 async function enviarMensajeMeta(to: string, texto: string) {
@@ -322,7 +369,19 @@ export async function GET() {
 export async function PATCH(request: Request) {
     try {
         const body = await request.json()
-        const { ticketId, nuevoEstado, costoReparacion, notasDiagnostico, botActivo, telefonoNuevo, reenviarNotificacion, direccionRecoleccion } = body
+        const {
+            ticketId,
+            nuevoEstado,
+            costoReparacion,
+            notasDiagnostico,
+            botActivo,
+            telefonoNuevo,
+            reenviarNotificacion,
+            direccionRecoleccion,
+            fechaCita,
+            fechaIso,
+            fechaAgendada
+        } = body
 
         if (!ticketId) return NextResponse.json({ error: 'Ticket ID requerido' }, { status: 400 })
 
@@ -345,11 +404,12 @@ export async function PATCH(request: Request) {
             }
         }
 
+        const fechaFinalIso = fechaIso || fechaCita || fechaAgendada
         const esRecoleccion = nuevoEstado === 'RECOLECCION'
         const esCitaAgendada = nuevoEstado === 'AGENDADO'
-        const esCitaOAgendado = esCitaAgendada || esRecoleccion
+        const esCitaOAgendado = esCitaAgendada || esRecoleccion || Boolean(fechaFinalIso)
 
-        const estadoDbValido = esCitaOAgendado ? 'ESPERANDO_APROBACION' : (nuevoEstado || ticket.estado)
+        const estadoDbValido = (esCitaAgendada || esRecoleccion) ? 'ESPERANDO_APROBACION' : (nuevoEstado || ticket.estado)
         const botActivoFinal = esCitaOAgendado ? false : (botActivo !== undefined ? botActivo : ticket.botActivo)
 
         if (botActivoFinal !== undefined) {
@@ -359,8 +419,44 @@ export async function PATCH(request: Request) {
             })
         }
 
-        // Formatear notas internas con la etiqueta logística correspondiente
+        // 📅 1. SINCRONIZACIÓN CON GOOGLE CALENDAR Y CREACIÓN EN TABLA CITA SI SE ESPECIFICÓ FECHA
+        if (fechaFinalIso) {
+            await agendarEnGoogleCalendar(
+                telefonoFinal,
+                ticket.cliente.nombre || 'Cliente',
+                fechaFinalIso,
+                ticket.equipo
+            )
+
+            try {
+                await prisma.cita.create({
+                    data: {
+                        telefono: telefonoFinal,
+                        nombreCliente: ticket.cliente.nombre || 'Cliente',
+                        direccion: direccionRecoleccion || 'Recepción Presencial Caseta Principal',
+                        fechaCita: new Date(fechaFinalIso),
+                        distanciaKm: 0,
+                        coordenadas: '19.68430387588073,-99.15870193124036',
+                        tipo: (esRecoleccion ? 'RECOLECCION' : 'ENTREGA') as any,
+                        estado: 'PENDIENTE'
+                    }
+                })
+            } catch (errCita: any) {
+                console.error('🔴 Error al registrar Cita en Prisma:', errCita.message)
+            }
+        }
+
+        // 🏷️ 2. INYECCIÓN DE ETIQUETA ISO_DATE EN NOTAS INTERNAS PARA ACTUALIZAR EL BADGE DEL DASHBOARD
         let notasInternasActualizadas = ticket.notasInternas || ''
+
+        if (fechaFinalIso) {
+            const tagIso = `[ISO_DATE: ${fechaFinalIso}]`
+            if (!notasInternasActualizadas.includes('[ISO_DATE:')) {
+                notasInternasActualizadas = `${tagIso} ${notasInternasActualizadas}`.trim()
+            } else {
+                notasInternasActualizadas = notasInternasActualizadas.replace(/\[ISO_DATE:[^\]]+\]/g, tagIso)
+            }
+        }
 
         if (esRecoleccion) {
             const tagRecoleccion = direccionRecoleccion ? `[RECOLECCION: ${direccionRecoleccion}]` : '[RECOLECCION]'
