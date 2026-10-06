@@ -905,12 +905,11 @@ export async function GET(req: Request) {
         const token = searchParams.get('hub.verify_token')
         const challenge = searchParams.get('hub.challenge')
 
-        // 🔐 FALLBACK DIRECTO PARA VALIDACIÓN EN RAMA PREVIEW
-        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'Soltecot2026Workshop'
+        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
 
         if (mode && token) {
-            if (mode === 'subscribe' && (token === VERIFY_TOKEN || token === 'Soltecot2026Workshop')) {
-                console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.')
+            if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+                console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.');
                 return new Response(challenge, { status: 200 })
             } else {
                 return new Response('Forbidden', { status: 403 })
