@@ -119,7 +119,9 @@ export default function ChatPanel({
 
         setGuardandoCita(true)
         try {
-            const fechaIsoObj = new Date(fechaCitaInput).toISOString()
+            // 🇲🇽 Fijamos la hora local de CDMX agregando el offset -06:00 directamente
+            const fechaIsoObj = `${fechaCitaInput}:00-06:00`
+
             const res = await fetch('/api/tickets', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -135,7 +137,6 @@ export default function ChatPanel({
 
             if (res.ok) {
                 alert("📅 Cita registrada con éxito en Neon DB y Google Calendar.")
-                // 🔄 Refresca la interfaz para que el badge verde con fecha aparezca de inmediato
                 window.location.reload()
             } else {
                 alert("🔴 Error al guardar la fecha de cita.")
