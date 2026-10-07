@@ -790,11 +790,51 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                             }
                         });
 
-                        await dispararAlertaInmediata(telefonoParaCita, 'AGENDADO', `${nombreCrm} agendó Visita para el ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`)
+                        await dispararAlertaInmediata(
+                            telefonoParaCita,
+                            'AGENDADO',
+                            `${nombreCrm} agendó Visita para el ${fechaParseada.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${fechaParseada.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`
+                        )
                     }
                     estatusLead = 'AGENDADO'
                 } else {
-                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Disculpa, detectamos que el horario se encuentra ocupado. ¿Tendrás algún otro espacio libre? 🗓️`
+                    // 🚨 ESCAPE AUTOMÁTICO POR CRUCE DE HORARIO (Paso a Modo Manual)
+                    const clienteDb = await prisma.cliente.upsert({
+                        where: { telefono: telefonoParaCita },
+                        update: { nombre: nombreCrm, atendidoPorBot: false },
+                        create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                    });
+
+                    await prisma.ticket.upsert({
+                        where: { numeroOrden: `LEAD-${telefonoParaCita}` },
+                        update: {
+                            equipo: dispositivoCrm,
+                            fallaReportada: `${fallaCrm} (Cruce Cita)`,
+                            estado: 'ESPERANDO_APROBACION',
+                            notasInternas: `[CRUCE_HORARIOS] Intento de agendamiento para: ${fechaExtraida}. Bot pausado.`,
+                            botActivo: false
+                        },
+                        create: {
+                            numeroOrden: `LEAD-${telefonoParaCita}`,
+                            equipo: dispositivoCrm,
+                            fallaReportada: `${fallaCrm} (Cruce Cita)`,
+                            estado: 'ESPERANDO_APROBACION',
+                            clienteId: clienteDb.id,
+                            notasInternas: `[CRUCE_HORARIOS] Intento de agendamiento para: ${fechaExtraida}. Bot pausado.`,
+                            botActivo: false
+                        }
+                    });
+
+                    // Respuesta empática de transferencia inmediata
+                    respuestaWhatsApp = `¡Hola, ${nombreCrm}! Noté un pequeño ajuste en la agenda en tiempo real para esa hora. Para no hacerte perder tiempo, le acabo de transferir tu chat al Ingeniero Julio para que te confirme la cita de inmediato. Un momento por favor 🧑‍🔧`
+
+                    // Alerta inmediata a tu centro de notificaciones
+                    await dispararAlertaInmediata(
+                        telefonoParaCita,
+                        'ERROR_HORARIO',
+                        `⚠️ CRUCE DE HORARIOS: ${nombreCrm} intentó agendar (${fechaExtraida}) pero el espacio está ocupado. Se desactivó el bot para atención manual.`
+                    );
+
                     estatusLead = 'POR_AGENDAR'
                 }
             }
