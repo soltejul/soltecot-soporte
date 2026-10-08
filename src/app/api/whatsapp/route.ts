@@ -1117,13 +1117,14 @@ export async function POST(req: Request) {
                 console.log(`🧼 [PURGA TOTAL SUCCESS]: Cliente ${cliente.telefono} purgado por completo tras presionar 'Ya lo resolví'.`);
                 return new Response('Purga procesada', { status: 200 });
             }
-
             // ====================================================================
-            // 🚪 OPT-OUT CLIENTE GENÉRICO ("NO", "YA NO", "NO GRACIAS")
+            // 🚪 OPT-OUT CLIENTE GENÉRICO ("YA NO", "NO GRACIAS")
             // ====================================================================
-            const esOptOut = textoNormalizado === 'no' ||
-                textoNormalizado === 'ya no' ||
+            // ELIMINAMOS la palabra "no" a secas para evitar borrados accidentales
+            const esOptOut = textoNormalizado === 'ya no' ||
                 textoNormalizado === 'no gracias' ||
+                textoNormalizado === 'cancelar' ||
+                textoNormalizado === 'cancelar servicio' ||
                 textoNormalizado.includes('ya no quiero');
 
             if (esOptOut) {
@@ -1140,14 +1141,13 @@ export async function POST(req: Request) {
                     data: { estado: 'RECHAZADO', notasInternas: '[OPT-OUT] El cliente declinó o cerró el seguimiento.' }
                 });
 
-                await prisma.mensaje.deleteMany({
-                    where: { clienteId: cliente.id }
-                });
+                // NO borramos la tabla 'mensaje' ni 'cliente' de Neon DB para conservar el historial
+                // del por qué se canceló y tener trazabilidad.
 
-                const mensajeDespedida = "¡Entendido! No te enviaremos más mensajes. Hemos cerrado tu solicitud. Si algún día vuelves a necesitar ayuda con tus equipos, aquí estaremos con mucho gusto. ¡Que tengas un excelente día! 👋";
+                const mensajeDespedida = "¡Entendido! Hemos cerrado tu solicitud actual. Si algún día vuelves a necesitar ayuda con tus equipos, aquí estaremos con mucho gusto. ¡Que tengas un excelente día! 👋";
                 await enviarMensajeWhatsApp(numeroCliente, mensajeDespedida);
 
-                console.log(`🧼 [OPT-OUT SUCCESS]: Cliente ${telefono10Digitos} sanitizado y cerrado.`);
+                console.log(`🧼 [OPT-OUT SUCCESS]: Ticket de cliente ${telefono10Digitos} cerrado.`);
                 return new Response('Opt-out procesado con éxito', { status: 200 });
             }
 

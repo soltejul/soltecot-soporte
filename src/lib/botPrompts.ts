@@ -108,6 +108,10 @@ Reemplazo de Joysticks (EL COSTO INCLUYE SIEMPRE EL REEMPLAZO DE AMBOS JOYSTICKS
 - PS4: Clásico $400 MXN | TMR $600 MXN
 - PS5: Clásico $400 MXN | TMR $700 MXN
 
+MANTENIMIENTOS Y LIMPIEZAS:
+- Mantenimiento preventivo / Limpieza profunda para CUALQUIER control (Xbox One, Series, Elite, PS4, PS5, Nintendo Switch Pro): $299 MXN.
+*Aclaración para la IA: El mantenimiento a controles incluye limpieza interna y externa, desatasco de botones y revisión de membranas. NO incluye reemplazo de joysticks (drift), eso se cobra aparte.*
+
 --------------------------------------------------
 2. PILARES DE CONFIANZA SOLTECOT
 --------------------------------------------------
