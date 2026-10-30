@@ -725,16 +725,18 @@ export default function AdminDashboard() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ids: seleccionados })
             })
-            if (res.ok) {
+            const data = await res.json()
+
+            if (res.ok && data.success) {
                 setSeleccionados([])
                 reloadTickets()
                 reloadConversaciones()
-                alert('Registros purgados exitosamente.')
+                alert(data.mensaje || 'Registros purgados exitosamente.')
             } else {
-                alert('Ocurrió un error al purgar los registros.')
+                alert(`🔴 ${data.error || 'Ocurrió un error al purgar los registros.'}`)
             }
         } catch (e) {
-            alert('Error de conexión.')
+            alert('Error de conexión con el servidor.')
         } finally {
             setPurgandoLote(false)
         }
@@ -1004,8 +1006,8 @@ export default function AdminDashboard() {
                                         </span>
                                     ) : (
                                         <span className={`text-[10px] font-mono uppercase px-2.5 py-1 rounded-lg whitespace-nowrap ${item.estadoTaller === 'ENTREGADO' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' :
-                                                item.estadoTaller === 'RECHAZADO' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold' :
-                                                    'text-zinc-500 bg-zinc-900 border border-zinc-800'
+                                            item.estadoTaller === 'RECHAZADO' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold' :
+                                                'text-zinc-500 bg-zinc-900 border border-zinc-800'
                                             }`}>
                                             {item.estadoTaller?.replace(/_/g, ' ') || 'PROSPECTO'}
                                         </span>

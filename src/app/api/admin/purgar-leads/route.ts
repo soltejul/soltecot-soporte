@@ -8,135 +8,118 @@ async function ejecutarPurga(request: Request) {
         const body = await request.json().catch(() => ({}))
         const { clienteId, ids, forzar = false } = body
 
-        // 1. Normalización de IDs a procesar (clienteId individual o lote de IDs)
-        const listaIdsCandidatos: string[] = []
-        if (clienteId && typeof clienteId === 'string') {
-            listaIdsCandidatos.push(clienteId)
-        }
+        // 1. Normalización de IDs a procesar
+        const candidateIds: string[] = []
+        if (clienteId && typeof clienteId === 'string') candidateIds.push(clienteId.trim())
         if (Array.isArray(ids)) {
             ids.forEach((id: any) => {
-                if (typeof id === 'string' && id.trim()) {
-                    listaIdsCandidatos.push(id.trim())
-                }
+                if (typeof id === 'string' && id.trim()) candidateIds.push(id.trim())
             })
         }
 
         // ====================================================================
-        // CASO A: PURGA SELECTIVA POR IDS (DESDE CHECKBOXES O DRAWER)
+        // CASO A: PURGA SELECCIONADA POR CHECKBOXES O BOTÓN
         // ====================================================================
-        if (listaIdsCandidatos.length > 0) {
-            const [clientesDirectos, ticketsAsociados] = await Promise.all([
-                prisma.cliente.findMany({
-                    where: { id: { in: listaIdsCandidatos } },
-                    select: { id: true, telefono: true }
-                }),
+        if (candidateIds.length > 0) {
+            // Buscamos si los IDs corresponden a Tickets o a Clientes directos
+            const [ticketsDirectos, clientesDirectos] = await Promise.all([
                 prisma.ticket.findMany({
-                    where: { id: { in: listaIdsCandidatos } },
+                    where: { id: { in: candidateIds } },
                     select: { id: true, clienteId: true, estado: true, numeroOrden: true }
+                }),
+                prisma.cliente.findMany({
+                    where: { id: { in: candidateIds } },
+                    select: { id: true, telefono: true }
                 })
             ])
 
-            const clienteIdsSet = new Set<string>()
-            const telefonosSet = new Set<string>()
+            // 🛡️ ÚNICA REGLA DE PROTECCIÓN: No permitir borrar órdenes activas en taller a menos que se fuerce
+            const ESTADOS_EN_PROCESO = ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION', 'LISTO_PARA_ENTREGA']
+            const ticketsEnProceso = ticketsDirectos.filter(t => ESTADOS_EN_PROCESO.includes(t.estado))
 
-            clientesDirectos.forEach(c => {
-                clienteIdsSet.add(c.id)
-                if (c.telefono) telefonosSet.add(c.telefono)
-            })
-
-            ticketsAsociados.forEach(t => {
-                if (t.clienteId) clienteIdsSet.add(t.clienteId)
-            })
-
-            const clienteIdsFinales = Array.from(clienteIdsSet)
-
-            if (clienteIdsFinales.length === 0) {
+            if (ticketsEnProceso.length > 0 && !forzar) {
+                const folios = ticketsEnProceso.map(t => t.numeroOrden).join(', ')
                 return NextResponse.json({
-                    success: true,
-                    mensaje: 'No se encontraron registros coincidentes para purgar.',
-                    purgados: 0
-                })
-            }
-
-            // 🛡️ Filtro de Protección: Evitar borrar tickets de taller oficiales o entregados
-            let clientesABorrar = clienteIdsFinales
-            if (!forzar) {
-                const clientesProtegidos = await prisma.cliente.findMany({
-                    where: {
-                        id: { in: clienteIdsFinales },
-                        tickets: {
-                            some: {
-                                OR: [
-                                    { numeroOrden: { not: { startsWith: 'LEAD-' } } },
-                                    { estado: { in: ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION', 'LISTO_PARA_ENTREGA', 'ENTREGADO'] } }
-                                ]
-                            }
-                        }
-                    },
-                    select: { id: true }
-                })
-
-                const idsProtegidos = new Set(clientesProtegidos.map(c => c.id))
-                clientesABorrar = clienteIdsFinales.filter(id => !idsProtegidos.has(id))
-            }
-
-            if (clientesABorrar.length === 0) {
-                return NextResponse.json({
-                    error: 'Los registros seleccionados corresponden a órdenes de taller activas o históricas y no pueden ser purgados.'
+                    error: `No se pueden eliminar órdenes activas en el laboratorio (${folios}). Cambia su estatus a RECHAZADO o ENTREGADO primero.`
                 }, { status: 400 })
             }
 
-            // Rescatamos los teléfonos de todos los clientes a borrar para eliminar sus citas
-            const clientesFinalesConTel = await prisma.cliente.findMany({
-                where: { id: { in: clientesABorrar } },
-                select: { telefono: true }
-            })
-            clientesFinalesConTel.forEach(c => {
-                if (c.telefono) telefonosSet.add(c.telefono)
-            })
-            const listaTelefonosABorrar = Array.from(telefonosSet).filter(Boolean)
+            const ticketIdsParaBorrar = ticketsDirectos.map(t => t.id)
+            const clienteIdsDeTickets = ticketsDirectos.map(t => t.clienteId).filter(Boolean) as string[]
+            const clienteIdsDirectos = clientesDirectos.map(c => c.id)
 
-            // Transacción atómica: Mensajes -> Citas (por teléfono) -> Tickets -> Clientes
+            const todosClienteIds = Array.from(new Set([...clienteIdsDeTickets, ...clienteIdsDirectos]))
+
+            // Rescatamos teléfonos para limpiar citas
+            const clientesInfo = await prisma.cliente.findMany({
+                where: { id: { in: todosClienteIds } },
+                select: { id: true, telefono: true }
+            })
+            const telefonosParaCitas = clientesInfo.map(c => c.telefono).filter(Boolean) as string[]
+
+            // Transacción atómica en Neon DB
             const resultado = await prisma.$transaction(async (tx) => {
-                const msgs = await tx.mensaje.deleteMany({
-                    where: { clienteId: { in: clientesABorrar } }
-                })
+                let ticketsBorrados = 0
+                let clientesBorrados = 0
+                let mensajesBorrados = 0
+                let citasBorradas = 0
 
-                let citasCount = 0
-                if (listaTelefonosABorrar.length > 0) {
-                    const citas = await tx.cita.deleteMany({
-                        where: {
-                            telefono: { in: listaTelefonosABorrar }
-                        }
+                // 1. Borrar los tickets seleccionados
+                if (ticketIdsParaBorrar.length > 0) {
+                    const resT = await tx.ticket.deleteMany({
+                        where: { id: { in: ticketIdsParaBorrar } }
                     })
-                    citasCount = citas.count
+                    ticketsBorrados += resT.count
                 }
 
-                const tickets = await tx.ticket.deleteMany({
-                    where: { clienteId: { in: clientesABorrar } }
-                })
+                // 2. Si se seleccionaron Leads (clientes sin ticket), borrar mensajes y cliente
+                if (clienteIdsDirectos.length > 0) {
+                    const resM = await tx.mensaje.deleteMany({
+                        where: { clienteId: { in: clienteIdsDirectos } }
+                    })
+                    mensajesBorrados += resM.count
 
-                const clientes = await tx.cliente.deleteMany({
-                    where: { id: { in: clientesABorrar } }
-                })
+                    const resT = await tx.ticket.deleteMany({
+                        where: { clienteId: { in: clienteIdsDirectos } }
+                    })
+                    ticketsBorrados += resT.count
 
-                return {
-                    clientes: clientes.count,
-                    tickets: tickets.count,
-                    mensajes: msgs.count,
-                    citas: citasCount
+                    const resC = await tx.cliente.deleteMany({
+                        where: { id: { in: clienteIdsDirectos } }
+                    })
+                    clientesBorrados += resC.count
                 }
+
+                // 3. Si al borrar tickets un cliente se queda con 0 tickets, limpiarlo
+                for (const cId of clienteIdsDeTickets) {
+                    const ticketsRestantes = await tx.ticket.count({ where: { clienteId: cId } })
+                    if (ticketsRestantes === 0) {
+                        await tx.mensaje.deleteMany({ where: { clienteId: cId } })
+                        await tx.cliente.delete({ where: { id: cId } }).catch(() => { })
+                        clientesBorrados++
+                    }
+                }
+
+                // 4. Limpiar citas huérfanas por teléfono
+                if (telefonosParaCitas.length > 0) {
+                    const resCitas = await tx.cita.deleteMany({
+                        where: { telefono: { in: telefonosParaCitas } }
+                    })
+                    citasBorradas = resCitas.count
+                }
+
+                return { ticketsBorrados, clientesBorrados, mensajesBorrados, citasBorradas }
             })
 
             return NextResponse.json({
                 success: true,
-                mensaje: `Se purgaron ${resultado.clientes} prospectos con éxito.`,
+                mensaje: `Se eliminaron ${resultado.ticketsBorrados} tickets y ${resultado.clientesBorrados} registros con éxito.`,
                 detalles: resultado
             })
         }
 
         // ====================================================================
-        // CASO B: BARRIDO AUTOMÁTICO DE LEADS HUÉRFANOS (SIN IDS ESPECÍFICOS)
+        // CASO B: BARRIDO AUTOMÁTICO DE PROSPECTOS INACTIVOS (SIN IDS)
         // ====================================================================
         const clientesHuerfanos = await prisma.cliente.findMany({
             where: {
@@ -166,25 +149,21 @@ async function ejecutarPurga(request: Request) {
         })
 
         const idsHuerfanos = clientesHuerfanos.map(c => c.id)
-        const telefonosHuerfanos = clientesHuerfanos
-            .map(c => c.telefono)
-            .filter((t): t is string => Boolean(t))
+        const telefonosHuerfanos = clientesHuerfanos.map(c => c.telefono).filter(Boolean) as string[]
 
         if (idsHuerfanos.length === 0) {
             return NextResponse.json({
                 success: true,
-                mensaje: 'La base de datos se encuentra limpia. No hay prospectos huérfanos para purgar.',
+                mensaje: 'La base de datos se encuentra limpia.',
                 borrados: 0
             })
         }
 
         const resultadoBarrido = await prisma.$transaction(async (tx) => {
             await tx.mensaje.deleteMany({ where: { clienteId: { in: idsHuerfanos } } })
-
             if (telefonosHuerfanos.length > 0) {
                 await tx.cita.deleteMany({ where: { telefono: { in: telefonosHuerfanos } } })
             }
-
             await tx.ticket.deleteMany({ where: { clienteId: { in: idsHuerfanos } } })
             const delClientes = await tx.cliente.deleteMany({ where: { id: { in: idsHuerfanos } } })
             return delClientes.count
