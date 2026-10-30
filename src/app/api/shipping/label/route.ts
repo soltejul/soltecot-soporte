@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
+import { prisma } from '../../../../lib/prisma'
+import { enviarMensajeWhatsApp } from '../../../../lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,7 +100,10 @@ export async function POST(request: Request) {
             nombreClienteTel = '',
             sentido = '📥 Recepción',
             cpOrigenDestino = '',
-            costoGuia = '51.25'
+            costoGuia = '51.25',
+            // 📞 Parámetros requeridos para WhatsApp y Prisma
+            telefono = '',
+            nombreCliente = ''
         } = body
 
         if (!rateId) {
@@ -139,6 +144,51 @@ export async function POST(request: Request) {
             costoGuia,
             labelUrl
         })
+
+        // 📲 ENVÍO AUTOMÁTICO DE WHATSAPP AL CLIENTE
+        // Validamos que haya teléfono y que el sentido sea Recepción para enviar instrucciones de empaque
+        if (telefono && sentido.includes('Recepción')) {
+            const mensajeWhatsApp = `📦 *¡Tu guía de envío está lista!* 🎮\n\n` +
+                `Hola, *${nombreCliente || nombreClienteTel.split(' ')[0] || 'Cliente'}*. Te compartimos los detalles de tu guía Paquetexpress (Orden *${folioTicket || 'SOL'}*):\n` +
+                `• *No. de Guía:* \`${trackingNumber}\`\n` +
+                (labelUrl ? `• *Descarga tu guía PDF aquí:* ${labelUrl}\n\n` : `\n`) +
+                `🚚 *MODALIDADES DE ENTREGA:*\n` +
+                `1️⃣ *Recolección en domicilio:* En horario comercial abierto (9:00 AM a 6:30 PM). Te sugerimos tener el paquete listo y estar al pendiente del celular.\n` +
+                `2️⃣ *Entrega en sucursal Paquetexpress:* Si prefieres no esperar al recolector, puedes llevar tu paquete directamente a la oficina de Paquetexpress más cercana a tu domicilio con la guía impresa y pegada.\n\n` +
+                `📋 *PASOS DE EMBALAJE:*\n` +
+                `• Retira cualquier juego o disco de la bandeja.\n` +
+                `• Envuelve la consola con plástico burbuja o material acolchonado.\n` +
+                `• Colócala en una caja rígida donde no se mueva y sella en forma de "H" con cinta canela o gruesa.\n` +
+                `• Pega la guía impresa en la parte superior sin tapar el código de barras.\n\n` +
+                `¡Quedamos al pendiente del trayecto de tu equipo! 🔬🛠️`
+
+            // Despachar el mensaje
+            await enviarMensajeWhatsApp(telefono, mensajeWhatsApp)
+
+            // Registrar el mensaje en Neon DB para que aparezca en el Chat del Dashboard
+            const tel10 = telefono.replace(/\D/g, '').slice(-10)
+            const clienteDb = await prisma.cliente.findFirst({
+                where: { telefono: { endsWith: tel10 } }
+            })
+
+            if (clienteDb) {
+                await prisma.mensaje.create({
+                    data: {
+                        texto: mensajeWhatsApp,
+                        origen: 'BOT',
+                        clienteId: clienteDb.id
+                    }
+                })
+
+                // Actualizar notas internas del ticket para incrustar el tracking automáticamente
+                await prisma.ticket.updateMany({
+                    where: { clienteId: clienteDb.id, estado: { notIn: ['ENTREGADO', 'RECHAZADO'] } },
+                    data: {
+                        notasInternas: `[GUIA GENERADA] Tracking: ${trackingNumber} | URL: ${labelUrl}`
+                    }
+                })
+            }
+        }
 
         return NextResponse.json({
             success: true,

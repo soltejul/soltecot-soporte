@@ -93,6 +93,8 @@ export default function ChatPanel({
     const [zipCodeDestino, setZipCodeDestino] = useState('')
     const [tipoPreset, setTipoPreset] = useState('controles')
     const [sentido, setSentido] = useState<'entrada' | 'salida'>('entrada')
+    const [valorDeclarado, setValorDeclarado] = useState('1000')
+    const [conSeguro, setConSeguro] = useState(true)
     const [cargandoCotizacion, setCargandoCotizacion] = useState(false)
     const [cotizacionGanadora, setCotizacionGanadora] = useState<any>(null)
     const [generandoGuia, setGenerandoGuia] = useState(false)
@@ -119,7 +121,6 @@ export default function ChatPanel({
 
         setGuardandoCita(true)
         try {
-            // 🇲🇽 Fijamos la hora local de CDMX agregando el offset -06:00 directamente
             const fechaIsoObj = `${fechaCitaInput}:00-06:00`
 
             const res = await fetch('/api/tickets', {
@@ -158,7 +159,13 @@ export default function ChatPanel({
             const res = await fetch('/api/shipping/quote', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ zipCodeDestino, tipoPreset, sentido })
+                body: JSON.stringify({
+                    zipCodeDestino,
+                    tipoPreset,
+                    sentido,
+                    valorDeclarado: conSeguro ? (parseFloat(valorDeclarado) || 0) : 0,
+                    conSeguro
+                })
             })
             const data = await res.json()
 
@@ -178,7 +185,7 @@ export default function ChatPanel({
         }
     }
 
-    // 🚀 FUNCIÓN: GENERAR Y DESCARGAR GUÍA EN PDF
+    // 🚀 FUNCIÓN: GENERAR GUÍA, REGISTRAR EN BD, SHEETS Y DESPACHAR WHATSAPP
     const handleGenerarGuia = async () => {
         const rateId = cotizacionGanadora?.rateId
 
@@ -186,13 +193,40 @@ export default function ChatPanel({
             return alert("No hay una tarifa válida seleccionada para generar la guía.")
         }
 
+        // 🧠 Extracción de datos para trazabilidad y WhatsApp
+        const telefonoLimpio = (
+            ticketSeleccionado?.cliente?.telefono ||
+            itemSeleccionadoActual?.telefono ||
+            telefonoRescate ||
+            ''
+        ).replace(/\D/g, '')
+
+        const nombreCliente = (
+            ticketSeleccionado?.cliente?.nombre ||
+            itemSeleccionadoActual?.nombre ||
+            'Cliente'
+        ).trim()
+
+        const folio = ticketSeleccionado?.numeroOrden || itemSeleccionadoActual?.folio || 'SOL-ORDEN'
+
         setGenerandoGuia(true)
 
         try {
+            const payload = {
+                rateId,
+                folioTicket: folio,
+                nombreClienteTel: `${nombreCliente} (${telefonoLimpio})`,
+                sentido: sentido === 'entrada' ? '📥 Recepción' : '📤 Retorno',
+                cpOrigenDestino: sentido === 'entrada' ? `${zipCodeDestino} -> 54850` : `54850 -> ${zipCodeDestino}`,
+                costoGuia: cotizacionGanadora.precio || '51.25',
+                telefono: telefonoLimpio,
+                nombreCliente: nombreCliente
+            }
+
             const res = await fetch('/api/shipping/label', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rateId })
+                body: JSON.stringify(payload)
             })
 
             const data = await res.json()
@@ -202,9 +236,8 @@ export default function ChatPanel({
             }
 
             if (data.labelUrl) {
-                // Abrir PDF de la etiqueta directamente en una pestaña nueva
                 window.open(data.labelUrl, '_blank')
-                alert(`¡Guía de ${data.carrierName || 'Paquetexpress'} creada con éxito!\n\nNúmero de rastreo: ${data.trackingNumber}`)
+                alert(`¡Guía de ${data.carrierName || 'Paquetexpress'} creada con éxito!\n\nNúmero de rastreo: ${data.trackingNumber}\n\nSe enviaron las instrucciones automáticas a ${nombreCliente} por WhatsApp.`)
             } else {
                 alert(`¡Guía creada con éxito!\n\nNúmero de rastreo: ${data.trackingNumber}`)
             }
@@ -390,7 +423,9 @@ export default function ChatPanel({
             {modalCotizadorAbierto && (
                 <div className="bg-zinc-900 border-b border-zinc-800 p-3 sm:p-4 text-xs shadow-inner">
                     <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-blue-400 font-bold flex items-center gap-1.5"><span className="text-base">📦</span> Cotizador Skydrops (Paquetexpress)</h3>
+                        <h3 className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <span className="text-base">📦</span> Cotizador Skydrops (Paquetexpress)
+                        </h3>
                         <button onClick={() => setModalCotizadorAbierto(false)} className="text-zinc-500 hover:text-zinc-300">❌ Cerrar</button>
                     </div>
 
@@ -399,7 +434,7 @@ export default function ChatPanel({
                             <label className="block text-[10px] text-zinc-400 mb-1">C.P. Cliente</label>
                             <input
                                 type="text"
-                                placeholder="Ej. 04600"
+                                placeholder="Ej. 54948"
                                 maxLength={5}
                                 value={zipCodeDestino}
                                 onChange={(e) => setZipCodeDestino(e.target.value.replace(/\D/g, ''))}
@@ -427,10 +462,35 @@ export default function ChatPanel({
                                 className="w-40 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-white outline-none focus:border-blue-500 font-mono"
                             >
                                 <option value="controles">🎮 1 a 3 Controles</option>
-                                <option value="consolas_chicas">🕹️ Consola Chica (Switch/Series S)</option>
+                                <option value="consolas_chicas">🕹️ Consola Chica (Switch/Xbox 360)</option>
                                 <option value="consolas_grandes">🖥️ Consola Grande (PS5/Series X)</option>
                                 <option value="laptops">💻 Laptop / PC</option>
                             </select>
+                        </div>
+
+                        {/* 🛡️ VALOR DECLARADO & SEGURO */}
+                        <div>
+                            <label className="block text-[10px] text-zinc-400 mb-1">Valor Declarado ($)</label>
+                            <input
+                                type="number"
+                                placeholder="1000"
+                                value={valorDeclarado}
+                                onChange={(e) => setValorDeclarado(e.target.value)}
+                                className="w-24 bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-white outline-none focus:border-blue-500 font-mono"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-1.5 pb-2">
+                            <input
+                                type="checkbox"
+                                id="checkSeguro"
+                                checked={conSeguro}
+                                onChange={(e) => setConSeguro(e.target.checked)}
+                                className="accent-blue-500 cursor-pointer"
+                            />
+                            <label htmlFor="checkSeguro" className="text-[10px] text-zinc-300 cursor-pointer font-bold">
+                                🛡️ Seguro SOS
+                            </label>
                         </div>
 
                         <button
@@ -444,7 +504,7 @@ export default function ChatPanel({
 
                     {/* RESULTADO DE LA COTIZACION */}
                     {cotizacionGanadora && (
-                        <div className="mt-4 p-3 bg-blue-950/20 border border-blue-900/50 rounded-lg flex items-center justify-between">
+                        <div className="mt-4 p-3 bg-blue-950/20 border border-blue-900/50 rounded-lg flex items-center justify-between flex-wrap gap-2">
                             <div>
                                 <p className="text-blue-400 font-bold uppercase">{cotizacionGanadora.proveedor}</p>
                                 <p className="text-zinc-400 text-[10px]">
@@ -453,6 +513,11 @@ export default function ChatPanel({
                                         [{sentido === 'entrada' ? '📥 Recepción' : '📤 Retorno'}]
                                     </span>
                                 </p>
+                                {cotizacionGanadora.costoSeguro && parseFloat(cotizacionGanadora.costoSeguro) > 0 && (
+                                    <p className="text-[9px] text-zinc-400 font-mono mt-0.5">
+                                        Flete base: ${cotizacionGanadora.precioFleteBase || '51.25'} | Seguro SOS: ${cotizacionGanadora.costoSeguro} MXN
+                                    </p>
+                                )}
                             </div>
                             <div className="text-right">
                                 <p className="text-lg font-bold text-white font-mono">${cotizacionGanadora.precio} <span className="text-[10px] text-zinc-500">MXN</span></p>
@@ -461,7 +526,7 @@ export default function ChatPanel({
                                     disabled={generandoGuia}
                                     className="mt-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 text-white border border-emerald-500 px-3 py-1 rounded text-[10px] font-bold transition-colors cursor-pointer disabled:cursor-not-allowed shadow-sm"
                                 >
-                                    {generandoGuia ? '⏳ Generando Guía...' : '📄 Generar y Descargar Guía PDF'}
+                                    {generandoGuia ? '⏳ Generando Guía...' : '📄 Generar y Enviar Guía'}
                                 </button>
                             </div>
                         </div>

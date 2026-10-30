@@ -153,10 +153,23 @@ export default function AdminDashboard() {
     // 🧠 ESTADOS GLOBALES DE LA INTERFAZ & CHATS VISTOS
     // --------------------------------------------------------
     const [busqueda, setBusqueda] = useState('')
-    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'citas' | 'taller' | 'envios' | 'leads'>('citas')
+    const [filtroPestana, setFiltroPestana] = useState<'todos' | 'citas' | 'taller' | 'envios' | 'leads' | 'historial'>('citas')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
+    const [modalGamepadAbierto, setModalGamepadAbierto] = useState(false)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
+
+    // Selección masiva para purga de leads
+    const [seleccionados, setSeleccionados] = useState<string[]>([])
+    const [purgandoLote, setPurgandoLote] = useState(false)
+
+    // Reporte rápido Gamepad Tester
+    const [fallaRapida, setFallaRapida] = useState({
+        stickIzq: false,
+        stickDer: false,
+        gatillos: false,
+        botones: false
+    })
 
     // Estados del Chat / Drawer Activo
     const [telefonoRescate, setTelefonoRescate] = useState('')
@@ -202,11 +215,6 @@ export default function AdminDashboard() {
         revalidateOnFocus: true
     })
 
-    const tickets = useMemo(() => {
-        if (!Array.isArray(ticketsBrutos)) return []
-        return ticketsBrutos.filter((t: any) => t.estado !== 'ENTREGADO' && t.estado !== 'RECHAZADO')
-    }, [ticketsBrutos])
-
     const {
         data: conversacionesData,
         mutate: reloadConversaciones
@@ -248,7 +256,7 @@ export default function AdminDashboard() {
     }, [historialDirecto])
 
     // --------------------------------------------------------
-    // 🚚 LÓGICA DE UNIFICACIÓN, EXTRACCIÓN DE FECHAS Y ORDENAMIENTO CRONOLÓGICO
+    // 🚚 LÓGICA DE UNIFICACIÓN, EXTRACCIÓN DE FECHAS Y RESOLUCIÓN DE LEADS FANTASMAS
     // --------------------------------------------------------
     const listaUnificada = useMemo(() => {
         const items: any[] = []
@@ -268,7 +276,6 @@ export default function AdminDashboard() {
             return t.includes('cita está confirmada') || t.includes('te esperamos en nuestro laboratorio') || t.includes('cita confirmada') || t.includes('agendamos tu cita')
         }
 
-        // 🧠 RASTREO PROFUNDO EN CAMPOS Y MENSAJES DE CONVERSACIÓN
         const extraerFechaYSortValue = (ticket: any, conv: any) => {
             const fuentesTextuales = [
                 ticket?.fechaAgendada,
@@ -294,7 +301,8 @@ export default function AdminDashboard() {
             return { formateada: null, timestamp: null }
         }
 
-        tickets.forEach((ticket: any) => {
+        // 1. Procesamos TODOS los tickets de Neon DB (activos e históricos) para blindar los números procesados
+        ticketsBrutos.forEach((ticket: any) => {
             const tel10 = ticket.cliente?.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (tel10) telefonosProcesados.add(tel10)
 
@@ -344,6 +352,7 @@ export default function AdminDashboard() {
                 equipo: ticket.equipo,
                 falla: ticket.fallaReportada,
                 estadoTaller: ticket.estado,
+                costoReparacion: ticket.costoReparacion || 0,
                 botActivo: botActivoCalculado,
                 ultimoMensaje: ultimoMsg || null,
                 ticketOriginal: ticket,
@@ -352,6 +361,7 @@ export default function AdminDashboard() {
             })
         })
 
+        // 2. Solo agregamos como 'lead' las conversaciones que NO pertenezcan a clientes con tickets
         conversaciones.forEach((conv: any) => {
             const tel10 = conv.telefono?.replace(/[^0-9]/g, '').slice(-10) || ''
             if (!telefonosProcesados.has(tel10)) {
@@ -390,6 +400,7 @@ export default function AdminDashboard() {
                     equipo: 'Consulta WhatsApp',
                     falla: ultimoMsg?.texto || 'Consulta general',
                     estadoTaller: esRecoleccion ? 'RECOLECCION' : (esAgendado ? 'AGENDADO' : 'ESPERANDO_APROBACION'),
+                    costoReparacion: 0,
                     botActivo: conv.atendidoPorBot ?? true,
                     ultimoMensaje: ultimoMsg || null,
                     ticketOriginal: null,
@@ -399,17 +410,13 @@ export default function AdminDashboard() {
             }
         })
 
-        // 🚨 ORDENAMIENTO CRONOLÓGICO DE CITAS:
-        // 1. Mensajes NO Leídos (requiereAtencion) arriba.
-        // 2. Citas ordenadas por fecha más cercana/inmediata primero (ascendente por timestamp).
+        // Ordenamiento cronológico: Citas próximas primero, no leídos arriba
         return items.sort((a, b) => {
             if (a.requiereAtencion && !b.requiereAtencion) return -1
             if (!a.requiereAtencion && b.requiereAtencion) return 1
 
             if (a.esAgendado && b.esAgendado) {
-                if (a.fechaCitaTimestamp && b.fechaCitaTimestamp) {
-                    return a.fechaCitaTimestamp - b.fechaCitaTimestamp
-                }
+                if (a.fechaCitaTimestamp && b.fechaCitaTimestamp) return a.fechaCitaTimestamp - b.fechaCitaTimestamp
                 if (a.fechaCitaTimestamp && !b.fechaCitaTimestamp) return -1
                 if (!a.fechaCitaTimestamp && b.fechaCitaTimestamp) return 1
             }
@@ -422,15 +429,42 @@ export default function AdminDashboard() {
 
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         })
-    }, [tickets, conversaciones, chatsVistos])
+    }, [ticketsBrutos, conversaciones, chatsVistos])
 
-    // 📊 METRICAS KPI EN TIEMPO REAL
-    const kpis = useMemo(() => {
-        const citasCount = listaUnificada.filter(i => i.esAgendado).length
-        const tallerCount = listaUnificada.filter(i => i.tipo === 'taller' && ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION'].includes(i.estadoTaller)).length
-        const logisticaCount = listaUnificada.filter(i => i.esRecoleccion || i.esEnvioPaqueteria).length
-        const leadsCount = listaUnificada.filter(i => i.tipo === 'lead' && !i.esAgendado && !i.esRecoleccion).length
-        return { citasCount, tallerCount, logisticaCount, leadsCount }
+    // 📊 KPIS EN TIEMPO REAL & GANANCIAS DEL MES
+    const { kpis, gananciasMes } = useMemo(() => {
+        const fechaActual = new Date()
+        const mesActual = fechaActual.getMonth()
+        const anioActual = fechaActual.getFullYear()
+
+        let totalGanancias = 0
+        let citasCount = 0
+        let tallerCount = 0
+        let logisticaCount = 0
+        let leadsCount = 0
+
+        listaUnificada.forEach(i => {
+            const esCerrado = i.estadoTaller === 'ENTREGADO' || i.estadoTaller === 'RECHAZADO'
+
+            if (i.estadoTaller === 'ENTREGADO') {
+                const f = new Date(i.updatedAt)
+                if (f.getMonth() === mesActual && f.getFullYear() === anioActual) {
+                    totalGanancias += Number(i.costoReparacion) || 0
+                }
+            }
+
+            if (!esCerrado) {
+                if (i.esAgendado) citasCount++
+                if (i.tipo === 'taller' && ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION'].includes(i.estadoTaller)) tallerCount++
+                if (i.esRecoleccion || i.esEnvioPaqueteria) logisticaCount++
+                if (i.tipo === 'lead' && !i.esAgendado && !i.esRecoleccion) leadsCount++
+            }
+        })
+
+        return {
+            kpis: { citasCount, tallerCount, logisticaCount, leadsCount },
+            gananciasMes: totalGanancias
+        }
     }, [listaUnificada])
 
     // 🔍 FILTRADO Y BÚSQUEDA APLICADA
@@ -445,6 +479,15 @@ export default function AdminDashboard() {
 
             if (!coincide) return false
 
+            const esHistorico = item.estadoTaller === 'ENTREGADO' || item.estadoTaller === 'RECHAZADO'
+
+            // En pestaña Historial mostrar únicamente servicios concluidos
+            if (filtroPestana === 'historial') return esHistorico
+            // Al buscar un término específico en la barra, permitir ver cualquier estado
+            if (term) return true
+            // En pestañas de operación diaria no mostrar órdenes terminadas
+            if (esHistorico) return false
+
             if (filtroPestana === 'citas') return item.esAgendado
             if (filtroPestana === 'taller') return item.tipo === 'taller' || ['RECIBIDO', 'EN_DIAGNOSTICO', 'EN_REPARACION', 'LISTO_PARA_ENTREGA'].includes(item.estadoTaller)
             if (filtroPestana === 'envios') return item.esRecoleccion || item.esEnvioPaqueteria
@@ -453,8 +496,13 @@ export default function AdminDashboard() {
         })
     }, [listaUnificada, busqueda, filtroPestana])
 
+    const ticketSeleccionado = useMemo(() => {
+        const clientTickets = ticketsBrutos.filter((t: any) => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10)))
+        if (clientTickets.length === 0) return null
+        return clientTickets.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+    }, [ticketsBrutos, telefonoRescate])
+
     const itemSeleccionadoActual = listaUnificada.find(i => i.telefono?.endsWith(telefonoRescate.slice(-10)))
-    const ticketSeleccionado = tickets.find((t: any) => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10))) || null
 
     useEffect(() => {
         if (ticketSeleccionado?.costoReparacion) {
@@ -465,7 +513,7 @@ export default function AdminDashboard() {
     }, [telefonoRescate, ticketSeleccionado?.costoReparacion])
 
     // --------------------------------------------------------
-    // ⚙️ ACCIONES Y MUTACIONES
+    // ⚙️ ACCIONES Y MUTACIONES DEL CHAT
     // --------------------------------------------------------
     const handleEnviarMensaje = async () => {
         const cleanNum = telefonoRescate.replace(/[^0-9]/g, '')
@@ -653,10 +701,82 @@ export default function AdminDashboard() {
         if (res.ok) router.push('/admin/login')
     }
 
+    // --------------------------------------------------------
+    // 🗑️ SELECCIÓN MASIVA Y PURGA DEFINITIVA
+    // --------------------------------------------------------
+    const toggleSeleccion = (id: string) => {
+        setSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    }
+
+    const toggleSeleccionarTodo = () => {
+        if (seleccionados.length === listaFiltrada.length) {
+            setSeleccionados([])
+        } else {
+            setSeleccionados(listaFiltrada.map(i => i.id))
+        }
+    }
+
+    const handlePurgarLote = async () => {
+        if (!confirm(`¿Confirmas eliminar de forma definitiva ${seleccionados.length} registros seleccionados de Neon DB?`)) return
+        setPurgandoLote(true)
+        try {
+            const res = await fetch('/api/admin/purgar-leads', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: seleccionados })
+            })
+            if (res.ok) {
+                setSeleccionados([])
+                reloadTickets()
+                reloadConversaciones()
+                alert('Registros purgados exitosamente.')
+            } else {
+                alert('Ocurrió un error al purgar los registros.')
+            }
+        } catch (e) {
+            alert('Error de conexión.')
+        } finally {
+            setPurgandoLote(false)
+        }
+    }
+
+    // --------------------------------------------------------
+    // 🎮 INYECCIÓN DE DIAGNÓSTICO DESDE GAMEPAD TESTER
+    // --------------------------------------------------------
+    const inyectarDiagnosticoGamepad = async () => {
+        if (!ticketSeleccionado?.id) return alert("Selecciona primero una orden de taller en el panel.")
+
+        const fallas: string[] = []
+        if (fallaRapida.stickIzq) fallas.push("Drift Stick Izquierdo / L3")
+        if (fallaRapida.stickDer) fallas.push("Drift Stick Derecho / R3")
+        if (fallaRapida.gatillos) fallas.push("Falla en Gatillos (L2/R2 / LB/RB)")
+        if (fallaRapida.botones) fallas.push("Falla en Botones de Acción / Membrana")
+
+        const diagnosticoTexto = fallas.length > 0
+            ? `[TESTER HW]: ${fallas.join(' | ')}`
+            : '[TESTER HW]: Control verificado - Sin drift ni anomalías detectadas.'
+
+        try {
+            await fetch('/api/tickets', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticketId: ticketSeleccionado.id,
+                    notasDiagnostico: diagnosticoTexto
+                })
+            })
+            alert(`Diagnóstico guardado en orden ${ticketSeleccionado.numeroOrden}`)
+            setModalGamepadAbierto(false)
+            reloadTickets()
+        } catch (e) {
+            alert("Error al inyectar diagnóstico.")
+        }
+    }
+
     if (!ticketsBrutos.length && !conversacionesData && !cargandoHistorial && esPrimeraCargaChat.current) {
         return <div className="h-screen bg-black text-emerald-400 flex flex-col items-center justify-center font-mono">
             <span className="text-4xl mb-4 animate-bounce">⚡</span>
-            Cargando Soltecot Dashboard v2.0...
+            Cargando Soltecot Dashboard v2.1...
         </div>
     }
 
@@ -671,17 +791,19 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                         <h1 className="text-sm font-bold text-white font-mono tracking-wide flex items-center gap-2">
-                            SOLTECOT <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">v2.0 DEV</span>
+                            SOLTECOT <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">v2.1 PROD</span>
                         </h1>
                         <p className="text-[10px] text-zinc-500 font-mono">Laboratorio & Sistema Logístico Nacional</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setModalGamepadAbierto(true)} className="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md">
+                        🎮 <span>Tester HW</span>
+                    </button>
                     <Link href="/admin/ingreso" className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-950/50">
                         <span>➕</span><span className="hidden md:inline">Nueva Orden</span>
                     </Link>
-
                     <button onClick={dispararRecordatoriosManual} className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5" title="Ejecutar barrido manual de 72h">
                         <span>🔔</span><span className="hidden md:inline">Sweep 72h</span>
                     </button>
@@ -694,8 +816,8 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* 📊 BARRA KPIS METRICAS */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-zinc-900/40 border-b border-zinc-900 shrink-0">
+            {/* 📊 BARRA KPIS METRICAS & GANANCIAS */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-4 bg-zinc-900/40 border-b border-zinc-900 shrink-0">
                 <div onClick={() => setFiltroPestana('citas')} className={`cursor-pointer p-3.5 rounded-2xl border transition-all ${filtroPestana === 'citas' ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}>
                     <div className="flex justify-between items-center text-[10px] sm:text-xs text-zinc-400 font-mono">
                         <span>📍 CITAS LABORATORIO</span>
@@ -727,6 +849,14 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-xl sm:text-2xl font-bold text-white mt-1 font-mono">{kpis.leadsCount}</div>
                 </div>
+
+                <div onClick={() => setFiltroPestana('historial')} className={`cursor-pointer p-3.5 rounded-2xl border transition-all col-span-2 lg:col-span-1 ${filtroPestana === 'historial' ? 'bg-emerald-950/50 border-emerald-400 shadow-lg' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}>
+                    <div className="flex justify-between items-center text-[10px] sm:text-xs text-emerald-400 font-mono">
+                        <span>💰 GANANCIAS MES</span>
+                        <span className="text-emerald-400">💵</span>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-bold text-emerald-400 mt-1 font-mono">${gananciasMes.toLocaleString('es-MX')}</div>
+                </div>
             </div>
 
             {/* 🔍 BARRA DE BÚSQUEDA Y PESTAÑAS */}
@@ -744,24 +874,47 @@ export default function AdminDashboard() {
                     <button onClick={() => setFiltroPestana('leads')} className={`px-3 py-1.5 rounded-xl border transition-all whitespace-nowrap ${filtroPestana === 'leads' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 font-bold' : 'text-zinc-400 border-transparent hover:text-zinc-200'}`}>
                         🔴 Leads
                     </button>
+                    <button onClick={() => setFiltroPestana('historial')} className={`px-3 py-1.5 rounded-xl border transition-all whitespace-nowrap ${filtroPestana === 'historial' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-bold' : 'text-zinc-400 border-transparent hover:text-zinc-200'}`}>
+                        🗄️ Historial
+                    </button>
                     <button onClick={() => setFiltroPestana('todos')} className={`px-3 py-1.5 rounded-xl border transition-all whitespace-nowrap ${filtroPestana === 'todos' ? 'bg-zinc-800 text-white border-zinc-700 font-bold' : 'text-zinc-500 border-transparent hover:text-zinc-300'}`}>
                         📋 Todos
                     </button>
                 </div>
 
-                <div className="w-full sm:w-72 relative">
-                    <input
-                        type="text"
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                        placeholder="🔍 Buscar cliente o folio..."
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 font-mono transition-all"
-                    />
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {seleccionados.length > 0 && (
+                        <button onClick={handlePurgarLote} disabled={purgandoLote} className="bg-rose-950/60 hover:bg-rose-900 border border-rose-700 text-rose-300 text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 shadow-md">
+                            🗑️ Purgar ({seleccionados.length})
+                        </button>
+                    )}
+                    <div className="w-full sm:w-72 relative">
+                        <input
+                            type="text"
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            placeholder="🔍 Buscar cliente o folio..."
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 font-mono transition-all"
+                        />
+                    </div>
                 </div>
             </div>
 
             {/* 📋 VISTA EN LISTA DE CLIENTES Y ORDENES */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 px-2 font-mono">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={seleccionados.length > 0 && seleccionados.length === listaFiltrada.length}
+                            onChange={toggleSeleccionarTodo}
+                            className="rounded border-zinc-800 bg-zinc-900 accent-emerald-500"
+                        />
+                        <span>Seleccionar todos</span>
+                    </label>
+                    <span>{listaFiltrada.length} registros</span>
+                </div>
+
                 {listaFiltrada.length === 0 ? (
                     <div className="text-center py-16 text-zinc-600 font-mono text-xs">
                         No hay registros en esta sección.
@@ -775,13 +928,20 @@ export default function AdminDashboard() {
                                 key={item.id}
                                 onClick={() => handleSeleccionarChat(item.telefono, item.ultimoMensaje?.createdAt)}
                                 className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${estaSeleccionado
-                                        ? 'bg-zinc-900 border-emerald-500/80 shadow-lg'
-                                        : item.requiereAtencion
-                                            ? 'bg-rose-950/20 border-rose-500/60 hover:bg-rose-950/40 shadow-[0_0_15px_rgba(225,29,72,0.2)]'
-                                            : 'bg-zinc-950/60 border-zinc-900 hover:border-zinc-800 hover:bg-zinc-900/40'
+                                    ? 'bg-zinc-900 border-emerald-500/80 shadow-lg'
+                                    : item.requiereAtencion
+                                        ? 'bg-rose-950/20 border-rose-500/60 hover:bg-rose-950/40 shadow-[0_0_15px_rgba(225,29,72,0.2)]'
+                                        : 'bg-zinc-950/60 border-zinc-900 hover:border-zinc-800 hover:bg-zinc-900/40'
                                     }`}
                             >
                                 <div className="flex items-center gap-3 w-full sm:w-auto min-w-[220px]">
+                                    <input
+                                        type="checkbox"
+                                        checked={seleccionados.includes(item.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={() => toggleSeleccion(item.id)}
+                                        className="rounded border-zinc-800 bg-zinc-900 accent-emerald-500 shrink-0"
+                                    />
                                     <div className="relative">
                                         <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-emerald-400 font-mono shrink-0">
                                             {item.nombre?.slice(0, 2).toUpperCase() || 'WA'}
@@ -823,8 +983,6 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap sm:justify-end w-full sm:w-auto pt-2 sm:pt-0 border-t border-zinc-900 sm:border-0 mt-2 sm:mt-0">
-
-                                    {/* 📅 BADGE DE FECHA / HORA EXTRAÍDA Y RESALTADA */}
                                     {item.fechaCitaFormateada && (
                                         <span className="bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 text-[11px] font-mono font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-md shadow-emerald-950/40 whitespace-nowrap">
                                             <span>📅</span>
@@ -845,8 +1003,17 @@ export default function AdminDashboard() {
                                             📍 CITA TALLER
                                         </span>
                                     ) : (
-                                        <span className="text-[10px] font-mono text-zinc-500 uppercase bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                        <span className={`text-[10px] font-mono uppercase px-2.5 py-1 rounded-lg whitespace-nowrap ${item.estadoTaller === 'ENTREGADO' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' :
+                                                item.estadoTaller === 'RECHAZADO' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold' :
+                                                    'text-zinc-500 bg-zinc-900 border border-zinc-800'
+                                            }`}>
                                             {item.estadoTaller?.replace(/_/g, ' ') || 'PROSPECTO'}
+                                        </span>
+                                    )}
+
+                                    {item.estadoTaller === 'ENTREGADO' && (
+                                        <span className="text-[11px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/80 px-2 py-1 rounded-lg font-mono font-bold whitespace-nowrap">
+                                            💰 ${Number(item.costoReparacion || 0).toLocaleString('es-MX')}
                                         </span>
                                     )}
 
@@ -860,7 +1027,7 @@ export default function AdminDashboard() {
                 )}
             </div>
 
-            {/* 🚪 MODAL SLIDE-OVER LATERAL */}
+            {/* 🚪 MODAL SLIDE-OVER LATERAL (CHAT) */}
             {telefonoRescate && (
                 <div
                     className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm transition-opacity"
@@ -902,6 +1069,58 @@ export default function AdminDashboard() {
                                 enviandoRescate={enviandoRescate}
                                 handleEnviarMensaje={handleEnviarMensaje}
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 🎮 MODAL GIGANTE GAMEPAD TESTER CON INYECCIÓN DE DIAGNÓSTICO */}
+            {modalGamepadAbierto && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+                        <div className="p-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
+                            <h3 className="text-white font-bold font-mono text-sm flex items-center gap-2">
+                                🎮 Hardware Tester & Inyección de Diagnóstico
+                            </h3>
+                            <button onClick={() => setModalGamepadAbierto(false)} className="text-zinc-400 hover:text-white font-bold px-2 py-1">
+                                ❌
+                            </button>
+                        </div>
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                            <iframe
+                                src="https://hardwaretester.com/gamepad"
+                                className="flex-1 bg-zinc-900 border-none w-full h-full"
+                                allow="gamepad"
+                            />
+                            <div className="w-full lg:w-72 bg-zinc-950 border-t lg:border-t-0 lg:border-l border-zinc-800 p-4 flex flex-col justify-between shrink-0">
+                                <div>
+                                    <h4 className="text-xs font-mono font-bold text-amber-400 uppercase mb-3">Diagnóstico Rápido</h4>
+                                    <p className="text-[11px] text-zinc-400 mb-3">
+                                        Marca las fallas detectadas para inyectarlas directamente al diagnóstico de la orden activa.
+                                    </p>
+                                    <div className="space-y-2 text-xs">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={fallaRapida.stickIzq} onChange={e => setFallaRapida({ ...fallaRapida, stickIzq: e.target.checked })} className="accent-indigo-500" />
+                                            <span>Drift Stick Izquierdo / L3</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={fallaRapida.stickDer} onChange={e => setFallaRapida({ ...fallaRapida, stickDer: e.target.checked })} className="accent-indigo-500" />
+                                            <span>Drift Stick Derecho / R3</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={fallaRapida.gatillos} onChange={e => setFallaRapida({ ...fallaRapida, gatillos: e.target.checked })} className="accent-indigo-500" />
+                                            <span>Falla en Gatillos (L2/R2 / LB/RB)</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={fallaRapida.botones} onChange={e => setFallaRapida({ ...fallaRapida, botones: e.target.checked })} className="accent-indigo-500" />
+                                            <span>Falla Botones Acción / Membrana</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <button onClick={inyectarDiagnosticoGamepad} className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md">
+                                    📋 Inyectar a Ficha Técnica
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

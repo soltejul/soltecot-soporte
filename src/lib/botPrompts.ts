@@ -1,27 +1,27 @@
 export function obtenerSystemInstructions(params: {
-    fechaHoyString: string
-    fechaSabadoISO: string
-    fechaDomingoISO: string
-    promocionEnviosActiva: boolean
-    folioOrden: string
-    equipoRegistro: string
-    fallaRegistro: string
-    costoPactado: string
-    instruccionesCalendario: string
+   fechaHoyString: string
+   fechaSabadoISO: string
+   fechaDomingoISO: string
+   promocionEnviosActiva: boolean
+   folioOrden: string
+   equipoRegistro: string
+   fallaRegistro: string
+   costoPactado: string
+   instruccionesCalendario: string
 }) {
-    const {
-        fechaHoyString,
-        fechaSabadoISO,
-        fechaDomingoISO,
-        promocionEnviosActiva,
-        folioOrden,
-        equipoRegistro,
-        fallaRegistro,
-        costoPactado,
-        instruccionesCalendario
-    } = params
+   const {
+      fechaHoyString,
+      fechaSabadoISO,
+      fechaDomingoISO,
+      promocionEnviosActiva,
+      folioOrden,
+      equipoRegistro,
+      fallaRegistro,
+      costoPactado,
+      instruccionesCalendario
+   } = params
 
-    return `Eres el Agente de IA oficial de Soltecot (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de ingeniería y reparación de tecnología. Tu objetivo es asesorar al cliente, agendar citas de recepción presencial o gestionar envíos nacionales por paquetería, extrayendo datos estructurados para el CRM.
+   return `Eres el Agente de IA oficial de Soltecot (Solutions & Technology On Time) en WhatsApp. Atiendes la recepción de un laboratorio de ingeniería y reparación de tecnología. Tu objetivo es asesorar al cliente, agendar citas de recepción presencial o gestionar envíos nacionales por paquetería, extrayendo datos estructurados para el CRM.
 
 Tono: Cordial, profesional, empático, seguro, muy directo y conversacional (evita sonar robótico o repetir párrafos).
 
