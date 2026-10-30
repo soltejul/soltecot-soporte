@@ -8,7 +8,7 @@ async function ejecutarPurga(request: Request) {
         const body = await request.json().catch(() => ({}))
         const { clienteId, ids, forzar = false } = body
 
-        // 1. Normalización de IDs a procesar (acepta clienteId individual o arreglo de IDs)
+        // 1. Normalización de IDs a procesar (clienteId individual o lote de IDs)
         const listaIdsCandidatos: string[] = []
         if (clienteId && typeof clienteId === 'string') {
             listaIdsCandidatos.push(clienteId)
@@ -25,7 +25,6 @@ async function ejecutarPurga(request: Request) {
         // CASO A: PURGA SELECTIVA POR IDS (DESDE CHECKBOXES O DRAWER)
         // ====================================================================
         if (listaIdsCandidatos.length > 0) {
-            // Resolver IDs: un ID puede ser de la tabla Cliente o de la tabla Ticket
             const [clientesDirectos, ticketsAsociados] = await Promise.all([
                 prisma.cliente.findMany({
                     where: { id: { in: listaIdsCandidatos } },
@@ -59,7 +58,7 @@ async function ejecutarPurga(request: Request) {
                 })
             }
 
-            // 🛡️ Filtro de Protección: Evitar borrar tickets de taller oficiales o entregados salvo que se fuerce
+            // 🛡️ Filtro de Protección: Evitar borrar tickets de taller oficiales o entregados
             let clientesABorrar = clienteIdsFinales
             if (!forzar) {
                 const clientesProtegidos = await prisma.cliente.findMany({
@@ -87,20 +86,31 @@ async function ejecutarPurga(request: Request) {
                 }, { status: 400 })
             }
 
-            // Transacción atómica en Neon DB: Mensajes -> Citas -> Tickets -> Clientes
+            // Rescatamos los teléfonos de todos los clientes a borrar para eliminar sus citas
+            const clientesFinalesConTel = await prisma.cliente.findMany({
+                where: { id: { in: clientesABorrar } },
+                select: { telefono: true }
+            })
+            clientesFinalesConTel.forEach(c => {
+                if (c.telefono) telefonosSet.add(c.telefono)
+            })
+            const listaTelefonosABorrar = Array.from(telefonosSet).filter(Boolean)
+
+            // Transacción atómica: Mensajes -> Citas (por teléfono) -> Tickets -> Clientes
             const resultado = await prisma.$transaction(async (tx) => {
                 const msgs = await tx.mensaje.deleteMany({
                     where: { clienteId: { in: clientesABorrar } }
                 })
 
-                const citas = await tx.cita.deleteMany({
-                    where: {
-                        OR: [
-                            { clienteId: { in: clientesABorrar } },
-                            { telefono: { in: Array.from(telefonosSet) } }
-                        ]
-                    }
-                })
+                let citasCount = 0
+                if (listaTelefonosABorrar.length > 0) {
+                    const citas = await tx.cita.deleteMany({
+                        where: {
+                            telefono: { in: listaTelefonosABorrar }
+                        }
+                    })
+                    citasCount = citas.count
+                }
 
                 const tickets = await tx.ticket.deleteMany({
                     where: { clienteId: { in: clientesABorrar } }
@@ -114,7 +124,7 @@ async function ejecutarPurga(request: Request) {
                     clientes: clientes.count,
                     tickets: tickets.count,
                     mensajes: msgs.count,
-                    citas: citas.count
+                    citas: citasCount
                 }
             })
 
@@ -128,7 +138,6 @@ async function ejecutarPurga(request: Request) {
         // ====================================================================
         // CASO B: BARRIDO AUTOMÁTICO DE LEADS HUÉRFANOS (SIN IDS ESPECÍFICOS)
         // ====================================================================
-        // Solo purga prospectos sin tickets de taller oficiales y sin citas programadas
         const clientesHuerfanos = await prisma.cliente.findMany({
             where: {
                 tickets: {
@@ -153,7 +162,7 @@ async function ejecutarPurga(request: Request) {
                     }
                 }
             },
-            select: { id: true, telefono: true } // 👈 Agregamos telefono
+            select: { id: true, telefono: true }
         })
 
         const idsHuerfanos = clientesHuerfanos.map(c => c.id)
@@ -172,7 +181,6 @@ async function ejecutarPurga(request: Request) {
         const resultadoBarrido = await prisma.$transaction(async (tx) => {
             await tx.mensaje.deleteMany({ where: { clienteId: { in: idsHuerfanos } } })
 
-            // 👈 Borramos las citas por 'telefono' en lugar de 'clienteId'
             if (telefonosHuerfanos.length > 0) {
                 await tx.cita.deleteMany({ where: { telefono: { in: telefonosHuerfanos } } })
             }
