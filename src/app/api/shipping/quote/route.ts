@@ -61,7 +61,32 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { zipCodeDestino, tipoPreset = 'controles', sentido = 'entrada' } = body
+        const {
+            zipCodeDestino,
+            tipoPreset = 'controles',
+            sentido = 'entrada'
+        } = body
+
+        // 🛡️ 1. Extracción y normalización de Valor Declarado y Seguro Opcional
+        const rawValor = body.valorDeclarado ??
+            body.declaredValue ??
+            body.valor_declarado ??
+            body.declared_value ??
+            body.seguroValor ??
+            0
+
+        let cleanValorDeclarado = 0
+        if (typeof rawValor === 'number') {
+            cleanValorDeclarado = rawValor
+        } else if (typeof rawValor === 'string') {
+            const soloNumeros = rawValor.replace(/[^0-9.]/g, '')
+            cleanValorDeclarado = parseFloat(soloNumeros) || 0
+        }
+
+        const rawConSeguro = body.conSeguro ?? body.seguro ?? body.insurance
+        const conSeguro = rawConSeguro !== undefined
+            ? Boolean(rawConSeguro)
+            : (cleanValorDeclarado > 0)
 
         const cleanClienteCP = String(zipCodeDestino || '').replace(/\D/g, '').trim()
         const cleanTallerCP = String(ORIGIN_CP || '54850').replace(/\D/g, '').trim()
@@ -81,7 +106,8 @@ export async function POST(request: Request) {
         const addressFrom = await obtenerUbicacionCompleta(cleanOrigen, bearerToken)
         const addressTo = await obtenerUbicacionCompleta(cleanDestino, bearerToken)
 
-        const skydropxPayload = {
+        // 📦 2. Construcción del payload para Skydropx Pro
+        const skydropxPayload: any = {
             quotation: {
                 zip_code_from: cleanOrigen,
                 zip_code_to: cleanDestino,
@@ -98,7 +124,18 @@ export async function POST(request: Request) {
             }
         }
 
-        // 1. Solicitud inicial
+        // 🛡️ Inyección de Seguro y Valor Declarado en la cotización
+        if (conSeguro && cleanValorDeclarado > 0) {
+            skydropxPayload.quotation.insurance = true
+            skydropxPayload.quotation.consignment_note_details = {
+                declared_value: cleanValorDeclarado,
+                currency: "MXN"
+            }
+            skydropxPayload.quotation.declared_value = cleanValorDeclarado
+            skydropxPayload.quotation.parcel.declared_value = cleanValorDeclarado
+        }
+
+        // 3. Solicitud inicial a la API
         const resSkydropx = await fetch('https://api-pro.skydropx.com/api/v1/quotations', {
             method: 'POST',
             headers: {
@@ -123,7 +160,7 @@ export async function POST(request: Request) {
             return prov.includes('paquetexpress') && t.success === true && parseFloat(t.total || t.total_pricing || '0') > 0
         })
 
-        // 2. Polling de respaldo si Paquetexpress sigue calculando
+        // 4. Polling de respaldo si Paquetexpress sigue calculando
         if (!paquetexpressListo && quotationId) {
             console.log(`⏳ [SKYDROPS POLLING]: Esperando actualización de tarifas para ID ${quotationId}...`)
             await delay(1500)
@@ -144,7 +181,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // 3. Normalización estricta: Únicamente tarifas con success === true
+        // 5. Normalización estricta y cálculo de seguro
         const tarifasNormalizadas = listaTarifas
             .filter((item: any) => item && item.success === true)
             .map((item: any) => {
@@ -154,14 +191,31 @@ export async function POST(request: Request) {
                 const servicio = a.provider_service_name || a.service_level_name || 'Express'
 
                 const precioRaw = a.total ?? a.total_pricing ?? a.amount ?? 0
-                const precioNum = parseFloat(String(precioRaw)) || 0
+                let precioNum = parseFloat(String(precioRaw)) || 0
                 const dias = a.days ?? a.estimated_days ?? 3
+
+                // Detección de prima de seguro devuelta por Skydropx
+                let seguroNum = parseFloat(String(a.insurance_price ?? a.insurance_fee ?? a.insurance_cost ?? 0)) || 0
+
+                // 🛡️ Si el cliente solicitó seguro con valor declarado:
+                if (conSeguro && cleanValorDeclarado > 0) {
+                    if (seguroNum === 0) {
+                        // Prima estándar de paquetería (1.25% del valor declarado + IVA 16%, mín. $17.40 MXN)
+                        seguroNum = Math.max(17.40, Math.round(cleanValorDeclarado * 0.0125 * 1.16 * 100) / 100)
+                    }
+
+                    // Si la tarifa devuelta es solo el flete promocional en seco (ej. $51.25), sumamos la prima
+                    if (precioNum <= 55) {
+                        precioNum += seguroNum
+                    }
+                }
 
                 return {
                     rateId: item.id || a.id || 'N/A',
                     proveedor: String(proveedor).toUpperCase(),
                     servicio: String(servicio),
                     precioNum,
+                    seguroNum,
                     diasEstimados: Number(dias) || 3
                 }
             })
@@ -186,11 +240,15 @@ export async function POST(request: Request) {
             success: true,
             presetAplicado: tipoPreset,
             dimensiones: dims,
+            valorDeclarado: cleanValorDeclarado,
+            conSeguro: Boolean(conSeguro && cleanValorDeclarado > 0),
             cotizacionMejor: tarifaGanadora ? {
                 rateId: tarifaGanadora.rateId,
                 proveedor: tarifaGanadora.proveedor,
                 servicio: tarifaGanadora.servicio,
                 precio: tarifaGanadora.precioNum.toFixed(2),
+                precioFleteBase: (tarifaGanadora.precioNum - tarifaGanadora.seguroNum).toFixed(2),
+                costoSeguro: tarifaGanadora.seguroNum > 0 ? tarifaGanadora.seguroNum.toFixed(2) : '0.00',
                 diasEstimados: tarifaGanadora.diasEstimados
             } : null,
             todasLasTarifas: tarifasNormalizadas
