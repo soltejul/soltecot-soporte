@@ -33,6 +33,18 @@ const MAPEO_ESTATUS_HUMANO: Record<string, string> = {
     RECHAZADO: '❌ REPARACIÓN CANCELADA - Responde "OK" para coordinar la devolución.'
 }
 
+// ⏱️ CONSULTA DEL TIEMPO DE ENTREGA VIGENTE EN NEON DB
+async function obtenerTiempoEntregaVigente(): Promise<string> {
+    try {
+        const config = await prisma.configuracionTaller.findUnique({
+            where: { id: 'global' }
+        })
+        return config?.tiempoEntregaActual?.trim() || '1 a 2 días hábiles'
+    } catch {
+        return '1 a 2 días hábiles'
+    }
+}
+
 function obtenerAuthGoogle() {
     const credencialesRaw = process.env.GOOGLE_APPLICATION_CREDENTIALS
     if (!credencialesRaw) return null
@@ -123,7 +135,14 @@ async function enviarPlantillaMeta(
     const paramNombre = String(nombreCliente || 'Cliente').trim()
     const paramEquipo = String(equipo || 'Dispositivo').trim()
     const paramFolio = String(folio || 'Sin Folio').trim()
-    const paramEstatus = MAPEO_ESTATUS_HUMANO[estatusFormateado] || String(estatusFormateado || 'ACTUALIZADO').trim()
+
+    let paramEstatus = MAPEO_ESTATUS_HUMANO[estatusFormateado] || String(estatusFormateado || 'ACTUALIZADO').trim()
+
+    // ⏱️ Si el equipo ingresa a banco de trabajo, adjuntar el tiempo estimado vigente
+    if (estatusFormateado === 'RECIBIDO') {
+        const tiempoEntrega = await obtenerTiempoEntregaVigente()
+        paramEstatus = `⚙️ RECIBIDO EN LABORATORIO (Tiempo estimado de entrega: ${tiempoEntrega}) - Responde "ENTERADO" para confirmar la recepción de tu equipo.`
+    }
 
     const idiomasATrobar = ['es_MX', 'es']
 
@@ -338,7 +357,8 @@ export async function POST(request: Request) {
         )
 
         if (!exitoPlantilla) {
-            const textoMensaje = `🔬 *SOLTECOT WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO EN TALLER\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
+            const tiempoEntrega = await obtenerTiempoEntregaVigente()
+            const textoMensaje = `🔬 *SOLTECOT WORKSHOP INFORMA* 🔬\n\nHemos registrado el ingreso de tu equipo a nuestro laboratorio.\n\n🎫 *Folio:* ${ticketFinal.numeroOrden}\n💻 *Dispositivo:* ${ticketFinal.equipo}\n🛠️ *Falla:* ${ticketFinal.fallaReportada}\n📍 *Estatus:* ⚙️ RECIBIDO EN TALLER\n⏳ *Tiempo estimado de entrega:* ${tiempoEntrega}\n\n🌐 *Rastreo en Vivo:*\n👉 ${APP_URL}?folio=${ticketFinal.numeroOrden}`
             await enviarMensajeMeta(cliente.telefono, textoMensaje)
         }
 

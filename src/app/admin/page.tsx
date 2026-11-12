@@ -7,6 +7,7 @@ import useSWR from 'swr'
 
 import ModalBloqueos from '../../components/ModalBloqueos'
 import ModalTicket from '../../components/ModalTicket'
+import ModalCatalogo from '../../components/ModalCatalogo'
 import ChatPanel from '../../components/ChatPanel'
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -207,6 +208,7 @@ export default function AdminDashboard() {
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
     const [modalGamepadAbierto, setModalGamepadAbierto] = useState(false)
     const [modalFinanzasAbierto, setModalFinanzasAbierto] = useState(false)
+    const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
 
@@ -889,6 +891,9 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setModalCatalogoAbierto(true)} className="bg-amber-950/60 hover:bg-amber-900 border border-amber-700/60 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md" title="Administrar catálogo de precios y tiempos de entrega">
+                        🏷️ <span className="hidden sm:inline">Precios</span>
+                    </button>
                     <button onClick={() => setModalGamepadAbierto(true)} className="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md" title="Probar controles y diagnosticar fallas">
                         🎮 <span className="hidden sm:inline">Tester HW</span>
                     </button>
@@ -1296,6 +1301,11 @@ export default function AdminDashboard() {
             )}
 
             {/* 🧩 MODALES SUPERPUESTOS */}
+            <ModalCatalogo
+                isOpen={modalCatalogoAbierto}
+                onClose={() => setModalCatalogoAbierto(false)}
+            />
+
             <ModalTicket
                 ticketDetalle={ticketDetalle}
                 mostrarModalPresupuesto={mostrarModalPresupuesto}
