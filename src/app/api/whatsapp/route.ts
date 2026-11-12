@@ -1111,19 +1111,23 @@ export async function POST(req: Request) {
             // 🛑 RESETEO MANUAL ADMIN (COMANDO SECRETO)
             // ====================================================================
             if (textoNormalizado === 'kanzer1986') {
-                await prisma.cliente.update({
-                    where: { id: cliente.id },
-                    data: { atendidoPorBot: true, googleChatThreadId: null }
-                })
-
+                // 1. Borramos la memoria RAM efímera
                 if (typeof MEMORIA_CHAT !== 'undefined') {
                     MEMORIA_CHAT.delete(numeroCliente)
                     MEMORIA_CHAT.delete(`B2B_${numeroCliente}`)
                 }
 
-                await enviarMensajeWhatsApp(numeroCliente, "🔄 [SISTEMA]: El asistente virtual ha sido reactivado para este número.")
-                console.log(`🧼 [RESET SUCCESS]: Hilo borrado y Bot reactivado para ${telefono10Digitos}.`)
-                return new Response('Bot reseteado', { status: 200 })
+                // 2. Aniquilación total del rastro en Neon DB
+                await prisma.mensaje.deleteMany({ where: { clienteId: cliente.id } });
+                await prisma.cita.deleteMany({ where: { telefono: cliente.telefono } });
+                await prisma.ticket.deleteMany({ where: { clienteId: cliente.id } });
+                await prisma.cliente.delete({ where: { id: cliente.id } });
+
+                // 3. Notificación de éxito
+                await enviarMensajeWhatsApp(numeroCliente, "🧨 [SISTEMA]: Hard Reset ejecutado. Historial, tickets y perfil destruidos. Eres un cliente nuevo.");
+                console.log(`🧼 [HARD RESET SUCCESS]: Perfil de ${telefono10Digitos} purgado por completo de la base de datos.`);
+
+                return new Response('Bot reseteado nuclearmente', { status: 200 })
             }
 
             // ====================================================================
