@@ -13,6 +13,19 @@ const CALENDAR_ID = 'juliolopez@soltecot.com'
 const COORDENADAS_LABORATORIO = '19.68430387588073,-99.15870193124036'
 const MEMORIA_CHAT = new Map<string, any[]>()
 
+const WHATSAPP_TOKEN = (
+    process.env.WHATSAPP_TOKEN ||
+    process.env.NEXT_PUBLIC_WHATSAPP_TOKEN ||
+    process.env.META_TOKEN
+)?.trim()
+
+const PHONE_NUMBER_ID = (
+    process.env.PHONE_NUMBER_ID ||
+    process.env.WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.META_PHONE_NUMBER_ID
+)?.trim()
+
 // =========================================================================
 // 🔐 FUNCIONES DE UTILERÍA Y AUTENTICACIÓN GOOGLE
 // =========================================================================
@@ -129,7 +142,7 @@ async function registrarCitaEnPrismaDB(
                 fechaCita: new Date(fechaIso),
                 distanciaKm: distancia,
                 coordenadas: COORDENADAS_LABORATORIO,
-                tipo: tipo as any, // 👈 Se agrega 'as any' para compatibilidad con el Enum de Prisma
+                tipo: tipo as any,
                 estado: 'PENDIENTE'
             }
         })
@@ -266,7 +279,6 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
             : `${fechaIso}-06:00`;
 
         const inicioCita = new Date(fechaConOffset)
-        // Citas ahora son de 30 minutos
         const finCita = new Date(inicioCita.getTime() + (30 * 60 * 1000))
 
         const listaEventos = await calendar.events.list({
@@ -366,7 +378,11 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     });
                 }
 
-                await dispararAlertaInmediata(telefono10Digitos, '💼 NUEVO LEAD B2B', `Prospecto corporativo calificado: *${nombreB2B}* de la empresa *"${empresaB2B}"* (${equiposB2B} equipos). Servicio interesado: ${servicioDetectado}.`);
+                await dispararAlertaInmediata(
+                    telefono10Digitos,
+                    '💼 NUEVO LEAD B2B',
+                    `Prospecto corporativo calificado: *${nombreB2B}* de la empresa *"${empresaB2B}"* (${equiposB2B} equipos). Servicio interesado: ${servicioDetectado}.`
+                );
 
                 await prisma.cliente.upsert({
                     where: { telefono: telefono10Digitos },
@@ -475,7 +491,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
             if (textoNormalizado === 'aceptar' || textoNormalizado === 'acepto' || textoNormalizado === 'autorizar') {
                 await prisma.ticket.update({ where: { id: ticketMasReciente.id }, data: { estado: 'EN_REPARACION' } })
                 const anticipo = (ticketMasReciente.costoReparacion || 0) * 0.50
-                const mensajeAceptacion = `✨ *¡Excelente decisión!* ✨\n\nHemos registrado tu autorización para proceder con la reparación de tu *${ticketMasReciente.equipo}* (Orden: ${ticketMasReciente.numeroOrden}).\n\n💳 *Instrucciones de Prepago (50%):*\nPara activar las órdenes de refacciones y asignarle prioridad en el banco de trabajo, es necesario realizar el depósito del anticipo reglamentario:\n👉 *Monto del Anticipo:* $${anticipo.toFixed(2)} MXN\n\n🏦 *Datos Bancarios Oficiales:* \n• *Banco:* BBVA\n• *Cuenta CLABE:* 0121 8001 2345 6789 01\n• *Beneficiario:* Solutions & Technology On Time\n• *Concepto/Referencia:* ${ticketMasReciente.numeroOrden}\n\n🙏 Una vez realizado el movimiento, por favor compártenos el comprobante por aquí para validar tu pago y arrancar el microscopio de inmediato. 🔬`
+                const mensajeAceptacion = `✨ *¡Excelente decisión!* ✨\n\nHemos registrado tu autorización para proceder con la reparación de tu *${ticketMasReciente.equipo}* (Orden: ${ticketMasReciente.numeroOrden}).\n\n💳 *Instrucciones de Prepago (50%):*\nPara activar las órdenes de refacciones y asignarle prioridad en el banco de trabajo, es necesario realizar el depósito del anticipo reglamentario:\n👉 *Monto del Anticipo:* $${anticipo.toFixed(2)} MXN\n\n🏦 *Datos Bancarios Oficiales:* \n*Banco:* BBVA\n*Cuenta CLABE:* 0121 8001 2345 6789 01\n*Beneficiario:* Solutions & Technology On Time\n*Concepto/Referencia:* ${ticketMasReciente.numeroOrden}\n\n🙏 Una vez realizado el movimiento, por favor compártenos el comprobante por aquí para validar tu pago y arrancar el microscopio de inmediato. 🔬`
                 await enviarMensajeWhatsApp(numeroCliente, mensajeAceptacion)
                 await dispararAlertaInmediata(telefono10Digitos, 'EN_REPARACION', `✅ ¡Presupuesto Aceptado! Orden ${ticketMasReciente.numeroOrden}. Anticipo: $${anticipo}`)
                 return
@@ -603,10 +619,25 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             domingoCalc.setDate(hoyCalc.getDate() + ((0 - hoyCalc.getDay() + 7) % 7));
             const fechaDomingoISO = domingoCalc.toISOString().split('T')[0];
 
-            // Verificamos si la promoción de $50 pesos está activa
             const promocionEnviosActiva = await verificarPromocionEnviosActiva();
 
-            // Obtenemos el prompt maestro
+            // Consultar catálogo dinámico de servicios
+            const [serviciosActivos, configTaller] = await Promise.all([
+                prisma.servicioCatalogo.findMany({
+                    where: { activo: true },
+                    orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }]
+                }),
+                prisma.configuracionTaller.findUnique({
+                    where: { id: 'global' }
+                })
+            ]);
+
+            const catalogoExtra = serviciosActivos.length > 0
+                ? serviciosActivos
+                    .map(s => `- ${s.nombre} (${s.categoria}): $${s.precio} MXN${s.descripcion ? ` (${s.descripcion})` : ''}`)
+                    .join('\n')
+                : '';
+
             const systemInstruction = obtenerSystemInstructions({
                 fechaHoyString,
                 fechaSabadoISO,
@@ -616,7 +647,10 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                 equipoRegistro,
                 fallaRegistro,
                 costoPactado,
-                instruccionesCalendario
+                instruccionesCalendario,
+                tiempoEntregaActual: configTaller?.tiempoEntregaActual,
+                notaCargaTrabajo: configTaller?.notaCargaTrabajo,
+                catalogoExtra
             });
 
             const response = await ai.models.generateContent({
@@ -649,6 +683,9 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?DATOS_CRM_?_?:\s*([^\n\r]+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:\s*([^\n\r]+)/i)
 
+        // 🖼️ Detección de Infografía para el Embudo Inteligente
+        const debeEnviarFlyer = respuestaRaw.includes('__ENVIAR_FLYER__');
+
         let respuestaWhatsApp = respuestaRaw
             .replace(/_?_?AGENDAR_VISITA_?_?:[^\n]*/gi, '')
             .replace(/_?_?GENERAR_GUIA_?_?:[^\n]*/gi, '')
@@ -658,6 +695,7 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             .replace(/\[DATA_FISCAL\]:[^\n]*/gi, '')
             .replace(/_*DATOS_FISCAL(ES)?_*:[^\n]*/gi, '')
             .replace(/__TRANSFERIR_HUMANO__/gi, '')
+            .replace(/__ENVIAR_FLYER__/g, '')
             .trim()
 
         let nombreCrm = 'Cliente WhatsApp', dispositivoCrm = 'PC/Laptop', fallaCrm = 'Soporte General'
@@ -767,7 +805,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                             create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
                         });
 
-                        // 🏷️ Etiqueta obligatoria para que el Dashboard formatee el botón verde con fecha/hora
                         const tagIso = `[ISO_DATE: ${fechaExtraida}]`
 
                         await prisma.ticket.upsert({
@@ -798,7 +835,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                     }
                     estatusLead = 'AGENDADO'
                 } else {
-                    // 🚨 ESCAPE AUTOMÁTICO POR CRUCE DE HORARIO (Paso a Modo Manual)
                     const clienteDb = await prisma.cliente.upsert({
                         where: { telefono: telefonoParaCita },
                         update: { nombre: nombreCrm, atendidoPorBot: false },
@@ -825,10 +861,8 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                         }
                     });
 
-                    // Respuesta empática de transferencia inmediata
                     respuestaWhatsApp = `¡Hola, ${nombreCrm}! Noté un pequeño ajuste en la agenda en tiempo real para esa hora. Para no hacerte perder tiempo, le acabo de transferir tu chat al Ingeniero Julio para que te confirme la cita de inmediato. Un momento por favor 🧑‍🔧`
 
-                    // Alerta inmediata a tu centro de notificaciones
                     await dispararAlertaInmediata(
                         telefonoParaCita,
                         'ERROR_HORARIO',
@@ -852,7 +886,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                 create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
             });
 
-            // 🏷️ Agregamos la etiqueta [RECOLECCION] para que el Dashboard lo mande directo a la pestaña Logística
             const notasConEtiquetaLogistica = `[RECOLECCION] [GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`
 
             await prisma.ticket.upsert({
@@ -887,8 +920,40 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         if (historial.length > 12) historial = historial.slice(-12)
         MEMORIA_CHAT.set(numeroCliente, historial)
 
-        // 🚀 DISPARO A WHATSAPP
-        await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
+        // 🚀 DISPARO A WHATSAPP Y ENCABEZADO DE IMAGEN (INFOGRAFÍA)
+        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://soporte.soltecot.com'
+        const urlFlyer = `${APP_URL}/flyer-soltecot.jpg`
+        let enviadoConImagen = false
+
+        if (debeEnviarFlyer && WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
+            try {
+                const toMeta = `52${telefono10Digitos}`
+                const resImg = await fetch(`https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        messaging_product: 'whatsapp',
+                        recipient_type: 'individual',
+                        to: toMeta,
+                        type: 'image',
+                        image: {
+                            link: urlFlyer,
+                            caption: respuestaWhatsApp // El texto de la IA se envía como pie de foto
+                        }
+                    })
+                })
+                enviadoConImagen = resImg.ok
+            } catch (e) {
+                console.error('⚠️ Error enviando flyer visual, usando respaldo de texto:', e)
+            }
+        }
+
+        if (!enviadoConImagen) {
+            await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
+        }
 
         // 🎯 CÁLCULO DE FINANZAS Y REGISTRO EN CRM
         const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
@@ -1120,7 +1185,6 @@ export async function POST(req: Request) {
             // ====================================================================
             // 🚪 OPT-OUT CLIENTE GENÉRICO ("YA NO", "NO GRACIAS")
             // ====================================================================
-            // ELIMINAMOS la palabra "no" a secas para evitar borrados accidentales
             const esOptOut = textoNormalizado === 'ya no' ||
                 textoNormalizado === 'no gracias' ||
                 textoNormalizado === 'cancelar' ||
@@ -1140,9 +1204,6 @@ export async function POST(req: Request) {
                     },
                     data: { estado: 'RECHAZADO', notasInternas: '[OPT-OUT] El cliente declinó o cerró el seguimiento.' }
                 });
-
-                // NO borramos la tabla 'mensaje' ni 'cliente' de Neon DB para conservar el historial
-                // del por qué se canceló y tener trazabilidad.
 
                 const mensajeDespedida = "¡Entendido! Hemos cerrado tu solicitud actual. Si algún día vuelves a necesitar ayuda con tus equipos, aquí estaremos con mucho gusto. ¡Que tengas un excelente día! 👋";
                 await enviarMensajeWhatsApp(numeroCliente, mensajeDespedida);
@@ -1173,10 +1234,11 @@ export async function POST(req: Request) {
                     }
                 });
 
+                const nombreEsteticoReact = cliente.nombre || 'WhatsApp';
                 await dispararAlertaInmediata(
                     telefono10Digitos,
                     '💬 CLIENTE REACTIVADO',
-                    `El cliente *${cliente.nombre || 'WhatsApp'}* (${telefono10Digitos}) presionó el botón *"${mensajeCliente}"*. La ventana de 24h de WhatsApp está abierta y lista en el panel.`
+                    `El cliente *${nombreEsteticoReact}* (${telefono10Digitos}) presionó el botón *"${mensajeCliente}"*. La ventana de 24h de WhatsApp está abierta y lista en el panel.`
                 );
 
                 await enviarMensajeWhatsApp(

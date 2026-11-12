@@ -88,6 +88,11 @@ export default function ChatPanel({
     const [fechaCitaInput, setFechaCitaInput] = useState('')
     const [guardandoCita, setGuardandoCita] = useState(false)
 
+    // 👤 ESTADO: EDICIÓN DEL NOMBRE DEL CLIENTE (NEON DB)
+    const [editandoNombre, setEditandoNombre] = useState(false)
+    const [nuevoNombre, setNuevoNombre] = useState('')
+    const [guardandoNombre, setGuardandoNombre] = useState(false)
+
     // 📦 ESTADOS: COTIZADOR Y GENERADOR SKYDROPS
     const [modalCotizadorAbierto, setModalCotizadorAbierto] = useState(false)
     const [zipCodeDestino, setZipCodeDestino] = useState('')
@@ -114,6 +119,51 @@ export default function ChatPanel({
             setFechaCitaInput('')
         }
     }, [ticketSeleccionado])
+
+    // Sincroniza el estado local de nuevoNombre al cambiar de chat
+    useEffect(() => {
+        if (ticketSeleccionado?.cliente?.nombre) {
+            setNuevoNombre(ticketSeleccionado.cliente.nombre)
+        } else if (itemSeleccionadoActual?.nombre) {
+            setNuevoNombre(itemSeleccionadoActual.nombre)
+        }
+    }, [ticketSeleccionado, itemSeleccionadoActual])
+
+    // Función para inyectar el nuevo nombre a Neon DB
+    const handleGuardarNombre = async () => {
+        const clienteIdActual = ticketSeleccionado?.clienteId || itemSeleccionadoActual?.clienteId
+        const nombreOriginal = ticketSeleccionado?.cliente?.nombre || itemSeleccionadoActual?.nombre || ''
+
+        if (!nuevoNombre.trim() || nuevoNombre.trim() === nombreOriginal || !clienteIdActual) {
+            setEditandoNombre(false)
+            setNuevoNombre(nombreOriginal)
+            return
+        }
+
+        setGuardandoNombre(true)
+        try {
+            const res = await fetch('/api/tickets', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clienteId: clienteIdActual,
+                    nuevoNombre: nuevoNombre.trim()
+                })
+            })
+
+            if (res.ok) {
+                setEditandoNombre(false)
+                // Se dispararán automáticamente los webhooks/swr de la página principal recargando el nombre
+            } else {
+                alert('Error al actualizar el nombre del cliente.')
+                setNuevoNombre(nombreOriginal)
+            }
+        } catch (e) {
+            alert('Error de conexión al actualizar el nombre.')
+        } finally {
+            setGuardandoNombre(false)
+        }
+    }
 
     const handleGuardarFechaCita = async () => {
         if (!fechaCitaInput) return alert("Selecciona una fecha y hora válidas.")
@@ -273,13 +323,42 @@ export default function ChatPanel({
                         <span>⬅️</span>
                     </button>
                     <div className="hidden sm:flex w-10 h-10 rounded-full bg-zinc-800 items-center justify-center font-bold text-emerald-400 border border-zinc-700">
-                        {telefonoRescate.slice(-2)}
+                        {nuevoNombre.slice(0, 2).toUpperCase() || 'WA'}
                     </div>
                     <div>
+                        {/* ✏️ EDICIÓN RÁPIDA DE NOMBRE */}
                         <div className="flex items-center gap-2">
-                            <h2 className="font-bold text-sm text-zinc-100 truncate max-w-[120px] sm:max-w-[200px]">
-                                {ticketSeleccionado?.cliente?.nombre || itemSeleccionadoActual?.nombre || 'Cliente WhatsApp'}
-                            </h2>
+                            {editandoNombre ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={nuevoNombre}
+                                        onChange={(e) => setNuevoNombre(e.target.value)}
+                                        onBlur={handleGuardarNombre}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleGuardarNombre()
+                                            if (e.key === 'Escape') {
+                                                setEditandoNombre(false)
+                                                setNuevoNombre(ticketSeleccionado?.cliente?.nombre || itemSeleccionadoActual?.nombre || '')
+                                            }
+                                        }}
+                                        className="bg-zinc-900 border border-emerald-500 rounded px-2 py-0.5 text-sm font-bold text-white outline-none w-32 sm:w-48"
+                                        autoFocus
+                                        disabled={guardandoNombre}
+                                    />
+                                </div>
+                            ) : (
+                                <div
+                                    className="flex items-center gap-2 cursor-pointer group"
+                                    onClick={() => setEditandoNombre(true)}
+                                    title="Clic para editar el nombre del cliente"
+                                >
+                                    <h2 className="font-bold text-sm text-zinc-100 truncate max-w-[120px] sm:max-w-[200px] group-hover:text-emerald-400 transition-colors">
+                                        {nuevoNombre || 'Cliente WhatsApp'}
+                                    </h2>
+                                    <span className="text-zinc-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">✏️</span>
+                                </div>
+                            )}
                             <span className={`border text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded font-bold hidden sm:inline-block ${itemSeleccionadoActual?.tipo === 'taller'
                                 ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
                                 : 'bg-amber-950 text-amber-400 border-amber-800/60'
@@ -508,7 +587,7 @@ export default function ChatPanel({
                             <div>
                                 <p className="text-blue-400 font-bold uppercase">{cotizacionGanadora.proveedor}</p>
                                 <p className="text-zinc-400 text-[10px]">
-                                    {cotizacionGanadora.servicio} • Entrega estim. {cotizacionGanadora.diasEstimados} días hábiles
+                                    {cotizacionGanadora.servicio} · Entrega estim. {cotizacionGanadora.diasEstimados} días hábiles
                                     <span className="ml-2 font-mono text-emerald-400 font-bold">
                                         [{sentido === 'entrada' ? '📥 Recepción' : '📤 Retorno'}]
                                     </span>
@@ -547,7 +626,7 @@ export default function ChatPanel({
                             <div key={m.id} className={`flex flex-col ${esCliente ? 'items-start max-w-[85%] sm:max-w-[75%]' : 'items-end max-w-[85%] sm:max-w-[75%] ml-auto'}`}>
                                 <div className={`p-2.5 sm:p-3 rounded-2xl border whitespace-pre-wrap ${esCliente ? 'bg-zinc-800 text-zinc-100 rounded-tl-none border-zinc-700/50 shadow-md' : 'bg-[#18332f] text-emerald-50 rounded-tr-none border-[#224b45] shadow-md'}`}>
                                     <div className="flex justify-between items-center gap-3 mb-1 text-[9px] opacity-60">
-                                        <span className="font-bold">{esCliente ? '👤 Cliente' : '🛠️ Taller'}</span>
+                                        <span className="font-bold">{esCliente ? '👤 ' + nuevoNombre : '🛠️ Taller'}</span>
                                     </div>
                                     <p className="text-xs">{m.texto}</p>
                                     <div className="flex items-center justify-end gap-1 text-[9px] font-mono mt-1 opacity-60">

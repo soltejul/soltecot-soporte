@@ -17,6 +17,10 @@ export default function RegistroOrdenAdmin() {
     const [buscandoCliente, setBuscandoCliente] = useState(false)
     const [clienteRegistradoPrevio, setClienteRegistradoPrevio] = useState(false)
 
+    // Catálogo dinámico para botones rápidos
+    const [catalogoServicios, setCatalogoServicios] = useState<any[]>([])
+    const [servicioSeleccionado, setServicioSeleccionado] = useState('')
+
     const [fotos, setFotos] = useState<File[]>([])
     const [previews, setPreviews] = useState<string[]>([])
     const [cargando, setCargando] = useState(false)
@@ -24,6 +28,39 @@ export default function RegistroOrdenAdmin() {
     const [error, setError] = useState('')
 
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // Cargar catálogo de servicios activos al iniciar
+    useEffect(() => {
+        const cargarCatalogo = async () => {
+            try {
+                const res = await fetch('/api/admin/catalogo')
+                const data = await res.json()
+                if (data.success && data.servicios) {
+                    setCatalogoServicios(data.servicios.filter((s: any) => s.activo))
+                }
+            } catch (err) {
+                console.error('Error cargando catálogo:', err)
+            }
+        }
+        cargarCatalogo()
+    }, [])
+
+    // Autocompletar formulario al seleccionar un servicio del catálogo
+    const manejarSeleccionServicio = (idServicio: string) => {
+        setServicioSeleccionado(idServicio)
+        if (!idServicio) return
+
+        const servicio = catalogoServicios.find(s => s.id === idServicio)
+        if (servicio) {
+            setForm(prev => ({
+                ...prev,
+                // Si la categoría es Controles y no tiene equipo específico, ponemos Control genérico
+                equipo: prev.equipo || (servicio.categoria === 'Controles' ? 'Control ' : ''),
+                fallaReportada: `${servicio.nombre}${servicio.descripcion ? ` - ${servicio.descripcion}` : ''}`,
+                costoEstimado: servicio.precio.toString()
+            }))
+        }
+    }
 
     // 🔍 AUTOCOMPLETADO DE CLIENTE POR TELÉFONO
     const buscarClienteExistente = async (telefonoRaw: string) => {
@@ -179,6 +216,7 @@ export default function RegistroOrdenAdmin() {
                 costoEstimado: '',
                 notasInternas: '',
             })
+            setServicioSeleccionado('')
             setFotos([])
             setClienteRegistradoPrevio(false)
 
@@ -208,6 +246,27 @@ export default function RegistroOrdenAdmin() {
                 </div>
 
                 <form onSubmit={manejarEnvio} className="space-y-4">
+
+                    {/* SELECTOR RÁPIDO DE SERVICIO DEL CATÁLOGO */}
+                    {catalogoServicios.length > 0 && (
+                        <div className="bg-emerald-950/20 border border-emerald-900/40 p-3 rounded-xl mb-2">
+                            <label className="block text-[10px] font-bold text-emerald-400 mb-1.5 uppercase font-mono tracking-wider">
+                                ⚡ Autocompletado de Catálogo (Opcional)
+                            </label>
+                            <select
+                                value={servicioSeleccionado}
+                                onChange={(e) => manejarSeleccionServicio(e.target.value)}
+                                className="w-full bg-zinc-900 border border-emerald-800/50 rounded-lg p-2 text-xs text-emerald-300 outline-none focus:border-emerald-500 font-mono"
+                            >
+                                <option value="">Selecciona un servicio rápido...</option>
+                                {catalogoServicios.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.categoria} | {s.nombre} - ${s.precio}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     {/* TELÉFONO CON BÚSQUEDA EN TIEMPO REAL */}
                     <div>
@@ -255,11 +314,11 @@ export default function RegistroOrdenAdmin() {
 
                     {/* FALLA REPORTADA */}
                     <div>
-                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Falla Reportada por el Cliente *</label>
+                        <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Falla / Servicio a Realizar *</label>
                         <textarea
                             required
                             rows={2}
-                            placeholder="Ej: Drift en joystick izquierdo o sobrecalentamiento"
+                            placeholder="Ej: Drift en joystick izquierdo o Mantenimiento"
                             value={form.fallaReportada}
                             onChange={(e) => setForm({ ...form, fallaReportada: e.target.value })}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-sm text-white outline-none focus:border-emerald-500 transition-colors resize-none"
@@ -281,7 +340,7 @@ export default function RegistroOrdenAdmin() {
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">Estatus Inicial</label>
-                            <div className="w-full bg-zinc-900 border border-dashed border-emerald-800/80 rounded-xl p-2.5 text-xs text-emerald-400 font-bold text-center font-mono">
+                            <div className="w-full bg-zinc-900 border border-dashed border-emerald-800/80 rounded-xl p-2.5 text-xs text-emerald-400 font-bold text-center font-mono flex items-center justify-center h-[42px]">
                                 🛠️ RECIBIDO
                             </div>
                         </div>
