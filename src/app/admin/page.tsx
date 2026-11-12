@@ -16,6 +16,56 @@ const MESES_MAP: Record<string, number> = {
     julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
 }
 
+// 🖼️ COMPRESOR AUTOMÁTICO DE IMÁGENES PARA RESPETAR EL LÍMITE DE VERCEL (4.5 MB)
+async function comprimirImagen(file: File, maxWidth = 1920, quality = 0.8): Promise<File> {
+    if (!file.type.startsWith('image/') || file.size < 2 * 1024 * 1024) {
+        return file
+    }
+
+    return new Promise((resolve) => {
+        const img = new Image()
+        const reader = new FileReader()
+
+        reader.onerror = () => resolve(file)
+        img.onerror = () => resolve(file)
+
+        reader.onload = (e) => {
+            img.src = e.target?.result as string
+        }
+
+        img.onload = () => {
+            let width = img.width
+            let height = img.height
+
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width)
+                width = maxWidth
+            }
+
+            const canvas = document.createElement('canvas')
+            canvas.width = width
+            canvas.height = height
+
+            const ctx = canvas.getContext('2d')
+            ctx?.drawImage(img, 0, 0, width, height)
+
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const archivoComprimido = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.jpg', {
+                        type: 'image/jpeg',
+                        lastModified: Date.now()
+                    })
+                    resolve(archivoComprimido)
+                } else {
+                    resolve(file)
+                }
+            }, 'image/jpeg', quality)
+        }
+
+        reader.readAsDataURL(file)
+    })
+}
+
 // 🧠 PARSER DE FECHAS INDIVIDUALES Y VERBALES
 function parseFechaInteligente(raw: string | null | undefined): { formateada: string | null; timestamp: number | null } {
     if (!raw) return { formateada: null, timestamp: null }
@@ -156,6 +206,7 @@ export default function AdminDashboard() {
     const [filtroPestana, setFiltroPestana] = useState<'todos' | 'citas' | 'taller' | 'envios' | 'leads' | 'historial'>('citas')
     const [modalInactividadAbierto, setModalInactividadAbierto] = useState(false)
     const [modalGamepadAbierto, setModalGamepadAbierto] = useState(false)
+    const [modalFinanzasAbierto, setModalFinanzasAbierto] = useState(false)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
 
@@ -431,17 +482,23 @@ export default function AdminDashboard() {
         })
     }, [ticketsBrutos, conversaciones, chatsVistos])
 
-    // 📊 KPIS EN TIEMPO REAL & GANANCIAS DEL MES
-    const { kpis, gananciasMes } = useMemo(() => {
+    // 📊 KPIS OPERATIVOS & CORTE FINANCIERO DEL MES (APARTADO PRIVADO)
+    const { kpis, finanzasMes } = useMemo(() => {
         const fechaActual = new Date()
         const mesActual = fechaActual.getMonth()
         const anioActual = fechaActual.getFullYear()
+        const nombreMes = fechaActual.toLocaleDateString('es-MX', {
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'America/Mexico_City'
+        })
 
         let totalGanancias = 0
         let citasCount = 0
         let tallerCount = 0
         let logisticaCount = 0
         let leadsCount = 0
+        const ordenesEntregadasMes: any[] = []
 
         listaUnificada.forEach(i => {
             const esCerrado = i.estadoTaller === 'ENTREGADO' || i.estadoTaller === 'RECHAZADO'
@@ -449,7 +506,9 @@ export default function AdminDashboard() {
             if (i.estadoTaller === 'ENTREGADO') {
                 const f = new Date(i.updatedAt)
                 if (f.getMonth() === mesActual && f.getFullYear() === anioActual) {
-                    totalGanancias += Number(i.costoReparacion) || 0
+                    const monto = Number(i.costoReparacion) || 0
+                    totalGanancias += monto
+                    ordenesEntregadasMes.push(i)
                 }
             }
 
@@ -461,9 +520,19 @@ export default function AdminDashboard() {
             }
         })
 
+        const ticketPromedio = ordenesEntregadasMes.length > 0
+            ? Math.round(totalGanancias / ordenesEntregadasMes.length)
+            : 0
+
         return {
             kpis: { citasCount, tallerCount, logisticaCount, leadsCount },
-            gananciasMes: totalGanancias
+            finanzasMes: {
+                total: totalGanancias,
+                cantidadEntregados: ordenesEntregadasMes.length,
+                ticketPromedio,
+                nombreMes: nombreMes.toUpperCase(),
+                ordenes: ordenesEntregadasMes
+            }
         }
     }, [listaUnificada])
 
@@ -520,12 +589,32 @@ export default function AdminDashboard() {
         if (cleanNum.length < 10) return alert('Ingresa un número válido')
         if (!mensajeRescate.trim() && !archivoAdjunto) return
 
+        // ⚠️ Validación de peso límite para videos o PDFs (límite Serverless Vercel: 4.5 MB)
+        if (archivoAdjunto && !archivoAdjunto.type.startsWith('image/')) {
+            const tamanoMB = archivoAdjunto.size / (1024 * 1024)
+            if (tamanoMB > 4.2) {
+                return alert(`El archivo pesa ${tamanoMB.toFixed(1)} MB. Vercel limita las subidas a un máximo de 4.5 MB. Por favor comprime o recorta el video antes de enviarlo.`)
+            }
+        }
+
         setEnviandoRescate(true)
         try {
+            let archivoListo = archivoAdjunto
+
+            // 🗜️ Si es foto pesada, la comprimimos automáticamente en el navegador
+            if (archivoAdjunto && archivoAdjunto.type.startsWith('image/')) {
+                archivoListo = await comprimirImagen(archivoAdjunto)
+                const tamanoFinalMB = archivoListo.size / (1024 * 1024)
+                if (tamanoFinalMB > 4.4) {
+                    setEnviandoRescate(false)
+                    return alert(`La imagen sigue pesando ${tamanoFinalMB.toFixed(1)} MB después de comprimir. Intenta con una captura o imagen más ligera.`)
+                }
+            }
+
             const formData = new FormData()
             formData.append('telefono', telefonoRescate)
             formData.append('mensaje', mensajeRescate)
-            if (archivoAdjunto) formData.append('archivo', archivoAdjunto)
+            if (archivoListo) formData.append('archivo', archivoListo)
 
             const mensajeSimulado = {
                 id: 'temp-' + Date.now(),
@@ -537,7 +626,7 @@ export default function AdminDashboard() {
             setEstadoBotOptimista(false)
 
             const res = await fetch('/api/admin/chat-directo', { method: 'POST', body: formData })
-            const data = await res.json()
+            const data = await res.json().catch(() => ({}))
 
             if (res.ok) {
                 setMensajeRescate('')
@@ -545,11 +634,11 @@ export default function AdminDashboard() {
                 reloadChatDirecto()
                 reloadConversaciones()
             } else {
-                alert('Error al enviar: ' + (data.error || 'Rechazado'))
+                alert('Error al enviar: ' + (data.error || `Servidor respondió ${res.status}`))
                 reloadChatDirecto()
             }
         } catch (err) {
-            alert('Error de conexión')
+            alert('Error de conexión o archivo demasiado pesado.')
             reloadChatDirecto()
         } finally {
             setEnviandoRescate(false)
@@ -795,31 +884,34 @@ export default function AdminDashboard() {
                         <h1 className="text-sm font-bold text-white font-mono tracking-wide flex items-center gap-2">
                             SOLTECOT <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">v2.1 PROD</span>
                         </h1>
-                        <p className="text-[10px] text-zinc-500 font-mono">Laboratorio & Sistema Logístico Nacional</p>
+                        <p className="text-[10px] text-zinc-500 font-mono hidden sm:block">Laboratorio & Sistema Logístico Nacional</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setModalGamepadAbierto(true)} className="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md">
-                        🎮 <span>Tester HW</span>
+                    <button onClick={() => setModalGamepadAbierto(true)} className="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-md" title="Probar controles y diagnosticar fallas">
+                        🎮 <span className="hidden sm:inline">Tester HW</span>
+                    </button>
+                    <button onClick={() => setModalFinanzasAbierto(true)} className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5" title="Ver corte financiero del mes">
+                        📊 <span className="hidden md:inline">Finanzas</span>
                     </button>
                     <Link href="/admin/ingreso" className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-950/50">
                         <span>➕</span><span className="hidden md:inline">Nueva Orden</span>
                     </Link>
                     <button onClick={dispararRecordatoriosManual} className="bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-900/40 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5" title="Ejecutar barrido manual de 72h">
-                        <span>🔔</span><span className="hidden md:inline">Sweep 72h</span>
+                        <span>🔔</span><span className="hidden lg:inline">Sweep 72h</span>
                     </button>
-                    <button onClick={() => setModalInactividadAbierto(true)} className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-3 py-2 rounded-xl transition-colors">
-                        🌴 <span className="hidden md:inline">Vacaciones</span>
+                    <button onClick={() => setModalInactividadAbierto(true)} className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-bold px-3 py-2 rounded-xl transition-colors" title="Configurar días inhábiles">
+                        🌴 <span className="hidden lg:inline">Vacaciones</span>
                     </button>
-                    <button onClick={ejecutarLogout} className="bg-zinc-900 hover:bg-zinc-800 text-rose-400 border border-zinc-800 text-xs p-2 rounded-xl font-bold transition-colors">
+                    <button onClick={ejecutarLogout} className="bg-zinc-900 hover:bg-zinc-800 text-rose-400 border border-zinc-800 text-xs p-2 rounded-xl font-bold transition-colors" title="Cerrar sesión">
                         🚪
                     </button>
                 </div>
             </header>
 
-            {/* 📊 BARRA KPIS METRICAS & GANANCIAS */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-4 bg-zinc-900/40 border-b border-zinc-900 shrink-0">
+            {/* 📊 BARRA KPIS OPERATIVOS (4 COLUMNAS LIMPIAS SIN CIFRAS FINANCIERAS EXPUESTAS) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-zinc-900/40 border-b border-zinc-900 shrink-0">
                 <div onClick={() => setFiltroPestana('citas')} className={`cursor-pointer p-3.5 rounded-2xl border transition-all ${filtroPestana === 'citas' ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}>
                     <div className="flex justify-between items-center text-[10px] sm:text-xs text-zinc-400 font-mono">
                         <span>📍 CITAS LABORATORIO</span>
@@ -850,14 +942,6 @@ export default function AdminDashboard() {
                         <span className="text-amber-400">💬</span>
                     </div>
                     <div className="text-xl sm:text-2xl font-bold text-white mt-1 font-mono">{kpis.leadsCount}</div>
-                </div>
-
-                <div onClick={() => setFiltroPestana('historial')} className={`cursor-pointer p-3.5 rounded-2xl border transition-all col-span-2 lg:col-span-1 ${filtroPestana === 'historial' ? 'bg-emerald-950/50 border-emerald-400 shadow-lg' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}>
-                    <div className="flex justify-between items-center text-[10px] sm:text-xs text-emerald-400 font-mono">
-                        <span>💰 GANANCIAS MES</span>
-                        <span className="text-emerald-400">💵</span>
-                    </div>
-                    <div className="text-xl sm:text-2xl font-bold text-emerald-400 mt-1 font-mono">${gananciasMes.toLocaleString('es-MX')}</div>
                 </div>
             </div>
 
@@ -1071,6 +1155,89 @@ export default function AdminDashboard() {
                                 enviandoRescate={enviandoRescate}
                                 handleEnviarMensaje={handleEnviarMensaje}
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 📊 MODAL PRIVADO DE FINANZAS / CORTE MENSUAL */}
+            {modalFinanzasAbierto && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setModalFinanzasAbierto(false)}>
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
+                            <div>
+                                <h3 className="text-white font-bold font-mono text-sm flex items-center gap-2">
+                                    📊 Corte Financiero & Resumen Mensual
+                                </h3>
+                                <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{finanzasMes.nombreMes}</p>
+                            </div>
+                            <button onClick={() => setModalFinanzasAbierto(false)} className="text-zinc-400 hover:text-white font-bold px-2 py-1">
+                                ❌
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-5 overflow-y-auto">
+                            {/* Tarjetas de métricas financieras */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40">
+                                    <p className="text-[10px] font-mono text-emerald-400 uppercase">Ingresos del Mes</p>
+                                    <p className="text-2xl font-bold text-white font-mono mt-1">
+                                        ${finanzasMes.total.toLocaleString('es-MX')} <span className="text-xs text-zinc-400">MXN</span>
+                                    </p>
+                                </div>
+
+                                <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
+                                    <p className="text-[10px] font-mono text-zinc-400 uppercase">Equipos Entregados</p>
+                                    <p className="text-2xl font-bold text-white font-mono mt-1">
+                                        {finanzasMes.cantidadEntregados}
+                                    </p>
+                                </div>
+
+                                <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
+                                    <p className="text-[10px] font-mono text-zinc-400 uppercase">Ticket Promedio</p>
+                                    <p className="text-2xl font-bold text-amber-400 font-mono mt-1">
+                                        ${finanzasMes.ticketPromedio.toLocaleString('es-MX')}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Desglose de órdenes entregadas en el mes */}
+                            <div>
+                                <h4 className="text-xs font-mono font-bold text-zinc-400 uppercase mb-2.5">
+                                    Desglose de Servicios Entregados ({finanzasMes.ordenes.length})
+                                </h4>
+                                {finanzasMes.ordenes.length === 0 ? (
+                                    <p className="text-xs text-zinc-600 font-mono text-center py-8 bg-zinc-900/40 rounded-xl border border-zinc-900">
+                                        Aún no hay equipos entregados registrados en este mes.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {finanzasMes.ordenes.map((ord) => (
+                                            <div
+                                                key={ord.id}
+                                                onClick={() => {
+                                                    setModalFinanzasAbierto(false)
+                                                    handleSeleccionarChat(ord.telefono, ord.ultimoMensaje?.createdAt)
+                                                }}
+                                                className="p-3 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/80 flex items-center justify-between gap-3 cursor-pointer transition-colors"
+                                            >
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-mono text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+                                                            {ord.folio}
+                                                        </span>
+                                                        <p className="text-xs font-bold text-white truncate">{ord.nombre}</p>
+                                                    </div>
+                                                    <p className="text-[11px] text-zinc-400 truncate mt-0.5">💻 {ord.equipo}</p>
+                                                </div>
+                                                <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-lg shrink-0">
+                                                    +${Number(ord.costoReparacion || 0).toLocaleString('es-MX')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
