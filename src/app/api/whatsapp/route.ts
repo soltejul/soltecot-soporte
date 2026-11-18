@@ -986,9 +986,13 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
         const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
+        // Asignamos las variables faltantes
+        const folioParaGoogle = ticketMasReciente?.numeroOrden || 'SOL-REM-PENDIENTE'
+        const equipoYFalla = `${dispositivoCrm} - ${fallaCrm}`
+
         await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
         await registrarFinanzasEnFacturacion(
-            codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
+            folioParaGoogle, telefonoParaCita, nombreCrm, tipoSoporteCalculado, equipoYFalla, estatusLead,
             reqFactura, rfcCrm, nombreFiscalCrm, cpCrm, regimenCrm, usoCfdiCrm, correoCrm,
             montoNeto, ivaCalculado, totalCobrado, estatusSatCalculado
         )
