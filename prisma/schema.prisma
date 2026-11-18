@@ -43,6 +43,8 @@ model Cliente {
   createdAt          DateTime  @default(now())
   atendidoPorBot     Boolean   @default(true)
   googleChatThreadId String?   @unique
+  ultimaActividad      DateTime  @default(now())
+  tieneMensajesSinLeer Boolean   @default(false)
   mensajes           Mensaje[]
   tickets            Ticket[]
 

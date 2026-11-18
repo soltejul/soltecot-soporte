@@ -211,6 +211,7 @@ export default function AdminDashboard() {
     const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false)
     const [ticketDetalle, setTicketDetalle] = useState<any>(null)
     const [mostrarModalPresupuesto, setMostrarModalPresupuesto] = useState(false)
+    const [soloNoLeidos, setSoloNoLeidos] = useState(false)
 
     // Selección masiva para purga de leads
     const [seleccionados, setSeleccionados] = useState<string[]>([])
@@ -231,31 +232,6 @@ export default function AdminDashboard() {
     const [enviandoRescate, setEnviandoRescate] = useState(false)
     const [costoReparacion, setCostoReparacion] = useState('')
     const [notasDiagnostico, setNotasDiagnostico] = useState('')
-
-    // 👁️ REGISTRO DE CHATS LEÍDOS
-    const [chatsVistos, setChatsVistos] = useState<Record<string, string>>({})
-
-    useEffect(() => {
-        try {
-            const guardados = localStorage.getItem('soltecot_chats_vistos')
-            if (guardados) setChatsVistos(JSON.parse(guardados))
-        } catch (e) { }
-    }, [])
-
-    const handleSeleccionarChat = (telefono: string, fechaUltimoMsg?: string) => {
-        setTelefonoRescate(telefono)
-        if (telefono && fechaUltimoMsg) {
-            const tel10 = telefono.replace(/[^0-9]/g, '').slice(-10)
-            const nuevosVistos = { ...chatsVistos, [tel10]: fechaUltimoMsg }
-            setChatsVistos(nuevosVistos)
-            try {
-                localStorage.setItem('soltecot_chats_vistos', JSON.stringify(nuevosVistos))
-            } catch (e) { }
-        }
-    }
-
-    const chatEndRef = useRef<HTMLDivElement | null>(null)
-    const esPrimeraCargaChat = useRef(true)
 
     // --------------------------------------------------------
     // 🚀 SWR: FETCHING INTELIGENTE Y POLLING
@@ -289,11 +265,35 @@ export default function AdminDashboard() {
     const historialDirecto = chatActivoData?.comparableMensajes || chatActivoData?.mensajes || []
     const [estadoBotOptimista, setEstadoBotOptimista] = useState<boolean | null>(null)
 
+    // 👁️ REGISTRO DE CHATS LEÍDOS VÍA API Y LOCAL
+    const handleSeleccionarChat = async (telefono: string, clienteId: string) => {
+        setTelefonoRescate(telefono)
+
+        // Apagamos el puntito verde inmediatamente vía API para ese cliente
+        try {
+            await fetch('/api/tickets', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clienteId: clienteId,
+                    apagarAlerta: true // Envío flag al backend
+                })
+            })
+            // Disparamos re-fetch para que el punto verde desaparezca visualmente
+            reloadConversaciones()
+        } catch (e) {
+            console.error('Error apagando alerta', e)
+        }
+    }
+
     useEffect(() => {
         if (chatActivoData?.cliente) {
             setEstadoBotOptimista(chatActivoData.cliente.atendidoPorBot)
         }
     }, [chatActivoData])
+
+    const chatEndRef = useRef<HTMLDivElement | null>(null)
+    const esPrimeraCargaChat = useRef(true)
 
     useEffect(() => {
         if (telefonoRescate) {
@@ -382,9 +382,10 @@ export default function AdminDashboard() {
             }
 
             const ultimoMsg = convAsociada?.mensajes?.[0]
-            const fechaUltimoMsgTime = ultimoMsg?.createdAt ? new Date(ultimoMsg.createdAt).getTime() : 0
-            const fechaUltimoVistoTime = chatsVistos[tel10] ? new Date(chatsVistos[tel10]).getTime() : 0
-            const requiereAtencion = ultimoMsg?.origen === 'CLIENTE' && fechaUltimoMsgTime > fechaUltimoVistoTime
+
+            // 🟢 LECTURA DEL PUNTO VERDE DESDE NEON DB
+            const requiereAtencion = ticket.cliente?.tieneMensajesSinLeer || convAsociada?.tieneMensajesSinLeer || false
+            const ultimaInteraccion = ticket.cliente?.ultimaActividad || convAsociada?.ultimaActividad || ticket.updatedAt
 
             const botActivoCalculado = convAsociada?.atendidoPorBot === false
                 ? false
@@ -399,6 +400,7 @@ export default function AdminDashboard() {
                 fechaCitaFormateada,
                 fechaCitaTimestamp: timestamp,
                 requiereAtencion,
+                ultimaActividadNum: new Date(ultimaInteraccion).getTime(), // 👈 Valor clave para el Sort
                 folio: ticket.numeroOrden,
                 nombre: ticket.cliente?.nombre || convAsociada?.nombre || 'Cliente WhatsApp',
                 telefono: ticket.cliente?.telefono || convAsociada?.telefono || '',
@@ -434,9 +436,9 @@ export default function AdminDashboard() {
                     else if (esAgendado) fechaCitaFormateada = "CITA PROGRAMADA"
                 }
 
-                const fechaUltimoMsgTime = ultimoMsg?.createdAt ? new Date(ultimoMsg.createdAt).getTime() : 0
-                const fechaUltimoVistoTime = chatsVistos[tel10] ? new Date(chatsVistos[tel10]).getTime() : 0
-                const requiereAtencion = ultimoMsg?.origen === 'CLIENTE' && fechaUltimoMsgTime > fechaUltimoVistoTime
+                // 🟢 LECTURA DEL PUNTO VERDE DESDE NEON DB
+                const requiereAtencion = conv.tieneMensajesSinLeer || false
+                const ultimaInteraccion = conv.ultimaActividad || conv.updatedAt || new Date().toISOString()
 
                 items.push({
                     id: conv.id,
@@ -447,6 +449,7 @@ export default function AdminDashboard() {
                     fechaCitaFormateada,
                     fechaCitaTimestamp: timestamp,
                     requiereAtencion,
+                    ultimaActividadNum: new Date(ultimaInteraccion).getTime(), // 👈 Valor clave para el Sort
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
                     telefono: conv.telefono,
@@ -463,26 +466,18 @@ export default function AdminDashboard() {
             }
         })
 
-        // Ordenamiento cronológico: Citas próximas primero, no leídos arriba
+        // =========================================================================
+        // 🔄 SORTING ESTILO WHATSAPP
+        // =========================================================================
         return items.sort((a, b) => {
+            // Regla 1 (Absoluta): Los que tienen punto verde SIEMPRE van hasta arriba.
             if (a.requiereAtencion && !b.requiereAtencion) return -1
             if (!a.requiereAtencion && b.requiereAtencion) return 1
 
-            if (a.esAgendado && b.esAgendado) {
-                if (a.fechaCitaTimestamp && b.fechaCitaTimestamp) return a.fechaCitaTimestamp - b.fechaCitaTimestamp
-                if (a.fechaCitaTimestamp && !b.fechaCitaTimestamp) return -1
-                if (!a.fechaCitaTimestamp && b.fechaCitaTimestamp) return 1
-            }
-
-            if (a.esRecoleccion && !b.esRecoleccion) return -1
-            if (!a.esRecoleccion && b.esRecoleccion) return 1
-
-            if (a.esAgendado && !b.esAgendado) return -1
-            if (!a.esAgendado && b.esAgendado) return 1
-
-            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+            // Regla 2 (WhatsApp): Ordenar por la fecha y hora de su última interacción
+            return b.ultimaActividadNum - a.ultimaActividadNum
         })
-    }, [ticketsBrutos, conversaciones, chatsVistos])
+    }, [ticketsBrutos, conversaciones])
 
     // 📊 KPIS OPERATIVOS & CORTE FINANCIERO DEL MES (APARTADO PRIVADO)
     const { kpis, finanzasMes } = useMemo(() => {
@@ -541,6 +536,9 @@ export default function AdminDashboard() {
     // 🔍 FILTRADO Y BÚSQUEDA APLICADA
     const listaFiltrada = useMemo(() => {
         return listaUnificada.filter(item => {
+            // Filtro rápido de "Solo No Leídos"
+            if (soloNoLeidos && !item.requiereAtencion) return false
+
             const term = busqueda.toLowerCase().trim()
             const coincide = !term ||
                 item.nombre?.toLowerCase().includes(term) ||
@@ -552,11 +550,8 @@ export default function AdminDashboard() {
 
             const esHistorico = item.estadoTaller === 'ENTREGADO' || item.estadoTaller === 'RECHAZADO'
 
-            // En pestaña Historial mostrar únicamente servicios concluidos
             if (filtroPestana === 'historial') return esHistorico
-            // Al buscar un término específico en la barra, permitir ver cualquier estado
             if (term) return true
-            // En pestañas de operación diaria no mostrar órdenes terminadas
             if (esHistorico) return false
 
             if (filtroPestana === 'citas') return item.esAgendado
@@ -565,7 +560,7 @@ export default function AdminDashboard() {
             if (filtroPestana === 'leads') return item.tipo === 'lead' && !item.esAgendado && !item.esRecoleccion
             return true
         })
-    }, [listaUnificada, busqueda, filtroPestana])
+    }, [listaUnificada, busqueda, filtroPestana, soloNoLeidos])
 
     const ticketSeleccionado = useMemo(() => {
         const clientTickets = ticketsBrutos.filter((t: any) => t.cliente?.telefono?.endsWith(telefonoRescate.slice(-10)))
@@ -591,11 +586,10 @@ export default function AdminDashboard() {
         if (cleanNum.length < 10) return alert('Ingresa un número válido')
         if (!mensajeRescate.trim() && !archivoAdjunto) return
 
-        // ⚠️ Validación de peso límite para videos o PDFs (límite Serverless Vercel: 4.5 MB)
         if (archivoAdjunto && !archivoAdjunto.type.startsWith('image/')) {
             const tamanoMB = archivoAdjunto.size / (1024 * 1024)
             if (tamanoMB > 4.2) {
-                return alert(`El archivo pesa ${tamanoMB.toFixed(1)} MB. Vercel limita las subidas a un máximo de 4.5 MB. Por favor comprime o recorta el video antes de enviarlo.`)
+                return alert(`El archivo pesa ${tamanoMB.toFixed(1)} MB. Vercel limita las subidas a un máximo de 4.5 MB.`)
             }
         }
 
@@ -603,13 +597,12 @@ export default function AdminDashboard() {
         try {
             let archivoListo = archivoAdjunto
 
-            // 🗜️ Si es foto pesada, la comprimimos automáticamente en el navegador
             if (archivoAdjunto && archivoAdjunto.type.startsWith('image/')) {
                 archivoListo = await comprimirImagen(archivoAdjunto)
                 const tamanoFinalMB = archivoListo.size / (1024 * 1024)
                 if (tamanoFinalMB > 4.4) {
                     setEnviandoRescate(false)
-                    return alert(`La imagen sigue pesando ${tamanoFinalMB.toFixed(1)} MB después de comprimir. Intenta con una captura o imagen más ligera.`)
+                    return alert(`La imagen sigue pesando ${tamanoFinalMB.toFixed(1)} MB después de comprimir.`)
                 }
             }
 
@@ -915,7 +908,7 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* 📊 BARRA KPIS OPERATIVOS (4 COLUMNAS LIMPIAS SIN CIFRAS FINANCIERAS EXPUESTAS) */}
+            {/* 📊 BARRA KPIS OPERATIVOS */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-zinc-900/40 border-b border-zinc-900 shrink-0">
                 <div onClick={() => setFiltroPestana('citas')} className={`cursor-pointer p-3.5 rounded-2xl border transition-all ${filtroPestana === 'citas' ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg' : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'}`}>
                     <div className="flex justify-between items-center text-[10px] sm:text-xs text-zinc-400 font-mono">
@@ -974,6 +967,16 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Botón Filtro No Leídos */}
+                    <button
+                        onClick={() => setSoloNoLeidos(!soloNoLeidos)}
+                        className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-colors border ${soloNoLeidos ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-zinc-800'}`}
+                        title="Filtrar solo chats sin responder"
+                    >
+                        <span>🟢</span>
+                        <span className="hidden md:inline">No Leídos</span>
+                    </button>
+
                     {seleccionados.length > 0 && (
                         <button onClick={handlePurgarLote} disabled={purgandoLote} className="bg-rose-950/60 hover:bg-rose-900 border border-rose-700 text-rose-300 text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 shadow-md">
                             🗑️ Purgar ({seleccionados.length})
@@ -1008,7 +1011,7 @@ export default function AdminDashboard() {
 
                 {listaFiltrada.length === 0 ? (
                     <div className="text-center py-16 text-zinc-600 font-mono text-xs">
-                        No hay registros en esta sección.
+                        No hay registros en esta sección o con ese filtro.
                     </div>
                 ) : (
                     listaFiltrada.map((item) => {
@@ -1017,7 +1020,7 @@ export default function AdminDashboard() {
                         return (
                             <div
                                 key={item.id}
-                                onClick={() => handleSeleccionarChat(item.telefono, item.ultimoMensaje?.createdAt)}
+                                onClick={() => handleSeleccionarChat(item.telefono, item.clienteId)}
                                 className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${estaSeleccionado
                                     ? 'bg-zinc-900 border-emerald-500/80 shadow-lg'
                                     : item.requiereAtencion
@@ -1046,13 +1049,9 @@ export default function AdminDashboard() {
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="font-bold text-sm text-white">{item.nombre}</h3>
-
-                                            {item.requiereAtencion && (
-                                                <span className="text-[9px] bg-rose-500/20 text-rose-400 border border-rose-500/50 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
-                                                    NUEVO
-                                                </span>
-                                            )}
+                                            <h3 className={`text-sm text-white ${item.requiereAtencion ? 'font-black' : 'font-semibold'}`}>
+                                                {item.nombre}
+                                            </h3>
 
                                             {!item.botActivo && !item.requiereAtencion && (
                                                 <span className="text-[9px] bg-rose-500/10 text-rose-500/60 border border-rose-500/20 px-1.5 py-0.5 rounded font-mono font-bold">
@@ -1182,7 +1181,6 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="p-5 space-y-5 overflow-y-auto">
-                            {/* Tarjetas de métricas financieras */}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40">
                                     <p className="text-[10px] font-mono text-emerald-400 uppercase">Ingresos del Mes</p>
@@ -1206,7 +1204,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* Desglose de órdenes entregadas en el mes */}
                             <div>
                                 <h4 className="text-xs font-mono font-bold text-zinc-400 uppercase mb-2.5">
                                     Desglose de Servicios Entregados ({finanzasMes.ordenes.length})
@@ -1222,7 +1219,7 @@ export default function AdminDashboard() {
                                                 key={ord.id}
                                                 onClick={() => {
                                                     setModalFinanzasAbierto(false)
-                                                    handleSeleccionarChat(ord.telefono, ord.ultimoMensaje?.createdAt)
+                                                    handleSeleccionarChat(ord.telefono, ord.clienteId)
                                                 }}
                                                 className="p-3 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/80 flex items-center justify-between gap-3 cursor-pointer transition-colors"
                                             >

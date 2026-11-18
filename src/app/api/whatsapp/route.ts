@@ -103,7 +103,6 @@ async function dispararAlertaInmediata(telefono: string, estatus: string, detall
                         where: { id: cliente.id },
                         data: { googleChatThreadId: threadIdCorto }
                     });
-                    console.log(`🚀 [NEON CRITICAL SUCCESS]: Hilo nativo '${threadIdCorto}' guardado para ${cliente.telefono}`);
                 }
             }
         }
@@ -116,8 +115,15 @@ async function registrarEnPrismaDB(telefono: string, nombre: string, mensaje: st
     try {
         return await prisma.cliente.upsert({
             where: { telefono: telefono },
-            update: { nombre: nombre !== 'Desconocido' && nombre !== 'Cliente WhatsApp' ? nombre : undefined },
-            create: { telefono: telefono, nombre: nombre }
+            update: {
+                nombre: nombre !== 'Desconocido' && nombre !== 'Cliente WhatsApp' ? nombre : undefined,
+                ultimaActividad: new Date()
+            },
+            create: {
+                telefono: telefono,
+                nombre: nombre,
+                ultimaActividad: new Date()
+            }
         })
     } catch (error: any) {
         console.error('🔴 [PRISMA ERROR]:', error.message)
@@ -171,8 +177,6 @@ async function registrarHistorialEnHoja1(telefono: string, mensaje: string, resp
         const filasExistentes = respuestaHoja.data.values || []
         const filasConDatos = filasExistentes.filter(row => row && row.length > 0 && String(row[0] || '').trim() !== '')
         const numeroFilaDestino = filasConDatos.length + 1
-
-        console.log(`📊 [GOOGLE SHEETS HOJA1]: Escribiendo mensaje en fila libre real ${numeroFilaDestino}...`)
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
@@ -307,14 +311,10 @@ async function procesarCitaEnCalendar(telefono: string, fechaIso: string, mensaj
         })
         return { exitoso: true, eventId: nuevoEvento.data.id, yaExistia: false }
     } catch (error: any) {
-        console.error('🔴 [CALENDAR CRITICAL ERROR]:', error.message);
         return { exitoso: false, motivo: 'error' }
     }
 }
 
-// =========================================================================
-// 🧠 MOTOR DE INTELIGENCIA ARTIFICIAL HÍBRIDO (B2B / B2C)
-// =========================================================================
 async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     const textoNormalizado = mensajeCliente.trim().toLowerCase()
     const textoSinAcentos = textoNormalizado.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -346,8 +346,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                     systemInstruction: `Eres el Asistente Comercial de IA de Soltec B2B en WhatsApp. Tu único objetivo es calificar de manera ejecutiva a encargados de PYMEs para agendar una sesión de consultoría técnica en Google Meet con el Ingeniero Julio. 
                     📅 HOY ES: ${fechaHoyB2B}.
                     Recopila con mucha amabilidad pero de forma directa: Nombre Completo del contacto, Nombre de la Empresa y la Cantidad aproximada de equipos informáticos a cubrir.
-                    Enlace oficial de la agenda corporativa: https://calendar.app.google/fWjMnrSUUC5cB3BJA (Proporciona el enlace de citas del Ingeniero Julio).
-                    ⚠️ OBLIGATORIO: En el preciso instante en que le proporciones el link de la agenda, DEBES concatenar al final del mensaje de forma estricta y literal la siguiente etiqueta estructurada de datos en una sola línea sin espacios extras: [DATA_LEAD_B2B]:Nombre Completo|Nombre Empresa|CantidadEquipos`
+                    Enlace oficial de la agenda corporativa: https://calendar.app.google/fWjMnrSUUC5cB3BJA 
+                    ⚠️ OBLIGATORIO: En el preciso instante en que le proporciones el link de la agenda, DEBES concatenar al final del mensaje de forma estricta y literal la siguiente etiqueta estructurada: [DATA_LEAD_B2B]:Nombre Completo|Nombre Empresa|CantidadEquipos`
                 }
             });
 
@@ -386,8 +386,18 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
                 await prisma.cliente.upsert({
                     where: { telefono: telefono10Digitos },
-                    update: { atendidoPorBot: false },
-                    create: { telefono: telefono10Digitos, nombre: nombreB2B, atendidoPorBot: false }
+                    update: {
+                        atendidoPorBot: false,
+                        ultimaActividad: new Date(),
+                        tieneMensajesSinLeer: true
+                    },
+                    create: {
+                        telefono: telefono10Digitos,
+                        nombre: nombreB2B,
+                        atendidoPorBot: false,
+                        ultimaActividad: new Date(),
+                        tieneMensajesSinLeer: true
+                    }
                 });
             }
 
@@ -401,9 +411,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // 🎮 MÓDULO B2C PARTICULARES (SISTEMA DE TALLER OPERATIVO)
-    // -------------------------------------------------------------------------
     let ticketMasReciente: any = null
     let clientePrisma: any = null
 
@@ -432,8 +439,8 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
 
             const clienteExpress = await prisma.cliente.upsert({
                 where: { telefono: telefono10Digitos },
-                update: { atendidoPorBot: false },
-                create: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: false }
+                update: { atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true },
+                create: { telefono: telefono10Digitos, nombre: 'Cliente WhatsApp', atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
             })
 
             let clienteIdParaTicket = clienteExpress.id
@@ -461,7 +468,7 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 })
             }
 
-            const mensajeConexion = `⚡ *SISTEMA SOLTECOT REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se conectará a tu equipo en un lapso de *15 a 30 minutos* vía *Google Remote Desktop*.\n\n💻 *Por favor, deja tu computadora encendida y no cierres la ventana del navegador.*\n\n⚠️ *Nota de Seguridad:* Si durante la sesión tu pantalla se oscurece y Windows/Mac te pide permiso para hacer cambios (ventana de administrador), yo no podré hacer clic remotamente. Te pediré que tú mismo presiones "Sí" o "Permitir" cuando aparezca.`
+            const mensajeConexion = `⚡ *SISTEMA SOLTECOT REMOTO* ⚡\n\n¡Código de acceso recibido con éxito!\n\n🎫 *Folio Asignado:* ${ticketActivo.numeroOrden}\n🔬 *Estatus en Taller:* EN REPARACIÓN\n\nEl Ingeniero Julio ha recibido la alerta en el Centro de Control y se conectará a tu equipo en un lapso de *15 a 30 minutos* vía *Google Remote Desktop*.\n\n💻 *Por favor, deja tu computadora encendida y no cierres la ventana del navegador.*`
 
             await enviarMensajeWhatsApp(numeroCliente, mensajeConexion)
 
@@ -505,7 +512,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 return
             }
         }
-
     } catch (dbError: any) {
         console.error('🔴 Error al validar escudos en el webhook:', dbError.message)
     }
@@ -513,8 +519,6 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
     let historial = MEMORIA_CHAT.get(numeroCliente) || []
 
     if (historial.length === 0 && clientePrisma) {
-        console.log(`🧠 [CONTEXT RECOVERY]: Instancia serverless nueva detectada. Buscando memoria en Neon DB para ${telefono10Digitos}`);
-
         try {
             const mensajesAnteriores = await prisma.mensaje.findMany({
                 where: { clienteId: clientePrisma.id },
@@ -582,20 +586,9 @@ async function ejecutarLogicaIA(mensajeCliente: string, numeroCliente: string) {
                 return `• Del ${inicio} al ${fin} (Motivo: ${b.motivo || 'Fuera de laboratorio / Actividades externas'})`;
             }).join('\n');
 
-            instruccionesCalendario = `
-🚨 INSTRUCCIÓN ESTRICTA DE DÍAS INACTIVOS Y VACACIONES (OUT OF OFFICE):
-El laboratorio físico NO estará recibiendo equipos en las siguientes fechas:
-${listaFechas}
-
-REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
-1. Si el cliente solicita agendar una Visita dentro de esos rangos, discúlpate AMABLEMENTE y explica el motivo.
-2. NUNCA emitas etiquetas de confirmación de agenda para esas fechas inactivas. 
-3. Puedes sugerirle realizar el envío por paquetería (para recibirlo a la vuelta) o esperar al primer día hábil.
-`;
+            instruccionesCalendario = `🚨 INSTRUCCIÓN DE DÍAS INACTIVOS: El laboratorio NO recibe equipos en estas fechas:\n${listaFechas}`;
         }
-    } catch (errBloqueos) {
-        console.error('🔴 Error consultando bloqueos de agenda en Neon:', errBloqueos);
-    }
+    } catch (errBloqueos) { }
 
     const MAX_REINTENTOS = 3
     let respuestaRaw = ''
@@ -621,7 +614,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
 
             const promocionEnviosActiva = await verificarPromocionEnviosActiva();
 
-            // Consultar catálogo dinámico de servicios
             const [serviciosActivos, configTaller] = await Promise.all([
                 prisma.servicioCatalogo.findMany({
                     where: { activo: true },
@@ -664,7 +656,10 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             console.error(`🔴 [GEMINI REINTENTO ${intento}/3 FALLÓ]:`, error.message)
             if (intento === MAX_REINTENTOS) {
                 if (clientePrisma?.id) {
-                    await prisma.cliente.update({ where: { id: clientePrisma.id }, data: { atendidoPorBot: false } })
+                    await prisma.cliente.update({
+                        where: { id: clientePrisma.id },
+                        data: { atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
+                    })
                 }
                 await dispararAlertaInmediata(telefono10Digitos, '🚨 FALLA TÉCNICA IA', `El motor de IA sufrió una anomalía.`)
                 return
@@ -683,7 +678,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         const matchCrm = respuestaRaw.match(/\[DATA_CRM\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_?_?DATOS_CRM_?_?:\s*([^\n\r]+)/i)
         const matchFiscal = respuestaRaw.match(/\[DATA_FISCAL\]:\s*([^\n\r]+)/i) || respuestaRaw.match(/_*DATOS_FISCAL(ES)?_*:\s*([^\n\r]+)/i)
 
-        // 🖼️ Detección de Infografía para el Embudo Inteligente
         const debeEnviarFlyer = respuestaRaw.includes('__ENVIAR_FLYER__');
 
         let respuestaWhatsApp = respuestaRaw
@@ -739,8 +733,8 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
         if (matchAgente) {
             const clienteActualizado = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
-                update: { atendidoPorBot: false },
-                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                update: { atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true },
+                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
             })
 
             estatusLead = 'REVISION_MANUAL'
@@ -781,9 +775,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             tipoSoporteCalculado = 'Reparación Física'
         }
 
-        // =========================================================================
-        // 🎯 PROCESAMIENTO Y REGISTRO DIRECTO DE VISITA EN LABORATORIO
-        // =========================================================================
         if (matchVisita) {
             const fechaExtraida = matchVisita[1].trim()
             const fechaParseada = new Date(fechaExtraida)
@@ -801,8 +792,8 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
 
                         const clienteDb = await prisma.cliente.upsert({
                             where: { telefono: telefonoParaCita },
-                            update: { nombre: nombreCrm, atendidoPorBot: false },
-                            create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                            update: { nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true },
+                            create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
                         });
 
                         const tagIso = `[ISO_DATE: ${fechaExtraida}]`
@@ -837,8 +828,8 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                 } else {
                     const clienteDb = await prisma.cliente.upsert({
                         where: { telefono: telefonoParaCita },
-                        update: { nombre: nombreCrm, atendidoPorBot: false },
-                        create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                        update: { nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true },
+                        create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
                     });
 
                     await prisma.ticket.upsert({
@@ -874,16 +865,13 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             }
         }
 
-        // =========================================================================
-        // 📦 PROCESAMIENTO Y REGISTRO DIRECTO DE GUÍA PAQUETEXPRESS
-        // =========================================================================
         if (matchGuiaEnvio) {
             const datosGuiaExtraidos = matchGuiaEnvio[1].trim()
 
             const clienteDb = await prisma.cliente.upsert({
                 where: { telefono: telefonoParaCita },
-                update: { nombre: nombreCrm, atendidoPorBot: false },
-                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false }
+                update: { nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true },
+                create: { telefono: telefonoParaCita, nombre: nombreCrm, atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
             });
 
             const notasConEtiquetaLogistica = `[RECOLECCION] [GUIA PENDIENTE] Datos de envío extraídos: ${datosGuiaExtraidos}`
@@ -941,13 +929,13 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
                         type: 'image',
                         image: {
                             link: urlFlyer,
-                            caption: respuestaWhatsApp // El texto de la IA se envía como pie de foto
+                            caption: respuestaWhatsApp
                         }
                     })
                 })
                 enviadoConImagen = resImg.ok
             } catch (e) {
-                console.error('⚠️ Error enviando flyer visual, usando respaldo de texto:', e)
+                console.error('⚠️ Error enviando flyer visual:', e)
             }
         }
 
@@ -955,16 +943,21 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
             await enviarMensajeWhatsApp(numeroCliente, respuestaWhatsApp)
         }
 
-        // 🎯 CÁLCULO DE FINANZAS Y REGISTRO EN CRM
-        const codigoFolio = ticketMasReciente?.numeroOrden || `LEAD-${telefonoParaCita}`
-        const compendioFalla = `${dispositivoCrm} / ${fallaCrm}`
-
+        // 🟢 AQUÍ APAGAMOS EL PUNTITO VERDE PORQUE LA IA YA CONTESTÓ
         try {
             const clienteFresco = await prisma.cliente.findFirst({
                 where: { telefono: { endsWith: telefono10Digitos } }
             });
 
             if (clienteFresco?.id) {
+                await prisma.cliente.update({
+                    where: { id: clienteFresco.id },
+                    data: {
+                        ultimaActividad: new Date(),
+                        tieneMensajesSinLeer: false // Apagamos alerta si la IA se encargó
+                    }
+                });
+
                 await prisma.mensaje.create({
                     data: { texto: mensajeCliente, origen: 'CLIENTE', clienteId: clienteFresco.id }
                 });
@@ -993,7 +986,6 @@ REGLAS OBLIGATORIAS DE ATENCIÓN EN DÍAS BLOQUEADOS:
 
         const estatusSatCalculado = reqFactura === 'SI' ? 'PENDIENTE TIMBRADO' : 'NO REQUIERE'
 
-        // 📊 ESCRITURA EN GOOGLE SHEETS
         await registrarHistorialEnHoja1(telefonoParaCita, mensajeCliente, respuestaWhatsApp, estatusLead, nombreCrm, dispositivoCrm, fallaCrm)
         await registrarFinanzasEnFacturacion(
             codigoFolio, telefonoParaCita, nombreCrm, tipoSoporteCalculado, compendioFalla, estatusLead,
@@ -1020,7 +1012,6 @@ export async function GET(req: Request) {
 
         if (mode && token) {
             if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-                console.log('✅ [META WEBHOOK]: Conexión y Token validados con éxito.');
                 return new Response(challenge, { status: 200 })
             } else {
                 return new Response('Forbidden', { status: 403 })
@@ -1068,7 +1059,6 @@ export async function POST(req: Request) {
                 await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS "WebhookLog" ("id" TEXT PRIMARY KEY, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
                 await prisma.$executeRaw`INSERT INTO "WebhookLog" ("id") VALUES (${messageId});`
             } catch (error) {
-                console.log(`♻️ [DEDUPLICADOR CENTRALIZADO]: Clon en paralelo interceptado para el mensaje ID: ${messageId}. Abortando con 200 OK.`)
                 return new Response('Retry Ignorado por Concurrencia', { status: 200 })
             }
         }
@@ -1080,8 +1070,6 @@ export async function POST(req: Request) {
         }
 
         if (mensajeCliente && numeroCliente) {
-            console.log(`📥 [WEBHOOK RECIBIDO]: De: ${numeroCliente} | Tipo: ${message.type} | Texto: "${mensajeCliente}"`)
-
             const telefonoLimpio = numeroCliente.replace(/[^0-9]/g, '')
             const telefono10Digitos = telefonoLimpio.slice(-10)
             const textoNormalizado = mensajeCliente.trim().toLowerCase()
@@ -1096,37 +1084,42 @@ export async function POST(req: Request) {
                 }
             })
 
+            // 🟢 REGISTRAMOS EL MENSAJE COMO "SIN LEER" DESDE QUE ENTRA
             if (!cliente) {
                 cliente = await prisma.cliente.create({
                     data: {
                         telefono: telefono10Digitos,
                         nombre: 'Cliente WhatsApp',
-                        atendidoPorBot: true
+                        atendidoPorBot: true,
+                        ultimaActividad: new Date(),
+                        tieneMensajesSinLeer: true
                     }
                 })
-                console.log(`👤 [NUEVO CLIENTE]: Registrado en Neon con teléfono ${telefono10Digitos}`)
+            } else {
+                cliente = await prisma.cliente.update({
+                    where: { id: cliente.id },
+                    data: {
+                        ultimaActividad: new Date(),
+                        tieneMensajesSinLeer: true
+                    }
+                })
             }
 
             // ====================================================================
-            // 🛑 RESETEO MANUAL ADMIN (COMANDO SECRETO)
+            // 🛑 RESETEO NUCLEAR ADMIN (COMANDO SECRETO)
             // ====================================================================
             if (textoNormalizado === 'kanzer1986') {
-                // 1. Borramos la memoria RAM efímera
                 if (typeof MEMORIA_CHAT !== 'undefined') {
                     MEMORIA_CHAT.delete(numeroCliente)
                     MEMORIA_CHAT.delete(`B2B_${numeroCliente}`)
                 }
 
-                // 2. Aniquilación total del rastro en Neon DB
                 await prisma.mensaje.deleteMany({ where: { clienteId: cliente.id } });
                 await prisma.cita.deleteMany({ where: { telefono: cliente.telefono } });
                 await prisma.ticket.deleteMany({ where: { clienteId: cliente.id } });
                 await prisma.cliente.delete({ where: { id: cliente.id } });
 
-                // 3. Notificación de éxito
                 await enviarMensajeWhatsApp(numeroCliente, "🧨 [SISTEMA]: Hard Reset ejecutado. Historial, tickets y perfil destruidos. Eres un cliente nuevo.");
-                console.log(`🧼 [HARD RESET SUCCESS]: Perfil de ${telefono10Digitos} purgado por completo de la base de datos.`);
-
                 return new Response('Bot reseteado nuclearmente', { status: 200 })
             }
 
@@ -1140,7 +1133,7 @@ export async function POST(req: Request) {
             if (esAunMeInteresa) {
                 await prisma.cliente.update({
                     where: { id: cliente.id },
-                    data: { atendidoPorBot: true }
+                    data: { atendidoPorBot: true, ultimaActividad: new Date(), tieneMensajesSinLeer: false }
                 });
 
                 await prisma.ticket.updateMany({
@@ -1183,9 +1176,9 @@ export async function POST(req: Request) {
                 await prisma.ticket.deleteMany({ where: { clienteId: cliente.id } });
                 await prisma.cliente.delete({ where: { id: cliente.id } });
 
-                console.log(`🧼 [PURGA TOTAL SUCCESS]: Cliente ${cliente.telefono} purgado por completo tras presionar 'Ya lo resolví'.`);
                 return new Response('Purga procesada', { status: 200 });
             }
+
             // ====================================================================
             // 🚪 OPT-OUT CLIENTE GENÉRICO ("YA NO", "NO GRACIAS")
             // ====================================================================
@@ -1212,7 +1205,6 @@ export async function POST(req: Request) {
                 const mensajeDespedida = "¡Entendido! Hemos cerrado tu solicitud actual. Si algún día vuelves a necesitar ayuda con tus equipos, aquí estaremos con mucho gusto. ¡Que tengas un excelente día! 👋";
                 await enviarMensajeWhatsApp(numeroCliente, mensajeDespedida);
 
-                console.log(`🧼 [OPT-OUT SUCCESS]: Ticket de cliente ${telefono10Digitos} cerrado.`);
                 return new Response('Opt-out procesado con éxito', { status: 200 });
             }
 
@@ -1227,7 +1219,7 @@ export async function POST(req: Request) {
             if (esBotonReactivacion) {
                 await prisma.cliente.update({
                     where: { id: cliente.id },
-                    data: { atendidoPorBot: false }
+                    data: { atendidoPorBot: false, ultimaActividad: new Date(), tieneMensajesSinLeer: true }
                 });
 
                 await prisma.mensaje.create({
@@ -1271,12 +1263,9 @@ export async function POST(req: Request) {
                         botActivo: true
                     }
                 })
-                console.log(`🎯 [AUTO-LEAD CREADO]: Ficha LEAD-${telefono10Digitos} inyectada en la Bandeja de Leads.`)
             }
 
             if (cliente.atendidoPorBot === false) {
-                console.log(`👤 [HUMAN TAKEOVER]: Bot silenciado para ${telefono10Digitos}. Registrando mensaje...`)
-
                 await prisma.mensaje.create({
                     data: {
                         texto: mensajeCliente,
@@ -1304,9 +1293,6 @@ export async function POST(req: Request) {
     }
 }
 
-// =========================================================================
-// 📊 FUNCIONES DE EXTRACCIÓN Y ANALÍTICA B2B
-// =========================================================================
 function calcularServicioDeMensaje(textoSinAcentos: string): string {
     if (textoSinAcentos.includes("soporte tecnico") || textoSinAcentos.includes("soporte")) return "Pólizas de Soporte";
     if (textoSinAcentos.includes("infraestructura") || textoSinAcentos.includes("redes")) return "Infraestructura y Redes";
@@ -1321,6 +1307,8 @@ async function registrarAnaliticaB2BEnSheets(telefono: string, nombre: string, e
         if (!sheetId) return;
 
         const auth = obtenerAuthGoogle(['https://www.googleapis.com/auth/spreadsheets']);
+        if (!auth) return;
+
         const sheets = google.sheets({ version: 'v4', auth });
 
         const fechaHoy = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -1332,7 +1320,6 @@ async function registrarAnaliticaB2BEnSheets(telefono: string, nombre: string, e
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [filaDatos] }
         });
-        console.log(`📊 [ANALYTICS B2B]: Fila indexada con éxito para la empresa: ${empresa}`);
     } catch (e: any) {
         console.error("🔴 Error al escribir analítica B2B en Sheets:", e.message);
     }
