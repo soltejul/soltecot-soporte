@@ -400,8 +400,19 @@ export async function PATCH(request: Request) {
             direccionRecoleccion,
             fechaCita,
             fechaIso,
-            fechaAgendada
+            fechaAgendada,
+            clienteId,      // 👈 Nuevo campo de ChatPanel
+            nuevoNombre     // 👈 Nuevo campo de ChatPanel
         } = body
+
+        // ✅ NUEVA LÓGICA: Esto debe ir ANTES del if (!ticketId)
+        if (nuevoNombre && clienteId) {
+            await prisma.cliente.update({
+                where: { id: clienteId },
+                data: { nombre: nuevoNombre.trim() }
+            })
+            return NextResponse.json({ success: true, message: 'Nombre actualizado' })
+        }
 
         if (!ticketId) return NextResponse.json({ error: 'Ticket ID requerido' }, { status: 400 })
 

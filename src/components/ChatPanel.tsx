@@ -131,7 +131,10 @@ export default function ChatPanel({
 
     // Función para inyectar el nuevo nombre a Neon DB
     const handleGuardarNombre = async () => {
-        const clienteIdActual = ticketSeleccionado?.clienteId || itemSeleccionadoActual?.clienteId
+        // 1. Ampliamos la búsqueda del ID para que funcione tanto en Tickets como en Leads
+        const clienteIdActual = ticketSeleccionado?.clienteId || itemSeleccionadoActual?.clienteId || itemSeleccionadoActual?.id
+        const ticketIdActual = ticketSeleccionado?.id || itemSeleccionadoActual?.ticketOriginal?.id || itemSeleccionadoActual?.id
+
         const nombreOriginal = ticketSeleccionado?.cliente?.nombre || itemSeleccionadoActual?.nombre || ''
 
         if (!nuevoNombre.trim() || nuevoNombre.trim() === nombreOriginal || !clienteIdActual) {
@@ -146,6 +149,7 @@ export default function ChatPanel({
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ticketId: ticketIdActual, // 👈 Se agrega para evitar el error 400 Bad Request
                     clienteId: clienteIdActual,
                     nuevoNombre: nuevoNombre.trim()
                 })
