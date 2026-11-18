@@ -995,23 +995,23 @@ export default function AdminDashboard() {
             </div>
 
             {/* 📋 VISTA EN LISTA DE CLIENTES Y ORDENES */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 px-2 font-mono">
-                    <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-zinc-500 px-1 sm:px-2 font-mono pb-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                             type="checkbox"
                             checked={seleccionados.length > 0 && seleccionados.length === listaFiltrada.length}
                             onChange={toggleSeleccionarTodo}
                             className="rounded border-zinc-800 bg-zinc-900 accent-emerald-500"
                         />
-                        <span>Seleccionar todos</span>
+                        <span>Selec. Todos</span>
                     </label>
-                    <span>{listaFiltrada.length} registros</span>
+                    <span>{listaFiltrada.length} regs</span>
                 </div>
 
                 {listaFiltrada.length === 0 ? (
-                    <div className="text-center py-16 text-zinc-600 font-mono text-xs">
-                        No hay registros en esta sección o con ese filtro.
+                    <div className="text-center py-12 text-zinc-600 font-mono text-[11px] sm:text-xs">
+                        No hay registros con este filtro.
                     </div>
                 ) : (
                     listaFiltrada.map((item) => {
@@ -1021,93 +1021,102 @@ export default function AdminDashboard() {
                             <div
                                 key={item.id}
                                 onClick={() => handleSeleccionarChat(item.telefono, item.clienteId)}
-                                className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${estaSeleccionado
-                                    ? 'bg-zinc-900 border-emerald-500/80 shadow-lg'
+                                className={`p-2.5 sm:p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 shadow-sm ${estaSeleccionado
+                                    ? 'bg-zinc-900 border-emerald-500/80 shadow-emerald-900/20'
                                     : item.requiereAtencion
-                                        ? 'bg-rose-950/20 border-rose-500/60 hover:bg-rose-950/40 shadow-[0_0_15px_rgba(225,29,72,0.2)]'
-                                        : 'bg-zinc-950/60 border-zinc-900 hover:border-zinc-800 hover:bg-zinc-900/40'
+                                        ? 'bg-rose-950/20 border-rose-500/50 hover:bg-rose-950/40 shadow-rose-900/10'
+                                        : 'bg-zinc-950/60 border-zinc-900 hover:border-zinc-800'
                                     }`}
                             >
-                                <div className="flex items-center gap-3 w-full sm:w-auto min-w-[220px]">
-                                    <input
-                                        type="checkbox"
-                                        checked={seleccionados.includes(item.id)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onChange={() => toggleSeleccion(item.id)}
-                                        className="rounded border-zinc-800 bg-zinc-900 accent-emerald-500 shrink-0"
-                                    />
-                                    <div className="relative">
-                                        <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-emerald-400 font-mono shrink-0">
-                                            {item.nombre?.slice(0, 2).toUpperCase() || 'WA'}
-                                        </div>
-                                        {item.requiereAtencion && (
-                                            <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500 border-2 border-zinc-900"></span>
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className={`text-sm text-white ${item.requiereAtencion ? 'font-black' : 'font-semibold'}`}>
-                                                {item.nombre}
-                                            </h3>
-
-                                            {!item.botActivo && !item.requiereAtencion && (
-                                                <span className="text-[9px] bg-rose-500/10 text-rose-500/60 border border-rose-500/20 px-1.5 py-0.5 rounded font-mono font-bold">
-                                                    MANUAL
+                                {/* FILA 1: Checkbox, Avatar, Nombre, Etiquetas y Fecha Cita */}
+                                <div className="flex items-start sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <input
+                                            type="checkbox"
+                                            checked={seleccionados.includes(item.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={() => toggleSeleccion(item.id)}
+                                            className="rounded border-zinc-800 bg-zinc-900 accent-emerald-500 shrink-0"
+                                        />
+                                        <div className="relative shrink-0">
+                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-emerald-400 font-mono text-xs sm:text-sm">
+                                                {item.nombre?.slice(0, 2).toUpperCase() || 'WA'}
+                                            </div>
+                                            {item.requiereAtencion && (
+                                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-zinc-900"></span>
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-zinc-400 font-mono">📱 {item.telefono}</p>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <h3 className={`text-xs sm:text-sm text-white truncate ${item.requiereAtencion ? 'font-black' : 'font-semibold'}`}>
+                                                    {item.nombre}
+                                                </h3>
+                                                {!item.botActivo && !item.requiereAtencion && (
+                                                    <span className="text-[8px] bg-rose-500/10 text-rose-500/60 border border-rose-500/20 px-1 py-0.5 rounded font-mono font-bold shrink-0">
+                                                        MANUAL
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[10px] text-zinc-400 font-mono mt-0.5">📱 {item.telefono}</p>
+                                        </div>
                                     </div>
+
+                                    {/* Fecha de cita (si existe) movida arriba a la derecha en móvil */}
+                                    {item.fechaCitaFormateada && (
+                                        <span className="shrink-0 bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-md flex items-center gap-1">
+                                            <span>📅</span>
+                                            <span className="hidden sm:inline">{item.fechaCitaFormateada}</span>
+                                            <span className="sm:hidden">{item.fechaCitaFormateada.split('|')[0]}</span>
+                                        </span>
+                                    )}
                                 </div>
 
-                                <div className="flex-1 w-full sm:w-auto min-w-[180px]">
-                                    <p className="text-xs text-zinc-300 font-semibold truncate">💻 {item.equipo}</p>
-                                    <p className={`text-[11px] truncate ${item.requiereAtencion ? 'text-white font-medium italic' : 'text-zinc-500'}`}>
+                                {/* FILA 2: Equipo y Último mensaje (Ocupa el ancho completo) */}
+                                <div className="pl-0 sm:pl-[3.25rem] w-full">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] sm:text-xs text-zinc-300 font-semibold truncate flex-1">💻 {item.equipo}</p>
+                                        {/* Costo (si está entregado) movido junto al equipo */}
+                                        {item.estadoTaller === 'ENTREGADO' && (
+                                            <span className="text-[10px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0">
+                                                💰 ${Number(item.costoReparacion || 0).toLocaleString('es-MX')}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className={`text-[10px] sm:text-[11px] truncate mt-0.5 line-clamp-1 ${item.requiereAtencion ? 'text-white font-medium italic' : 'text-zinc-500'}`}>
                                         {item.requiereAtencion && item.ultimoMensaje?.texto
                                             ? `💬 ${item.ultimoMensaje.texto}`
                                             : item.falla}
                                     </p>
                                 </div>
 
-                                <div className="flex items-center gap-2 flex-wrap sm:justify-end w-full sm:w-auto pt-2 sm:pt-0 border-t border-zinc-900 sm:border-0 mt-2 sm:mt-0">
-                                    {item.fechaCitaFormateada && (
-                                        <span className="bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 text-[11px] font-mono font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-md shadow-emerald-950/40 whitespace-nowrap">
-                                            <span>📅</span>
-                                            <span>{item.fechaCitaFormateada}</span>
-                                        </span>
-                                    )}
-
-                                    {item.esEnvioPaqueteria ? (
-                                        <span className="bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">
-                                            📦 PAQUETEXPRESS
-                                        </span>
-                                    ) : item.esRecoleccion ? (
-                                        <span className="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">
-                                            🚚 RECOLECCIÓN LOCAL
-                                        </span>
-                                    ) : item.esAgendado ? (
-                                        <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">
-                                            📍 CITA TALLER
-                                        </span>
-                                    ) : (
-                                        <span className={`text-[10px] font-mono uppercase px-2.5 py-1 rounded-lg whitespace-nowrap ${item.estadoTaller === 'ENTREGADO' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' :
-                                            item.estadoTaller === 'RECHAZADO' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold' :
-                                                'text-zinc-500 bg-zinc-900 border border-zinc-800'
-                                            }`}>
-                                            {item.estadoTaller?.replace(/_/g, ' ') || 'PROSPECTO'}
-                                        </span>
-                                    )}
-
-                                    {item.estadoTaller === 'ENTREGADO' && (
-                                        <span className="text-[11px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/80 px-2 py-1 rounded-lg font-mono font-bold whitespace-nowrap">
-                                            💰 ${Number(item.costoReparacion || 0).toLocaleString('es-MX')}
-                                        </span>
-                                    )}
-
-                                    <span className="text-xs font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800">
+                                {/* FILA 3: Badges de Estado y Folio (Alineados abajo) */}
+                                <div className="flex items-center justify-between pt-1.5 sm:pt-2 border-t border-zinc-900/50 mt-1 pl-0 sm:pl-[3.25rem]">
+                                    <div className="flex gap-1.5">
+                                        {item.esEnvioPaqueteria ? (
+                                            <span className="bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase">
+                                                PAQUETEXPRESS
+                                            </span>
+                                        ) : item.esRecoleccion ? (
+                                            <span className="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase">
+                                                RECOLECCIÓN
+                                            </span>
+                                        ) : item.esAgendado ? (
+                                            <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase">
+                                                CITA TALLER
+                                            </span>
+                                        ) : (
+                                            <span className={`text-[8px] sm:text-[9px] font-mono uppercase px-1.5 py-0.5 rounded ${item.estadoTaller === 'ENTREGADO' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' :
+                                                item.estadoTaller === 'RECHAZADO' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold' :
+                                                    'text-zinc-500 bg-zinc-900 border border-zinc-800'
+                                                }`}>
+                                                {item.estadoTaller?.replace(/_/g, ' ') || 'PROSPECTO'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500">
                                         {item.folio}
                                     </span>
                                 </div>
