@@ -852,11 +852,11 @@ export default function GamepadTester() {
         if (!ticketSeleccionado) return alert('Por favor selecciona una orden SOL-XXXX activa.')
 
         const bloqueAntes = snapshotAntes
-            ? `\n- ANTES (${snapshotAntes.hora}): L3 Drift ${snapshotAntes.driftL}% / Circ ${snapshotAntes.errCirc}% | R3 Drift ${snapshotAntes.driftR}% / Circ ${snapshotAntes.errCircR}%`
+            ? `\n- ANTES (${snapshotAntes.hora}): L3 Drift ${snapshotAntes.driftL}% / Circ ${snapshotAntes.errCircL}% | R3 Drift ${snapshotAntes.driftR}% / Circ ${snapshotAntes.errCircR}%`
             : ''
 
         const bloqueDespues = snapshotDespues
-            ? `\n- DESPUÉS (${snapshotDespues.hora}): L3 Drift ${snapshotDespues.driftL}% / Circ ${snapshotDespues.errCirc}% | R3 Drift ${snapshotDespues.driftR}% / Circ ${snapshotDespues.errCircR}%`
+            ? `\n- DESPUÉS (${snapshotDespues.hora}): L3 Drift ${snapshotDespues.driftL}% / Circ ${snapshotDespues.errCircL}% | R3 Drift ${snapshotDespues.driftR}% / Circ ${snapshotDespues.errCircR}%`
             : ''
 
         const pollingTexto = (snapshotDespues?.pollingHz || snapshotAntes?.pollingHz || pollingStats.hz)
@@ -875,8 +875,8 @@ export default function GamepadTester() {
         const reporte = `[REPORTE TÉCNICO DE GAMEPAD Y CALIBRACIÓN]:
 - Mando: ${gamepadNombre || 'Mando Estándar'}
 - Polling Rate USB/BT: ${pollingTexto}${bloqueAntes}${bloqueDespues}
-- Lectura Final L3: Drift Centro = ${statsL.driftCentro}% | Error Circularidad = ${statsL.errCirc}%
-- Lectura Final R3: Drift Centro = ${statsR.driftCentro}% | Error Circularidad = ${statsR.errCirc}%
+- Lectura Final L3: Drift Centro = ${statsL.driftCentro}% | Error Circularidad = ${statsL.errCircL}%
+- Lectura Final R3: Drift Centro = ${statsR.driftCentro}% | Error Circularidad = ${statsR.errCircR}%
 - Calibración Hardware Chip: ${infoHardwareCalib}
 - Prueba de Botones, Gatillos y Vibración: Verificada`
 
