@@ -3,12 +3,24 @@ import { prisma } from '../../../../lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.NEXT_PUBLIC_WHATSAPP_TOKEN || ''
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID || ''
+const WHATSAPP_TOKEN = (
+    process.env.WHATSAPP_TOKEN ||
+    process.env.NEXT_PUBLIC_WHATSAPP_TOKEN ||
+    process.env.META_TOKEN ||
+    ''
+).trim()
+
+const PHONE_NUMBER_ID = (
+    process.env.PHONE_NUMBER_ID ||
+    process.env.WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID ||
+    process.env.META_PHONE_NUMBER_ID ||
+    ''
+).trim()
 
 // ⚡ Función auxiliar para disparar la plantilla de SEGUIMIENTO/REACTIVACIÓN
 async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equipo: string) {
-    const urlMeta = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`
+    const urlMeta = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`
 
     const respuesta = await fetch(urlMeta, {
         method: 'POST',
@@ -21,7 +33,7 @@ async function enviarPlantillaRecuperacion(toMeta: string, nombre: string, equip
             to: toMeta,
             type: 'template',
             template: {
-                name: 'seguimiento_inactivo', // 👈 Nombre EXACTO de la plantilla en Meta
+                name: 'seguimiento_inactivo',
                 language: { code: 'es_MX' },
                 components: [
                     {
@@ -75,15 +87,21 @@ export async function POST(request: Request) {
                 data: {
                     telefono: phone10,
                     nombre: 'Cliente WhatsApp',
-                    atendidoPorBot: false
+                    atendidoPorBot: false,
+                    ultimaActividad: new Date(),
+                    tieneMensajesSinLeer: false
                 },
                 include: { tickets: true }
             })
         } else {
-            // Silenciar la IA (Modo Humano Activo)
+            // Silenciar la IA (Modo Humano Activo) y actualizar actividad
             await prisma.cliente.update({
                 where: { id: cliente.id },
-                data: { atendidoPorBot: false }
+                data: {
+                    atendidoPorBot: false,
+                    ultimaActividad: new Date(),
+                    tieneMensajesSinLeer: false
+                }
             })
         }
 
@@ -99,7 +117,6 @@ export async function POST(request: Request) {
                 throw new Error(`Meta rechazó la plantilla: ${errText}`)
             }
 
-            // 👁️ REGISTRO EXACTO PARA EL DASHBOARD
             const textoRegistrado = `⚡ [Plantilla Enviada]:\n"¡Hola ${nombreCliente}! 👋 Hace unos días nos contactaste para revisar tu ${equipoInput}. Solo pasaba a saludarte y saber si lograste resolverlo o si aún te podemos apoyar en el laboratorio. Recuerda que nuestra revisión es 100% sin costo. 🛠️"\n\n[Botones: "Aún me interesa" / "Ya lo resolví"]`
 
             await prisma.mensaje.create({
@@ -110,22 +127,36 @@ export async function POST(request: Request) {
         }
 
         // 3️⃣ Procesamiento de multimedia (Subida previa a Meta Media API)
+        const tieneArchivo = Boolean(archivo && archivo.size > 0)
         let mediaId: string | null = null
-        if (archivo && archivo.size > 0) {
+
+        if (tieneArchivo && archivo) {
+            const arrayBuffer = await archivo.arrayBuffer()
+            const mimeType = archivo.type || 'application/octet-stream'
+            const blobArchivo = new Blob([arrayBuffer], { type: mimeType })
+
             const metaFormData = new FormData()
-            metaFormData.append('file', archivo)
-            metaFormData.append('type', archivo.type)
+            metaFormData.append('file', blobArchivo, archivo.name || 'evidencia')
+            metaFormData.append('type', mimeType)
             metaFormData.append('messaging_product', 'whatsapp')
 
-            const resMedia = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`, {
+            const resMedia = await fetch(`https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/media`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}` },
                 body: metaFormData
             })
 
-            if (resMedia.ok) {
-                const dataMedia = await resMedia.json()
-                mediaId = dataMedia.id
+            if (!resMedia.ok) {
+                const errMedia = await resMedia.text()
+                console.error('🔴 [META MEDIA UPLOAD ERROR]:', errMedia)
+                throw new Error(`Meta rechazó el archivo (${mimeType}): ${errMedia}`)
+            }
+
+            const dataMedia = await resMedia.json()
+            mediaId = dataMedia.id
+
+            if (!mediaId) {
+                throw new Error('Meta no devolvió un ID de archivo válido.')
             }
         }
 
@@ -136,9 +167,9 @@ export async function POST(request: Request) {
             to: toMeta
         }
 
-        if (mediaId) {
-            const esImagen = archivo?.type.startsWith('image/')
-            const esVideo = archivo?.type.startsWith('video/')
+        if (mediaId && archivo) {
+            const esImagen = archivo.type.startsWith('image/')
+            const esVideo = archivo.type.startsWith('video/')
 
             let tipoMedia = 'document'
             if (esImagen) tipoMedia = 'image'
@@ -148,15 +179,18 @@ export async function POST(request: Request) {
             payloadMeta[tipoMedia] = {
                 id: mediaId,
                 caption: mensaje || undefined,
-                filename: tipoMedia === 'document' ? archivo?.name : undefined
+                filename: tipoMedia === 'document' ? archivo.name : undefined
             }
         } else {
+            if (!mensaje.trim()) {
+                return NextResponse.json({ error: 'El mensaje no puede estar vacío.' }, { status: 400 })
+            }
             payloadMeta.type = 'text'
             payloadMeta.text = { body: mensaje }
         }
 
         // 5️⃣ Envío del mensaje a Meta Cloud API
-        let resMeta = await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+        const resMeta = await fetch(`https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
@@ -165,9 +199,9 @@ export async function POST(request: Request) {
             body: JSON.stringify(payloadMeta)
         })
 
-        // 6️⃣ REINTENTO DE EMERGENCIA (Si caducó la ventana de 24h)
+        // 6️⃣ REINTENTO DE EMERGENCIA (Solo para texto puro si caducó la ventana de 24h)
         if (!resMeta.ok) {
-            if (!mediaId) {
+            if (!tieneArchivo && !mediaId) {
                 const resFallback = await enviarPlantillaRecuperacion(toMeta, nombreCliente, equipoInput)
                 if (resFallback.ok) {
                     const textoRegistrado = `⚡ [Reactivación Auto +24h - Plantilla Enviada]:\n"¡Hola ${nombreCliente}! 👋 Hace unos días nos contactaste para revisar tu ${equipoInput}. Solo pasaba a saludarte y saber si lograste resolverlo o si aún te podemos apoyar... [Botones]"`
@@ -181,8 +215,12 @@ export async function POST(request: Request) {
         }
 
         // 7️⃣ Registro de evidencia e historial normal
-        const prefijo = mediaId ? (archivo?.type.startsWith('image/') ? '📷 [Imagen]' : archivo?.type.startsWith('video/') ? '🎥 [Video]' : '📄 [Documento]') : ''
-        const textoAArchivar = mediaId ? `${prefijo}: ${archivo?.name || 'Archivo'}${mensaje ? ` - ${mensaje}` : ''}` : mensaje
+        const prefijo = mediaId && archivo
+            ? (archivo.type.startsWith('image/') ? '📷 [Imagen]' : archivo.type.startsWith('video/') ? '🎥 [Video]' : '📄 [Documento]')
+            : ''
+        const textoAArchivar = mediaId && archivo
+            ? `${prefijo}: ${archivo.name || 'Archivo'}${mensaje ? ` - ${mensaje}` : ''}`
+            : mensaje
 
         await prisma.mensaje.create({
             data: { texto: textoAArchivar, origen: 'BOT', clienteId: cliente.id }

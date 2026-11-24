@@ -276,10 +276,9 @@ export default function AdminDashboard() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clienteId: clienteId,
-                    apagarAlerta: true // Envío flag al backend
+                    apagarAlerta: true
                 })
             })
-            // Disparamos re-fetch para que el punto verde desaparezca visualmente
             reloadConversaciones()
         } catch (e) {
             console.error('Error apagando alerta', e)
@@ -400,7 +399,7 @@ export default function AdminDashboard() {
                 fechaCitaFormateada,
                 fechaCitaTimestamp: timestamp,
                 requiereAtencion,
-                ultimaActividadNum: new Date(ultimaInteraccion).getTime(), // 👈 Valor clave para el Sort
+                ultimaActividadNum: new Date(ultimaInteraccion).getTime(),
                 folio: ticket.numeroOrden,
                 nombre: ticket.cliente?.nombre || convAsociada?.nombre || 'Cliente WhatsApp',
                 telefono: ticket.cliente?.telefono || convAsociada?.telefono || '',
@@ -449,7 +448,7 @@ export default function AdminDashboard() {
                     fechaCitaFormateada,
                     fechaCitaTimestamp: timestamp,
                     requiereAtencion,
-                    ultimaActividadNum: new Date(ultimaInteraccion).getTime(), // 👈 Valor clave para el Sort
+                    ultimaActividadNum: new Date(ultimaInteraccion).getTime(),
                     folio: `LEAD-${tel10}`,
                     nombre: conv.nombre !== 'Cliente WhatsApp' ? conv.nombre : conv.telefono,
                     telefono: conv.telefono,
@@ -470,11 +469,8 @@ export default function AdminDashboard() {
         // 🔄 SORTING ESTILO WHATSAPP
         // =========================================================================
         return items.sort((a, b) => {
-            // Regla 1 (Absoluta): Los que tienen punto verde SIEMPRE van hasta arriba.
             if (a.requiereAtencion && !b.requiereAtencion) return -1
             if (!a.requiereAtencion && b.requiereAtencion) return 1
-
-            // Regla 2 (WhatsApp): Ordenar por la fecha y hora de su última interacción
             return b.ultimaActividadNum - a.ultimaActividadNum
         })
     }, [ticketsBrutos, conversaciones])
@@ -536,7 +532,6 @@ export default function AdminDashboard() {
     // 🔍 FILTRADO Y BÚSQUEDA APLICADA
     const listaFiltrada = useMemo(() => {
         return listaUnificada.filter(item => {
-            // Filtro rápido de "Solo No Leídos"
             if (soloNoLeidos && !item.requiereAtencion) return false
 
             const term = busqueda.toLowerCase().trim()
@@ -967,7 +962,6 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                    {/* Botón Filtro No Leídos */}
                     <button
                         onClick={() => setSoloNoLeidos(!soloNoLeidos)}
                         className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-colors border ${soloNoLeidos ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-zinc-800'}`}
@@ -1064,7 +1058,6 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Fecha de cita (si existe) movida arriba a la derecha en móvil */}
                                     {item.fechaCitaFormateada && (
                                         <span className="shrink-0 bg-emerald-950/90 border border-emerald-500/80 text-emerald-300 text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-md flex items-center gap-1">
                                             <span>📅</span>
@@ -1074,11 +1067,10 @@ export default function AdminDashboard() {
                                     )}
                                 </div>
 
-                                {/* FILA 2: Equipo y Último mensaje (Ocupa el ancho completo) */}
+                                {/* FILA 2: Equipo y Último mensaje */}
                                 <div className="pl-0 sm:pl-[3.25rem] w-full">
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-[11px] sm:text-xs text-zinc-300 font-semibold truncate flex-1">💻 {item.equipo}</p>
-                                        {/* Costo (si está entregado) movido junto al equipo */}
                                         {item.estadoTaller === 'ENTREGADO' && (
                                             <span className="text-[10px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0">
                                                 💰 ${Number(item.costoReparacion || 0).toLocaleString('es-MX')}
@@ -1092,7 +1084,7 @@ export default function AdminDashboard() {
                                     </p>
                                 </div>
 
-                                {/* FILA 3: Badges de Estado y Folio (Alineados abajo) */}
+                                {/* FILA 3: Badges de Estado y Folio */}
                                 <div className="flex items-center justify-between pt-1.5 sm:pt-2 border-t border-zinc-900/50 mt-1 pl-0 sm:pl-[3.25rem]">
                                     <div className="flex gap-1.5">
                                         {item.esEnvioPaqueteria ? (
@@ -1254,23 +1246,32 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* 🎮 MODAL GIGANTE GAMEPAD TESTER CON INYECCIÓN DE DIAGNÓSTICO */}
+            {/* 🎮 MODAL TESTER HW PROPIO (/admin/tester) CON INYECCIÓN DE DIAGNÓSTICO */}
             {modalGamepadAbierto && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden shadow-2xl">
                         <div className="p-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
-                            <h3 className="text-white font-bold font-mono text-sm flex items-center gap-2">
-                                🎮 Hardware Tester & Inyección de Diagnóstico
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-white font-bold font-mono text-sm flex items-center gap-2">
+                                    🎮 Soltecot Hardware Tester & Diagnóstico
+                                </h3>
+                                <Link
+                                    href="/admin/tester"
+                                    target="_blank"
+                                    className="text-[11px] font-mono bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 px-2.5 py-1 rounded-lg transition-colors"
+                                >
+                                    ↗ Pantalla Completa
+                                </Link>
+                            </div>
                             <button onClick={() => setModalGamepadAbierto(false)} className="text-zinc-400 hover:text-white font-bold px-2 py-1">
                                 ❌
                             </button>
                         </div>
                         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
                             <iframe
-                                src="https://hardwaretester.com/gamepad"
-                                className="flex-1 bg-zinc-900 border-none w-full h-full"
-                                allow="gamepad"
+                                src="/admin/tester"
+                                className="flex-1 bg-zinc-950 border-none w-full h-full"
+                                allow="gamepad; autoplay"
                             />
                             <div className="w-full lg:w-72 bg-zinc-950 border-t lg:border-t-0 lg:border-l border-zinc-800 p-4 flex flex-col justify-between shrink-0">
                                 <div>

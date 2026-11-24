@@ -245,7 +245,8 @@ export async function POST(request: Request) {
                 data: {
                     telefono: cleanPhone,
                     nombre: nombre?.trim() || 'Cliente Recepción',
-                    atendidoPorBot: true
+                    atendidoPorBot: true,
+                    ultimaActividad: new Date()
                 }
             })
         } else {
@@ -253,7 +254,8 @@ export async function POST(request: Request) {
                 where: { id: cliente.id },
                 data: {
                     nombre: nombre && nombre.trim() !== '' && nombre !== 'Cliente Recepción' && nombre !== 'Cliente WhatsApp' ? nombre.trim() : cliente.nombre,
-                    atendidoPorBot: true
+                    atendidoPorBot: true,
+                    ultimaActividad: new Date()
                 }
             })
         }
@@ -401,11 +403,21 @@ export async function PATCH(request: Request) {
             fechaCita,
             fechaIso,
             fechaAgendada,
-            clienteId,      // 👈 Nuevo campo de ChatPanel
-            nuevoNombre     // 👈 Nuevo campo de ChatPanel
+            clienteId,
+            nuevoNombre,
+            apagarAlerta
         } = body
 
-        // ✅ NUEVA LÓGICA: Esto debe ir ANTES del if (!ticketId)
+        // ✅ Apagar alerta de "No Leído" al abrir el chat desde el Dashboard
+        if (apagarAlerta && clienteId) {
+            await prisma.cliente.update({
+                where: { id: clienteId },
+                data: { tieneMensajesSinLeer: false }
+            })
+            return NextResponse.json({ success: true, message: 'Alerta apagada' })
+        }
+
+        // ✅ Edición rápida de nombre desde ChatPanel
         if (nuevoNombre && clienteId) {
             await prisma.cliente.update({
                 where: { id: clienteId },
