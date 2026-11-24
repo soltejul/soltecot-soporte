@@ -139,7 +139,24 @@ export default function GamepadTester() {
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) {
-                    setTicketsActivos(data.filter(t => t.estado !== 'ENTREGADO' && t.estado !== 'RECHAZADO'))
+                    const estadosBancoTrabajo = [
+                        'RECIBIDO',
+                        'EN_DIAGNOSTICO',
+                        'EN_REPARACION',
+                        'LISTO_PARA_ENTREGA'
+                    ]
+
+                    const soloTaller = data.filter((t: any) => {
+                        const estaCerrado = t.estado === 'ENTREGADO' || t.estado === 'RECHAZADO'
+                        if (estaCerrado) return false
+
+                        const esOrdenOficial = Boolean(t.numeroOrden && !t.numeroOrden.startsWith('LEAD-'))
+                        const estaEnBanco = estadosBancoTrabajo.includes(t.estado)
+
+                        return esOrdenOficial || estaEnBanco
+                    })
+
+                    setTicketsActivos(soloTaller)
                 }
             })
             .catch(console.error)
@@ -922,10 +939,12 @@ export default function GamepadTester() {
                             onChange={(e) => setTicketSeleccionado(e.target.value)}
                             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-white outline-none focus:border-emerald-500 font-mono"
                         >
-                            <option value="">-- Selecciona una orden SOL-XXXX --</option>
+                            <option value="">
+                                -- Selecciona orden de taller ({ticketsActivos.length} activas) --
+                            </option>
                             {ticketsActivos.map(t => (
                                 <option key={t.id} value={t.id}>
-                                    {t.numeroOrden} - {t.cliente?.nombre} ({t.equipo})
+                                    {t.numeroOrden} - {t.cliente?.nombre || 'Cliente'} | {t.equipo} [{t.estado?.replace(/_/g, ' ')}]
                                 </option>
                             ))}
                         </select>
