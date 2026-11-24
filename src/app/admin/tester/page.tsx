@@ -875,8 +875,8 @@ export default function GamepadTester() {
         const reporte = `[REPORTE TÉCNICO DE GAMEPAD Y CALIBRACIÓN]:
 - Mando: ${gamepadNombre || 'Mando Estándar'}
 - Polling Rate USB/BT: ${pollingTexto}${bloqueAntes}${bloqueDespues}
-- Lectura Final L3: Drift Centro = ${statsL.driftCentro}% | Error Circularidad = ${statsL.errCircL}%
-- Lectura Final R3: Drift Centro = ${statsR.driftCentro}% | Error Circularidad = ${statsR.errCircR}%
+- Lectura Final L3: Drift Centro = ${statsL.driftCentro}% | Error Circularidad = ${statsL.errCirc}%
+- Lectura Final R3: Drift Centro = ${statsR.driftCentro}% | Error Circularidad = ${statsR.errCirc}%
 - Calibración Hardware Chip: ${infoHardwareCalib}
 - Prueba de Botones, Gatillos y Vibración: Verificada`
 
